@@ -1074,7 +1074,7 @@ Both a human and `tools\build\Invoke-ForgeBuild.ps1` read this file. Format is f
 
 ---
 
-## Track P — Completeness gaps found by the 24 Sep 2026 source audit (12 tasks)
+## Track P — Completeness gaps found by the 24 Sep 2026 source audit (19 tasks)
 
 Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API end points not being called, any specific functionality missing, anything not as per initial goal"). **None of these is an exit-criterion failure** — every Wave 0 criterion in the table below still has a passing task. They are gaps the task list never gated, because the J-track `done:` clauses were component-level ("renders X, passes axe") and so "built and tested" never implied "mounted and connected to a live source". `W0-J22` (`AppShell` built but mounted nowhere) was the first instance of this bug class; `W0-P2`/`W0-P3`/`W0-P6` are the same class again. Read this preamble before picking up any task in this track — the shared root cause matters more than the individual symptoms.
 
@@ -1205,13 +1205,15 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
 
 - [ ] **W0-P11** — Assemble the live `/mcp` path: the gateway serves only the W0-E1 stub tool
   - model: opus
-  - deps: none
+  - deps: W0-P13, W0-P14, W0-P15, W0-P16, W0-P17
   - wave: 0
   - reads: 02#4.2, 02#5.2, 02#4.8, 02#11.4
   - touches: core/gateway/launch.ts, core/gateway/transport/**, core/gateway/meta/**, core/gateway/policy/**
   - context: Found 25 Sep 2026 while starting `W0-P9`. **This is the largest instance yet of Track P's bug class, "built and unit-tested, but connected to nothing".** `core/gateway/launch.ts` (`launchGateway`, the one assembly both `full` and headless mode start) calls `createGatewayHttpTransport` with consumer authentication only, so every session gets `createGatewayMcpServer()` from `transport/server.ts`, whose own header says: *"registers one stub tool … no `forge.find` / `forge.describe` / `forge.activate` / `forge.invoke` … no role-scoped `tools/list` … no policy chain — a real write tool must never be reachable through this skeleton."* `server.registerTool` is called in exactly one place in `core/gateway`: the stub `forge.transport.stub.get`. Every other piece of 02 §4.2's request path **exists and is tested as a library**: the meta-tools (`core/gateway/meta/**`, W0-G4), scope and visibility (W0-E2), the ten-stage policy chain and its two entry points (W0-E3), the write dispatcher with idempotency, guardrails, approval, confirm and reversal (W0-F1…F8, `core/gateway/policy/idempotency`), and the `function` executor (`adapters/function`). **But nothing composes them behind `/mcp`.** The write-path demonstrations (W0-F7/F8) compose them by hand in `tests/write-path/support/store-world.ts`; `createFunctionExecutor` has no non-test call site at all. **Consequences:** an external agent (W0-Q12) connecting to the running gateway today sees one stub tool: no `forge.find`, no P2P tools, no audit rows from real calls. Exit criteria 1 and 7 are evidenced by test harnesses, not by the running product. W0-G4's `done:` ("all four are ordinary MCP tools, always resident") is true of the definitions and false of the served endpoint. W0-P3's `/api/v1/**` would serve audit data that no live call produces.
   - done: `launchGateway` serves the real surface. The four meta-tools are resident; `tools/list` is the session's role-scoped set under the ≤1,300-token budget; every `tools/call` and `forge.invoke` runs the real policy chain with the real `PolicyContext` (store, identity, scope, kill switch, caps, keyring); a `proceed` dispatches through the real write dispatcher and binding executor (the `function` executor over an `AisClient` chosen by overlay config, the in-process fake at Wave 0) and writes the audit row. The stub tool is removed from the served server (kept only as a test fixture if still needed). **An end-to-end test drives the launched gateway over HTTP as a registered consumer with a resolved human identity:** `forge.find` → `forge.describe` → a read tool → a write tool plan → confirm → execute → audit row present; an unregistered consumer and an unresolved human are both refused (the existing tests must still pass against the assembled server, not a skeleton); `pnpm test:policy` green; `W0-C6` still passes. **From W0-P9:** the assembly supplies `PolicyRuntime.executionGrantKeyring` (from `secretRef://gateway/execution-grant/hmac`, never the confirm key), passes `PolicyDecision.executionGrant` through to the executor, constructs the executor with `executionGrantCheck(keyring)`, and adds exactly its own file to `EXECUTOR_CONSTRUCTORS` in `tests/policy/escalation.trust-boundary.test.ts`. The write path's dry run needs a `purpose: 'dry-run'` grant minted inside `core/gateway/policy/**` and bound to the `_VALIDATE` ref.
   - note: `OPUS_GUARDED_PATHS` throughout. Nothing here is new mechanism; the work is composition. **Do not re-implement any stage while wiring it.** A second copy of a gate is how the tested one and the served one drift apart. Should precede `W0-P3` (live audit data needs live calls) and `W0-Q12` (the external-agent demo needs a real endpoint).
+  - **Owner decisions, 25 Sep 2026 (asked while starting this task):** (1) **Path A only.** Every call runs policy chain → write dispatcher → the generic `function` executor (manifest-derived descriptor, W0-P9 grant). Codegen's per-tool `handler.generated.ts` carries its OWN inline confirm-token mint and audit calls (its comments: *"Track C stub — core/gateway/store/audit is not built yet"*) and calls `binding.custom.ts`, which is still `throw new Error('NOT_IMPLEMENTED')` for 4 of the 6 write tools. That is Path B, a second copy of stages 6g/[9], and it is **not served**. Stripping it from codegen is `W0-P18`. (2) **The live target at Wave 0 is a local mock JDE reached over a real HTTP AIS client** (`W0-P14`), never an in-process fake in production code. The same client points at a real AIS by changing one overlay URL.
+  - **Split into five reviewable steps, found while surveying the assembly, 25 Sep 2026:** `W0-P13` catalogue resolver · `W0-P14` HTTP AIS client + local mock JDE · `W0-P15` session establishment · `W0-P16` serve the surface · `W0-P17` execute, shape, audit. This task is then the launch wiring and the end-to-end HTTP test. **Found during the survey, each owned by a step below:** no composition root turns `generated/tools/**` into catalogue entries (store-world's header says so, and it builds two entries by hand); stage 6d's argument validator is still a stub everywhere outside unit tests; the transport authenticates the **consumer** only, never the human (no bearer handling in `transport/http.ts`); the group→role mapping reader lives in the **CLI** (`core/cli/src/lib/group-role-mapping.ts`), which the gateway cannot depend on; `writeDispatcher` is **write-only**, so whether a read-path dispatcher with an audit row exists must be checked, and if not, named; `AisRequest` carries **no human identity**, so how the HTTP client authenticates to JDE as the mapped user is undecided (see `W0-P14`); `@mcpforge/adapter-function` is only a dev dependency of the gateway.
 
 
 - [ ] **W0-P12** — The second stage-8 tripwire: stored credentials have no runtime refusal (case 8)
@@ -1223,6 +1225,68 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Found 25 Sep 2026 while verifying `W0-P9`. `tests/policy/escalation.stored-credential.test.ts › case 8 › "flagged for a human: no RUNTIME enforcement of credentialClass exists yet"` asserts that `core/gateway/secrets/` does **not** exist, with the message *"core/gateway/secrets/** now exists — case 8 needs a RUNTIME refusal test alongside the validate-time one."* That directory landed with the N-track (`W0-N5`), so this tripwire has been firing ever since, **masked** in `forge ci` stage 8's output behind the W0-P9 tripwire (the stage showed `[2/2]` failures). Case 8 is non-negotiable #8's four-part test: a binding may hold a stored credential only when (a) the probe reports it cannot carry per-user identity, (b) a per-user identity is still resolved and a missing mapping still fails, (c) a named compensating control carries it into the target and is echoed into audit, (d) the credential is scoped to one module and one environment. Today only the **validate-time** half (`forge validate`) is tested.
   - done: a runtime refusal test proving a call through a binding whose stored credential fails any one of the four parts is refused at runtime (each part separately, through both entry points), with the refusal carrying a `next`; the tripwire assertion **replaced by** that test, never deleted or loosened; `pnpm test:policy` green with every escalation failing closed. If the runtime half of case 8 turns out to need a mechanism the spec does not define, stop and name it: that is a `needs_human`, not a stub.
   - note: `OPUS_GUARDED_PATHS` (`core/gateway/secrets/**`, `core/gateway/policy/**`). Non-negotiable #8: if any part fails, it is a service-account fallback, and #1 forbids it.
+
+
+- [ ] **W0-P13** — The runtime catalogue resolver: `generated/` → what the gateway serves and enforces
+  - model: opus
+  - deps: none
+  - wave: 0
+  - reads: 02#2.3, 02#4.2, 02#5.3
+  - touches: core/gateway/assembly/**
+  - context: Part of `W0-P11`. There is no composition root that turns the committed artefacts into the runtime objects the policy chain needs. `tests/write-path/support/store-world.ts` builds `PolicyCatalogueEntry`, `WriteSafetyView` and `ReversalContract` for two tools by hand (with a module-load agreement check against `generated/tools/<id>/tool.ts`), and says so in its header. Stage 6d's `ArgumentValidator` is the always-valid stub everywhere outside adapter unit tests.
+  - done: one module under `core/gateway/assembly/` that resolves, **for all 11 tools**, from the committed `generated/` tree (the served artefact, not a re-parse of `manifests/`): the `PolicyCatalogueEntry`, the `WriteSafetyView`, the reversal registry, the `function` binding descriptor and a compiled-Ajv `ArgumentValidator` over `generated/tools/<id>/schema.json` (never a second hand-written validator); a test asserting agreement with every manifest field store-world checks today, for all 11; drift between a generated artefact and its manifest fails at load, as store-world does; store-world switched to the resolver and its two hand builders deleted.
+
+- [ ] **W0-P14** — A real HTTP AIS client, and a local mock JDE the gateway calls over HTTP
+  - model: opus
+  - deps: none
+  - wave: 0
+  - reads: 02#3.5, 02#4.8, CLAUDE.md §2 #1 and #8, 01#4
+  - touches: adapters/function/src/**, tests/mocks/**, overlays/local/**
+  - context: Part of `W0-P11`; owner decision of 25 Sep 2026. `AisClient` has only the in-process fake, so the live gateway has nothing to talk to, and W0-P9's static rule forbids production code importing test doubles. **The blast-radius question this task must answer first:** `AisRequest` carries no human identity. 02 §3.5 requires the orchestration to run **as the mapped JDE user** (identity carriage, echo-checked), so the HTTP client must authenticate per user, and non-negotiables #1 and #8 decide how. **If 02 §3.5 does not specify the per-user AIS authentication, stop and name the gap: that is a `needs_human`, not a shared service token.**
+  - done: an `AisClient` over HTTP (the AIS orchestration REST shape, timeout via the abort signal, target errors mapped as the fake maps them), authenticating as the caller's mapped JDE identity exactly as 02 §3.5 specifies and never with a shared credential; the mock AIS served as a standalone local HTTP process (outside production code) with a documented start command; the overlay chooses the base URL; contract tests run the executor through the HTTP client against the local mock; the W0-P9 egress job still passes.
+
+- [ ] **W0-P15** — Session establishment: human, consumer, roles, scope
+  - model: opus
+  - deps: W0-P13
+  - wave: 0
+  - reads: 02#4.2, 02#4.4, 02#11.2, 05#1.3
+  - touches: core/gateway/transport/**, core/gateway/identity/**, core/gateway/scope/**, core/gateway/assembly/**
+  - context: Part of `W0-P11`. The transport authenticates the **consumer** at `[2a]` but never the **human** at `[2]`: `transport/http.ts` has no bearer handling, so no `Principal` exists for any live session. The group→role mapping reader is in the CLI package. `ScopeContext` (deployment, package selections, role scopes, session, probe, flags) is assembled only in fixtures.
+  - done: at session establishment the gateway resolves the human through the configured `IdentityProvider` (local at Wave 0, OIDC contract-tested), maps groups to roles from git through a reader the gateway owns (moved or shared, never duplicated), loads target-identity mappings, and builds the real `ScopeContext` from `generated/roles/*.scope.json`, `packages/`, the overlay, the probe report and the runtime-flags store. Refusals: an unresolved human is `IDENTITY_UNRESOLVED` and an unregistered consumer `CONSUMER_UNREGISTERED`, both before any `tools/list`. Authorization is the consumer ∩ human intersection (non-negotiable #6); `pnpm test:policy`'s consumer and identity cases pass against the real session, not only fixtures.
+
+- [ ] **W0-P16** — Serve the surface: the four meta-tools, the scoped `tools/list`, `tools/call` → the chain
+  - model: opus
+  - deps: W0-P15
+  - wave: 0
+  - reads: 02#5.2, 02#5.3, 02#4.2, 02#11.4
+  - touches: core/gateway/transport/**, core/gateway/meta/**, core/gateway/assembly/**
+  - done: each session's `McpServer` registers `forge.find` / `forge.describe` / `forge.activate` / `forge.invoke` (always resident, ≤440 tokens combined) and the role-scoped resident set (≤1,300 tokens), with `list_changed` on activation and on kill-switch changes; `tools/call` and `forge.invoke` go through `callThroughToolsCall` / `invokeThroughForgeInvoke` with the real `PolicyContext`; a `responded` decision (plan, approval hand-off, replay) is returned as a tool result and a `refused` one as a tool error carrying the closed code and `next`; the stub tool is no longer served; the existing meta and policy suites pass against the served server.
+
+- [ ] **W0-P17** — Execute, shape and audit: `proceed` → dispatcher → executor → result → audit row
+  - model: opus
+  - deps: W0-P13, W0-P14, W0-P16
+  - wave: 0
+  - reads: 02#4.2, 02#3.1, 02#4.6, 02#10
+  - touches: core/gateway/assembly/**, core/gateway/policy/idempotency/**, core/gateway/store/audit*
+  - done: on `proceed`, writes go through the real `writeDispatcher` (nonce consume + execute + audit in one transaction) and reads through a read path that writes its audit row. If no read-path audit writer exists, name it and build it on the store's audit repository, never a second audit writer. Both invoke the `function` executor with `PolicyDecision.executionGrant`, and the dry run uses a `purpose: 'dry-run'` grant minted inside `core/gateway/policy/**`. Results pass the row cap, the response-byte cap and redaction by sensitivity before returning. Every call (plan, execute, refusal, replay) leaves an audit row carrying consumer id, human subject and the created business key where there is one; `forge audit verify` passes over the result.
+
+- [ ] **W0-P18** — Strip Path B from codegen: generated handlers must not carry their own confirm or audit
+  - model: opus
+  - deps: W0-P11
+  - wave: 0
+  - reads: 02#2.3, 02#2.4, 02#3.1
+  - touches: core/codegen/**, generated/**
+  - context: Owner decision of 25 Sep 2026 (see `W0-P11`). Each `generated/tools/<id>/handler.generated.ts` contains an inline confirm-token mint and audit calls written before Track C existed (*"Track C stub — core/gateway/store/audit is not built yet"*), and 4 of the 6 write tools' `binding.custom.ts` are `NOT_IMPLEMENTED`. The served path does not use any of it. Left in place, it is a second implementation of 6g and [9] waiting to be wired by mistake.
+  - done: the codegen templates stop emitting a confirm mint or audit call in handlers; what a generated handler is FOR is stated in its template header, or the artefact is removed if nothing needs it; `forge codegen` is byte-identical on a second run; the regen diff across all 11 tools is committed as one reviewable change; contract re-acceptance for any custom binding whose contract hash changes is a deliberate `--accept-contract`, recorded; `pnpm test` and `forge ci` stage 3 green.
+
+- [ ] **W0-P19** — How a human gets a token for an external agent (local provider) — design note first
+  - model: opus
+  - deps: none
+  - wave: 0
+  - reads: 02#4.4, 05#1.3, CLAUDE.md §2 #6
+  - touches: docs/build-plan/w0-p19-local-token-issuance.md
+  - context: Found 25 Sep 2026 while surveying `W0-P11`. The local `IdentityProvider` has a token issuer (`identity/jwt.ts`, `localTokenIssuer`) and a user store with Argon2id and optional TOTP (W0-D2), but nothing lets a human **obtain** a token for an external MCP client: no authorize or token endpoint, and no CLI. The OIDC path relies on an external IdP (Keycloak, contract-tested). Without this, `W0-Q12`'s live external-agent demo cannot run on the local provider.
+  - done: a design note, reviewed by the owner before any code, choosing between a CLI (`forge identity token`, password + TOTP → short-lived JWT, printed once, refused when `CI=true`), local OAuth authorize/token endpoints on the gateway, or requiring the Keycloak docker profile for external agents at Wave 0; stating the token TTL, what is logged (never the token), and how it composes with the consumer's private-key JWT (both are required, non-negotiable #6).
 
 ---
 
@@ -1337,7 +1401,7 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
 
 - [ ] **W0-Q12** — The live external-agent conversation, end to end
   - model: human
-  - deps: none
+  - deps: W0-P11, W0-P19
   - wave: 0
   - reads: 01#7, 05#1.3
   - touches: consumers/**, approvals/**
@@ -1389,9 +1453,9 @@ The lane's checkpoint generator uses this table to pre-fill agenda item 1. **A c
 | HG Human gates | 8 | — | — | 8 |
 | M Carried backlog | 3 | — | 3 | — |
 | **N Consumer governance, access control, credentials** | **14** | **9** | **5** | — |
-| **P Audit-found completeness gaps (24 Sep 2026)** | **12** | **9** | **2** | **1** |
+| **P Audit-found completeness gaps (24 Sep 2026)** | **19** | **16** | **2** | **1** |
 | **Q Prototype-parity gaps (25 Sep 2026)** | **12** | **4** | **6** | **2** |
-| **Total** | **135** | **56** | **68** | **11** |
+| **Total** | **142** | **63** | **68** | **11** |
 
 **43 Opus / 60 Sonnet / 8 human** — about **42%** of automated tasks on Opus, concentrated in tracks B, C, D, E, F, G, H and N, which are the security-sensitive two-thirds of the build. Track J is 19 Sonnet tasks and 2 Opus ones, and the two Opus ones (`W0-J12` change model, `W0-J18` roles editor) are governance mechanisms wearing a UI costume — which is exactly why routing the portal as a block would be a mistake. **The Opus share rose four points because Phase 5's additions sit almost entirely on the security spine: the consumer record and the anomaly-event schema fire Test 1, and every gate in track N fires Test 2. That is the correct place for the share to rise and the wrong place to economise.**
 
