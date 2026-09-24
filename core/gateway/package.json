@@ -17,6 +17,7 @@
     "./errors": "./errors/index.ts",
     "./caps": "./caps/index.ts",
     "./consumer": "./consumer/index.ts",
+    "./consumer/records": "./consumer/records.ts",
     "./anomaly": "./anomaly/index.ts",
     "./secrets": "./secrets/index.ts",
     "./secrets/server": "./secrets/server.ts",

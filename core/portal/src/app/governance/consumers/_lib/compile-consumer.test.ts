@@ -19,7 +19,7 @@ import {
   renderConsumerRecord,
   scaffoldConsumerRecord,
   type ConsumerRecord,
-} from '@mcpforge/gateway/consumer';
+} from '@mcpforge/gateway/consumer/records';
 
 import { compileConsumerDraft } from './compile-consumer';
 

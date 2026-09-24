@@ -23,7 +23,7 @@ import {
   renderConsumerRecord,
   scaffoldConsumerRecord,
   type ConsumerRecord,
-} from '@mcpforge/gateway/consumer';
+} from '@mcpforge/gateway/consumer/records';
 
 import { resolveRepoRoot } from '../../../build/_lib/repo-root';
 import { daysBetween } from './authorization-view';

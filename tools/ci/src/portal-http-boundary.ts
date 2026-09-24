@@ -26,7 +26,16 @@
 // where the gateway's live session state, policy enforcement, identity
 // resolution and call execution actually live; a runtime import from any of
 // those is exactly "reaching inside the gateway" and fails this check
-// unconditionally, with no allowlist entry able to admit one.
+// unconditionally, with no allowlist entry able to admit one. (W0-P7: the
+// narrow `/consumer/records` entry is a different subpath from the
+// `/consumer` barrel and is allowlisted per symbol below. The barrel itself
+// stays refused.)
+//
+// Also refused, since W0-P7, because they cannot be checked per symbol:
+// `import * as`, default imports, `export * from`, bare side-effect imports
+// and dynamic `import()` of any gateway module. Nested subpaths
+// (`/store/server`, `/secrets/server`) are matched too; they were previously
+// invisible to this check.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -44,6 +53,38 @@ const ALLOWED_RUNTIME_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> = {
   // live gateway (`core/portal/src/app/governance/_lib/policy.ts`).
   caps: new Set(['CAP_NAMES', 'HARD_CEILINGS', 'resolveEffectiveCaps', 'loadCapsOverlayFile']),
   scope: new Set(['KILL_SCOPES']),
+  // W0-P7. The read-only half of the consumer module (`core/gateway/consumer/records.ts`),
+  // never the `consumer` barrel, which also carries credential issuance and the
+  // proposal writer. `loadConsumerRegistry` reads `consumers/**` from git: a
+  // DEFINITIONAL read, which W0-P2 §7 (owner decision, 25 Sep 2026) keeps on
+  // git rather than on `/api/v1/**`. The portal shares the gateway's parser so
+  // it holds no second opinion about which registrations are live (02 §11.2).
+  // The other five are pure date/scaffold/render helpers. `records.test.ts`
+  // proves `credential.ts`/`proposal.ts` are unreachable from this entry.
+  'consumer/records': new Set([
+    'loadConsumerRegistry',
+    'scaffoldConsumerRecord',
+    'renderConsumerRecord',
+    'effectiveStatus',
+    'isoToday',
+    'addDays',
+    'DEFAULT_REGISTRATION_DAYS',
+  ]),
+};
+
+/**
+ * Value imports admitted ONLY in `*.test.ts(x)` files. R8 governs the portal's
+ * RUNTIME process; a Vitest file runs on Node in the test runner and never
+ * ships in the portal build. An entry here is still per symbol and must say
+ * why the test needs the real value rather than a restatement.
+ */
+const ALLOWED_TEST_ONLY_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> = {
+  // W0-P7. `activity/consumers/detector-defaults.test.ts` pins the client
+  // fixture's restated detector defaults against the real constants so the two
+  // cannot drift (W0-N13). The client restates them precisely because
+  // `anomaly/config.ts` reaches `node:fs`. Deleting the pin would be less safe,
+  // not more.
+  anomaly: new Set(['DETECTOR_DEFAULTS', 'DETECTOR_IDS']),
 };
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'build']);
@@ -77,8 +118,23 @@ function listSourceFiles(dir: string, out: string[]): void {
   }
 }
 
+// Named imports AND named re-exports (`export { x } from`), with nested
+// subpaths (`/store/server`, `/consumer/records`). Before W0-P7 the subpath
+// group was one segment deep, so an import of `@mcpforge/gateway/store/server`
+// (the store driver) matched nothing and passed unseen.
 const IMPORT_RE =
-  /import\s+(type\s+)?\{([^}]*)\}\s+from\s+['"]@mcpforge\/gateway(\/[a-zA-Z-]+)?['"]/g;
+  /(?:import|export)\s+(type\s+)?\{([^}]*)\}\s+from\s+['"]@mcpforge\/gateway((?:\/[a-zA-Z-]+)*)['"]/g;
+
+// Every OTHER way to reach a gateway module at runtime, none of which can be
+// checked per symbol: `import * as X`, a default import, `export * from`, a
+// bare side-effect import, and dynamic `import()`. Each is a violation unless
+// it is type-only (`import type * as X` / `export type * from`).
+const OPAQUE_IMPORT_RE =
+  /(?:\bimport\s+(?!type\s)(?:\*\s+as\s+\w+|\w+(?:\s*,\s*\*\s+as\s+\w+)?)\s+from\s+|\bexport\s+(?!type\s)\*(?:\s+as\s+\w+)?\s+from\s+|\bimport\s+|\bimport\s*\(\s*)['"](@mcpforge\/gateway(?:\/[a-zA-Z-]+)*)['"]/g;
+
+function isTestFile(relPath: string): boolean {
+  return /\.test\.tsx?$/.test(relPath);
+}
 
 /**
  * Runs the check over `core/portal/src` under the given repo root. Pure and
@@ -94,6 +150,18 @@ export function checkPortalHttpBoundary(repoRoot: string): BoundaryReport {
   for (const file of files) {
     const text = readFileSync(file, 'utf8');
     const relPath = relative(repoRoot, file).split('\\').join('/');
+
+    for (const match of text.matchAll(OPAQUE_IMPORT_RE)) {
+      const specifier = match[1] ?? '@mcpforge/gateway';
+      const subpath = specifier.replace(/^@mcpforge\/gateway\/?/, '');
+      violations.push({
+        file: relPath,
+        specifier: '*',
+        subpath: subpath || '(barrel)',
+        reason:
+          'namespace, default, side-effect, `export *` or dynamic import of a gateway module — it cannot be checked per symbol, so it is refused. Import the named allowlisted helpers, or use `import type`.',
+      });
+    }
 
     for (const match of text.matchAll(IMPORT_RE)) {
       const [, wholeTypeOnly, specifierList, subpathRaw] = match;
@@ -116,6 +184,7 @@ export function checkPortalHttpBoundary(repoRoot: string): BoundaryReport {
         if (wholeTypeOnly || isInlineType) continue; // erased at compile time — never a runtime coupling
 
         const name = isInlineType ? spec.slice('type '.length).trim() : spec;
+        if (isTestFile(relPath) && ALLOWED_TEST_ONLY_IMPORTS[subpath]?.has(name)) continue;
         const allowedForSubpath = ALLOWED_RUNTIME_IMPORTS[subpath];
 
         if (subpath === '' || allowedForSubpath === undefined) {
@@ -126,7 +195,7 @@ export function checkPortalHttpBoundary(repoRoot: string): BoundaryReport {
             reason:
               subpath === ''
                 ? 'runtime import from the @mcpforge/gateway barrel itself — the portal may only take types from it, or the small allowlisted pure helpers from a specific subpath (never the barrel).'
-                : `runtime import from @mcpforge/gateway/${subpath}, which is not one of the allowlisted pure/no-I/O subpaths (store, secrets, caps, scope) — this subpath carries live gateway state and must be reached over HTTP, not in-process.`,
+                : `runtime import from @mcpforge/gateway/${subpath}, which is not one of the allowlisted pure/no-I/O subpaths (${Object.keys(ALLOWED_RUNTIME_IMPORTS).join(', ')}) — this subpath carries live gateway state and must be reached over HTTP, not in-process.`,
           });
           continue;
         }
@@ -152,6 +221,8 @@ export function formatBoundaryReport(report: BoundaryReport): string {
   }
   return [
     `${report.violations.length} portal-to-gateway HTTP-boundary violation(s) across ${report.filesScanned} file(s) scanned:`,
-    ...report.violations.map((v) => `  ${v.file}: \`${v.specifier}\` from @mcpforge/gateway/${v.subpath} — ${v.reason}`),
+    ...report.violations.map(
+      (v) => `  ${v.file}: \`${v.specifier}\` from @mcpforge/gateway/${v.subpath} — ${v.reason}`,
+    ),
   ].join('\n');
 }
