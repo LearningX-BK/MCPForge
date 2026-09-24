@@ -1,7 +1,7 @@
 # W0-P2 — The portal↔gateway read seam
 
-**Status: DECISION REQUIRED. This note is the whole of `W0-P2`; no code was written.**
-Author: build lane (Opus), 24 Sep 2026. Owner decision needed before `W0-P3` starts.
+**Status: DECIDED 25 Sep 2026 — Option C adopted by the owner. See §7.** This note is the whole of `W0-P2`; no code was written.
+Author: build lane (Opus), 24 Sep 2026.
 
 ---
 
@@ -97,3 +97,21 @@ Yes, as the **test and component-development source only**, kept behind the same
 **Adopt Option C.** Then `W0-P3` builds the client, swaps the 13 pages, adds the gateway-down state, and the success test is that `portal-http-boundary.ts`'s allowlist gets *smaller*.
 
 **If the owner reads "no REST facade" as absolute, say so and I will re-plan** — but the honest consequence is that the runtime half of the portal cannot be made real without either corrupting the agent tool catalogue (A) or making headless mode a fiction (B), and that trade should be made knowingly rather than discovered in `W0-P3`.
+
+---
+
+## 7. Decision record — 25 Sep 2026
+
+**Decided by:** the owner (Bikash Pattnaik), in session, 25 Sep 2026.
+**Decision:** adopt **Option C**. The owner's words: *"I am unclear what's best as per my expectation, we can go with it."* In other words the owner accepted the recommendation without choosing independently between the options. A later reviewer should know that this is an acceptance of the recommendation rather than a separately argued choice, and is free to reopen it on the evidence in §3.
+
+**What this settles:**
+
+1. **How "no REST facade" (CLAUDE.md §3) is read.** It governs **agent-facing discovery and invocation**: agents reach tools only through `/mcp`, the four meta-tools and role-scoped `tools/list`. It does **not** forbid a read-only governance API for registered consumers. `/api/v1/**` must never serve tool discovery, tool invocation or any write. If a later change moves it towards any of those, that is the REST facade the rule forbids, and it needs a fresh decision.
+2. **§5's second open question is settled by default.** Definitional reads (roles, consumers, manifests, approvals) **stay on git**. `/api/v1/**` serves **runtime state only**: audit calls, the approval queue's runtime status, integrity verification, consumer usage, anomaly events, probe and enablement status, and kill-switch state.
+3. **§5's first and third items stand unchanged.** `W0-P3` owns the endpoint list and response shapes, reviewed as one unit. This note authorizes no write endpoint.
+
+**Consequences:**
+- `W0-P3` is unblocked.
+- `W0-P7` (the 11 in-process gateway imports) should land before or together with `W0-P3`, because Option C's success test is that the portal imports nothing from `@mcpforge/gateway` at runtime.
+- The new surface sits on the gateway process, so its authn/authz tests belong in `pnpm test:policy`. An unregistered consumer and an unresolved human must both be refused on `/api/v1/**` exactly as on `/mcp` (non-negotiable #6).

@@ -1094,7 +1094,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - **Full `forge ci` run, 24 Sep 2026 — the last line of the `done:` criterion: `7 passed, 8 failed, 0 not yet implemented.`** "0 not yet implemented" is the proof this task set out to produce, and all three stages appear by name in the summary. The eight failures are all pre-existing or by-design and none is caused by this task: stage 10 (the bench baseline is a placeholder of zeros — see `W0-HG5`), stage 11 (this task's own gate, failing as designed — one slice), stage 16 (Playwright `webServer` 60s timeout on this machine), stage 17 (the `W0-J21` contention flake, all six specs pass solo), stage 8 (**a deliberate tripwire firing — now `W0-P9`**), and stage 3 (**cannot pass: the repo is not a git repository — now `W0-P8`**). **Caveat on the evidence:** the command was piped through `tail -60`, so the per-stage lines for stages 1–8 were not captured — 4 of those 8 passed and 4 failed, and only stages 3 and 8 are identified above from the surviving text. Re-run `node core/cli/bin/forge.js ci` WITHOUT a tail to capture the full table.
   - **The one failing test is pre-existing and NOT from this task — but it is a real regression somebody should own.** `portal-http-boundary.test.ts` → "passes over the actual core/portal/src tree today" now fails: **11 violations across 3 files, in 2 gateway subpaths** (`anomaly`, `consumer`) — `core/portal/src/app/governance/consumers/_lib/repo-consumers.ts` (7, real source), plus `activity/consumers/detector-defaults.test.ts` and `governance/consumers/_lib/compile-consumer.test.ts` (4, tests). W0-K2's own status note records this check finding **zero** violations when it landed, so the violations arrived with the consumer-governance portal work after it (N-track / the 15 Sep W0-HG8 session). The fix is an R8 security-boundary judgement — either the portal stops importing those subpaths in-process, or each becomes a deliberate, commented allowlist entry — and it is deliberately **not** made here: it is outside this task's `touches: tools/ci/**` in spirit if not in letter, and CLAUDE.md §1 forbids tidying adjacent code mid-task. Needs its own task.
 
-- [ ] **W0-P2** — The portal↔gateway read seam — design note first
+- [x] **W0-P2** — The portal↔gateway read seam — design note first
   - model: opus
   - deps: none
   - wave: 0
@@ -1107,6 +1107,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - **Three options, one recommendation.** (A) portal becomes an MCP client — **rejected**: MCP has no vocabulary for audit rows, approval queues, integrity chains or consumer usage, so it would mean minting `forge.audit.*`-style tools that put governance data in the **agent-visible** catalogue and spend the ≤1,300-token role budget on tools no agent should call. (B) Next server components read `./.mcpforge/runtime.db` directly — **rejected**: exactly what R8 forbids, breaks under `MCPFORGE_MODE=headless` / Mode B / Postgres-multi-replica, and routes around the policy chain. (C) ★ **a read-only, consumer-authenticated, policy-filtered governance HTTP API on the gateway** (`/api/v1/**`, reads only — writes stay on `/mcp` and git). Keeps R8 honest, keeps governance data out of the tool catalogue, and extends non-negotiable #6's consumer ∩ human intersection to portal reads, which is the precondition for `W0-P4` to mean anything.
   - **The test of whether `W0-P3` is done right:** `tools/ci/src/portal-http-boundary.ts`'s allowlist should get **smaller**, never larger — under Option C the portal imports nothing from `@mcpforge/gateway` at runtime.
   - **The owner's actual decision is narrower than it looks:** does "no REST facade" (CLAUDE.md §3) govern only agent-facing *discovery*, as every occurrence of it in 02 §5 reads to me, or is it absolute? If absolute, Option C is out and the runtime half of the portal cannot be made real without accepting (A)'s catalogue corruption or (B)'s fictional headless mode. **That trade should be made knowingly, not discovered mid-`W0-P3`.**
+  - **DECIDED 25 Sep 2026 — Option C, owner-accepted. Ticked.** Recorded in the note's §7. The owner accepted the recommendation (*"I am unclear what's best as per my expectation, we can go with it"*) rather than choosing independently, and §7 says so for any later reviewer. **What is now settled:** "no REST facade" governs agent-facing discovery and invocation only; `/api/v1/**` is **runtime reads only** (definitional reads stay on git); no write endpoint is authorized. `W0-P3` is unblocked, and `W0-P7` should land before or with it.
 
 - [ ] **W0-P3** — Implement the read seam and retire the runtime fixtures
   - model: opus
@@ -1153,7 +1154,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - done: a decision made per violation and recorded in the diff — **either** the portal stops importing that subpath in-process (the R8-correct answer where the import reaches live state), **or** the symbol joins the allowlist as a deliberate, commented entry justifying it as a pure function or a git-config read, exactly as `loadCapsOverlayFile` was admitted during W0-K2. **Never widen the allowlist merely to make an import compile** — that inverts the gate. `npx vitest run tools/ci/src` back to 82/82; `pnpm -C core/portal test` still green.
   - note: `OPUS_GUARDED_PATHS`-adjacent by intent — R8 is a security boundary, and the question "is this symbol pure or does it reach live state?" must be answered per symbol, not in bulk.
 
-- [ ] **W0-P8** — The repository is not under version control
+- [x] **W0-P8** — The repository is not under version control
   - model: human
   - deps: none
   - wave: 0
@@ -1162,6 +1163,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Found 24 Sep 2026 while checking whether TASKS.md was current. `git rev-parse --is-inside-work-tree` -> **"fatal: not a git repository"**. The only `.git` anywhere in the tree is `.mcpforge/change-host-sandbox/.git`, the throwaway sandbox the portal seeds for its `LocalGit` demo. A carefully-written `.gitignore` exists and has never had a repository to govern; a **6.99 GB `MCPForge.zip`** sits in the root (16 Sep) serving as backup in place of history. **Four real consequences:** (1) `forge ci` **stage 3** — the regeneration invariant, Phase 1's G1, the gate CLAUDE.md §5 says may never be allowed to fail — cannot pass; it fails closed with "is not a git repository", and it is the entire reason `generated/` is committed. (2) CLAUDE.md §5's "one task, one branch `forge/<taskId>-<slug>`, one proposal" has never been possible: 118 tasks, zero commits, zero reviewable diffs, so the stated purpose of committing `generated/` ("a reviewer can see the blast radius") has never been available to a reviewer. (3) **`W0-C6` is not true as deployed** — "definitions are git; only events are in the store" — the definitions are unversioned files, so the test passes against its fixture while the property fails for the real tree. (4) The portal's propose/discard only ever writes into the sandbox copy, which is why a stale `forge/role-p2p` branch was found in there on 16 Sep; no proposal has ever reached the real tree.
   - **Status: the owner was asked on 24 Sep 2026 and chose explicitly to carry on without git for now.** Recorded here rather than actioned, per that decision. Not an agent call to reverse.
   - done: `git init` in the repo root; `.gitignore` confirmed to exclude `node_modules/`, `.mcpforge/`, `.forge-build/`, `*.log` and `MCPForge.zip` (the zip is **not** currently ignored and must not enter history); one baseline commit of the current tree; `forge ci` stage 3 then reaches a real pass or a real regeneration failure instead of failing on the absent repository.
+  - **Status: done 25 Sep 2026 — the owner reversed the 24 Sep "carry on without git" and authorized it.** `git init -b main`; `.gitignore` gained `MCPForge.zip`/`*.zip`/`*.7z`, the Playwright/Vitest output directories, `.claude/settings.local.json` and `.testres.json` (a stale 840 KB Vitest dump from 7 Sep). Before the commit: no `.pem`/`.key`/`.env`/`.db` file outside ignored paths, and a content scan for private keys and provider tokens found only the deliberately fake `MIIBogus` fixture in `tools/ci/src/overlay-purity.test.ts`. Baseline commit `4d6c75b` (1,151 files), pushed to `origin` = `https://github.com/LearningX-BK/MCPForge.git`, branch `main`. **Stage 3 verified:** `forge codegen && git diff --exit-code generated/` → clean, a real pass. CLAUDE.md §3.1's host-agnostic rule still holds: GitHub is where the source is kept, not something the product depends on. `ChangeHost` stays `LocalGit`, and the portal's propose/discard still targets its sandbox, which is a separate follow-up for `W0-J12`'s owner and not widened here.
 
 - [ ] **W0-P9** — The stage-8 tripwire has fired: exit criterion 5 needs a live egress-refusal job
   - model: opus
@@ -1172,6 +1174,126 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Found in `W0-P1`'s full `forge ci` run, 24 Sep 2026. Stage 8 (the privilege-escalation suite, "every escalation attempt must FAIL CLOSED") **fails** — and it is not a bug, it is a **deliberate tripwire firing exactly as designed**. `tests/policy/escalation.trust-boundary.test.ts:218` asserts that no TypeScript binding executor exists under `adapters/`, carrying its own message as the instruction: *"A TypeScript binding executor now exists under adapters/. Wave 0 exit criterion 5 needs a LIVE egress-refusal job against it (02 §4.8) — this suite currently evidences the ingress door only."* `adapters/function/**` now exists (7 files: `index.ts`, `mapping.ts`, `schema.ts`, `types.ts`, `testing/**`, `vitest.config.ts`), so the wire is tripped. **This matters because all six Wave 0 write tools are `function` bindings** — the adapter the tripwire names is the one every write goes through. Exit criterion 5 is "Gateway is the only door — direct module-server call refused", and the criteria table pairs it with criterion 14 as *"criterion 5 evidences the egress door; criterion 14 evidences the ingress door. Both are required — 01 §11.5."* Criterion 14 is satisfied (`W0-N14`); criterion 5's egress half is what this tripwire says is missing.
   - done: a live egress-refusal job proving a direct call to the `function` binding executor — bypassing the gateway's policy chain — is refused, not merely unreachable by convention; the tripwire assertion in `escalation.trust-boundary.test.ts` replaced by that real test rather than deleted or loosened; `pnpm test:policy` green with **every escalation attempt still failing closed**; exit criterion 5's row in the table below updated to name this task alongside `W0-E8`/`W0-N2`.
   - note: `OPUS_GUARDED_PATHS` (`adapters/**/binding*`, `core/gateway/policy/**`). Do not satisfy this by relaxing the assertion — the tripwire was written by someone who foresaw exactly this moment.
+
+---
+
+## Track Q — Prototype-parity gaps found by the 25 Sep 2026 independent assessment (12 tasks)
+
+Added 25 Sep 2026. The owner asked for an independent check of whether every **platform** capability the concept console showed has been factored into the build: Registry, Developer Workspace, Business Intake, Governance & Approvals, Consumption Graph and Application Enablement. The concept console is `mcpforge-console.html` in the owner's Downloads folder (18 Aug), and a later copy is `..\mcpforge-console_1.html`. **Do not read either at runtime.** This preamble and each task below restate what is needed. 03 §5.1 deliberately maps all six areas to portal routes, and the narrative pages (Overview, Why, Walkthrough, Plan) were removed on purpose. **This track is about what fell out between that map and the build**, and it has three root causes:
+
+1. **Routes 03 §5.2 specifies that were never built:** `/catalog/servers/[serverId]`, `/requests/[requestId]` and `/activity/consumption`. No J-track task named them, so no gate caught their absence.
+2. **Console capabilities that no build-plan document carries at all.** The main one is **model-assisted authoring**: the console's "describe the tool you need, then Generate tool spec", and its six-stage pipeline in which *"the model writes descriptions, examples, error maps and eval utterances; deterministic codegen writes the plumbing."* **Harvest** and **Normalize** (pulling an application's raw API surface into a capability inventory mapped onto entity and verb) are also missing. No component in the repo calls a model. For an AI product this is the largest gap between the console and the build, and because it was never decided, `W0-Q8` starts with a design note.
+3. **Two CLI commands still on the W0-A5 skeleton:** `forge new tool` (02 §2.5's authoring step, and the lane's automation seam at 02 §8) and `forge test`. Both print "not implemented yet".
+
+**Already planned, so not re-tasked here:** duplicate detection with a merge-or-justify decision (roadmap G1 @ M1, Wave 1; Wave 0 search is lexical only); the anomaly-monitoring *product* (Wave 3; the Wave 0 groundwork exists); the server inventory (`W0-P6`); making the fixture pages live (`W0-P3`).
+
+**Lesson carried from Track P, applied to every `done:` below:** each one requires the feature to be **reachable from a real entry point and fed by real data**. Rendering and passing axe is not enough.
+
+- [ ] **W0-Q1** — The Consumption Graph: `/activity/consumption`
+  - model: sonnet
+  - deps: W0-P3
+  - wave: 0
+  - reads: 03#5.2, 01#2 (G9), 01#11, 02#11.3
+  - touches: core/portal/src/app/activity/consumption/**
+  - context: The console's Consumption Graph promised *"for every MCP server and tool, know every registered agent that calls it"*. 03 §5.2 specifies the route and roadmap G9 @ M1 makes it an exit criterion (*"every tool → consuming agent, platform, scope, call count"*), but no task built it. The data already exists: since Phase 5, every audit row carries an authenticated `consumer_id`, which is what makes G9 provable (01 §11). The closest existing surface is the per-consumer usage panel in `/activity/consumers`, and that one is organised by consumer, not by tool.
+  - done: `/activity/consumption` renders tool → consumer edges with consumer class, the scope each consumer was granted, call count and last call for a chosen window, all read from W0-P3's `/api/v1/**` seam (never a fixture); it can pivot from tool to consumers and from consumer to tools; a tool with zero consumers is shown as such, not hidden, because that is G9's sprawl signal; it is reachable from the Activity nav and from a tool's Catalog drawer; the gateway-down state from W0-P3 applies; the a11y gates (stages 14–17) pass.
+
+- [ ] **W0-Q2** — Module-server detail and drill-down: `/catalog/servers/[serverId]`
+  - model: sonnet
+  - deps: W0-P6
+  - wave: 0
+  - reads: 03#5.2, 02#4.1
+  - touches: core/portal/src/app/catalog/servers/**
+  - context: The console's Registry was organised around **servers**, and each server had a map you could click through: server, then module, then entity, then tool, then binding type, then the underlying target (AIS orchestration, PL/SQL package, table/view). 03 §5.2 keeps this as `/catalog/servers/[serverId]`, and it was never built. `W0-P6` builds the server *inventory*; this task builds what opens when you click one server in it.
+  - done: the route reads `manifests/_servers/<id>.server.yaml` plus that server's tool manifests for real, and shows id, mode, version, owner, split-rule inputs (tool count against the 15–20 threshold, auth boundary, sensitivity class), the tool list and a drill-down from entity to tool to binding to target; every tool links to its Catalog drawer; the inventory rows from `W0-P6` link here; probe and kill-switch state come from `/api/v1/**` once W0-P3 lands, and until then are shown explicitly as "runtime state unavailable", never faked; the a11y gates pass.
+
+- [ ] **W0-Q3** — Register a new module server from Build
+  - model: sonnet
+  - deps: W0-Q2
+  - wave: 0
+  - reads: 02#4.1, 03#6, 03#8
+  - touches: core/portal/src/app/build/**
+  - context: The console's Developer Workspace offered two paths, **New MCP Server** and **Add Tool to Existing Server**. Build only offers the second (`/build/new` seeds a *tool* draft). Today a new server can only be created by hand-writing YAML in `manifests/_servers/`.
+  - done: Build offers "New module server", which drafts a `*.server.yaml` through the same Save draft · Propose · Discard flow as tool drafts (never a direct write); the form puts the split rule on screen and warns when a proposed server would duplicate an existing module boundary; the draft passes the real `forge validate` in the checks pane; a proposed server appears in `W0-P6`'s inventory once merged; a Playwright test drives the flow from the Build landing page.
+
+- [ ] **W0-Q4** — Business Intake as a tracked request — design note first
+  - model: opus
+  - deps: none
+  - wave: 0
+  - reads: 02#2.5, 03#5.2, 03#9, 01#2 (G1)
+  - touches: docs/build-plan/w0-q4-intake-requests.md
+  - context: `/requests` answers "does this exist already?" with the real ranker (W0-J19), but a request is **not recorded anywhere**. The console's "Your requests" table, its status lifecycle (*drafted → in dev → testing → pending approval → deployed*) and its six intake questions (what should it do, which app and module, read or write, what the user supplies, what a good answer looks like, who may run it) are backed by `requests/fixtures.ts` only, and `/requests/[requestId]` does not exist. 02 §2.5 names intake as the first step of the authoring pipeline, and it is the only step with no persisted artefact. **Where a request lives is a file-format decision with a blast radius**, which is why this is a note first.
+  - done: a design note, reviewed by the owner before any code, deciding: (a) where a request lives. The recommended default is a git artefact under a new `requests/` directory, following the portal-writes-to-git rule, with status derived from the linked change and approval rather than stored twice; (b) how the six questions map onto `forge new tool`'s answers (W0-Q6), so intake and authoring share one schema; (c) how a request links forward to its draft, proposal, approval record and deployed tool id; (d) who may move a request between states, deferring to W0-P4 for identity; (e) what the Wave 1 dedupe gate (G1 @ M1) will need from this record, so it is not re-shaped later.
+
+- [ ] **W0-Q5** — Implement tracked intake requests and `/requests/[requestId]`
+  - model: sonnet
+  - deps: W0-Q4, W0-Q6
+  - wave: 0
+  - reads: 03#5.2, docs/build-plan/w0-q4-intake-requests.md
+  - touches: core/portal/src/app/requests/**, requests/**
+  - done: exactly what W0-Q4's approved note specifies; submitting from `/requests` creates the record through the change flow; `/requests/[requestId]` shows the lifecycle derived from real linked artefacts; `requests/fixtures.ts` is no longer imported by any `page.tsx`; a Playwright test drives ask → submit → request detail.
+
+- [ ] **W0-Q6** — Implement `forge new tool` (scaffold a manifest from answers)
+  - model: sonnet
+  - deps: none
+  - wave: 0
+  - reads: 02#2.1, 02#2.5, 02#8
+  - touches: core/cli/src/commands/new-tool*, core/cli/src/program.ts
+  - context: `forge new tool` is registered in `core/cli/src/commands.ts:26` and still prints *"forge new tool is not implemented yet"* (the W0-A5 skeleton). 02 §2.5 makes it the authoring step (*"scaffolds the YAML from answers"*) and 02 §8 lists it first on the CLI automation seam. The portal's `/build/new` seeds a static `NEW_DRAFT_TEMPLATE_YAML` instead, so the CLI and the portal scaffold new tools in two different ways.
+  - done: `forge new tool` takes answers (flags, or `--answers <file>`; never an interactive-only prompt, so the lane and CI can drive it) and writes a manifest that passes `forge validate` apart from the fields only a human may supply, each reported by name; `write: true` scaffolds a complete `writeSafety` skeleton and a `reviewPath` consistent with the binding type, and never `identity.carries: verified` (non-negotiable #2); it emits a `next` naming the steward-eval step; the output lands in the change flow, not directly in `manifests/`; `/build/new` uses the same scaffolder, so there is one template; unit tests cover read, write, and every binding type.
+
+- [ ] **W0-Q7** — Implement `forge test`
+  - model: sonnet
+  - deps: none
+  - wave: 0
+  - reads: 02#2.3, 02#8
+  - touches: core/cli/src/commands/test*, core/cli/src/program.ts
+  - context: `forge test` is the other command still on the W0-A5 skeleton. The console's workspace had "run regression suite" for a single tool, and the generated per-tool contract and unit tests exist, but there is no one-tool entry point.
+  - done: `forge test [<toolId>…] [--json]` runs the generated contract and unit tests for the named tools (all tools when none are named), reports per-tool pass/fail, and exits non-zero on any failure; an unknown tool id fails with a `next`; tests cover the one-tool and all-tools paths.
+
+- [ ] **W0-Q8** — Model-assisted authoring — design note first
+  - model: opus
+  - deps: none
+  - wave: 0
+  - reads: 02#2, 02#5.3, 01#2, CLAUDE.md §2 and §5
+  - touches: docs/build-plan/w0-q8-assisted-authoring.md
+  - context: The console's authoring promise was that *"the model writes descriptions, examples, error maps and eval utterances; deterministic codegen writes the plumbing — never let a model freehand the plumbing."* No build-plan document carries this and nothing in the repo calls a model. It is the largest gap between the console and the build. It touches four settled commitments at once, so it needs owner decisions, not agent ones: **local-first** (§3.1: no cloud account may become a prerequisite, so the feature must be optional and the build must work fully without it); **secrets** (a provider API key is a credential, so it must be a `secretRef://` and pass non-negotiable #8); **data egress** (a draft manifest names systems, modules and business rules that leave the machine); and **steward-authored evals** (CLAUDE.md §4: `evals/` is authored by module stewards, *not tool authors*, so a model may suggest intents but must never be the author of record).
+  - done: a design note, reviewed by the owner before any code, deciding: (a) exactly which manifest fields a model may draft, at minimum `purpose`, `disambiguation`, `planTemplate`, parameter `desc` and error `next` copy, and which it may **never** write: bindings, `writeSafety` values, `identity.*`, grants, `reviewPath`, and anything in `generated/`; (b) the provider seam, meaning whether this is a pluggable interface like `IdentityProvider`/`ChangeHost`/`SecretStore` and which provider and model is the default; (c) key handling as a `secretRef://` and where it may be dereferenced under `no-secret-value-escape`; (d) what leaves the machine, and whether overlays can turn the feature off per deployment; (e) how drafted copy is gated: `forge validate`, the codegen token budgets, and a human accepting each field, with provenance recorded on the proposal; (f) how suggested eval intents stay steward-owned; (g) behaviour with no key configured: the feature is absent, not broken, and nothing else depends on it.
+
+- [ ] **W0-Q9** — Implement model-assisted authoring
+  - model: opus
+  - deps: W0-Q8, W0-Q6
+  - wave: 0
+  - reads: docs/build-plan/w0-q8-assisted-authoring.md
+  - touches: as W0-Q8's approved note specifies
+  - done: exactly what W0-Q8's approved note specifies, and no more; with no key configured the full `forge ci` result is unchanged; a test proves the model path cannot write any field outside the note's allow-list, even when the model's response tries to; every accepted field is recorded with provenance on the proposal; reachable from Build's draft editor and from `/requests` → draft.
+
+- [ ] **W0-Q10** — Harvest and Normalize: application surface → capability inventory — design note (Wave 1 candidate)
+  - model: opus
+  - deps: W0-Q8
+  - wave: 1
+  - reads: 01#4, 02#2.7, 02#3
+  - touches: docs/build-plan/w0-q10-harvest.md
+  - context: The console's pipeline began with **Harvest** (pull the application's raw API surface into a capability inventory) and **Normalize** (map raw operations onto canonical entity and closed verb). `seed/` was a one-time manual extraction, and the probe verifies bindings; neither of them harvests. At catalogue scale (roadmap Waves 1–3, ~150 tools) hand-authoring every manifest is the bottleneck the console said this pipeline removes. Ownership of this is a Wave 1 checkpoint decision; it is listed here so it is not lost.
+  - done: a design note, reviewed at the Wave 1 checkpoint, covering: which sources are harvested per application (JDE AIS orchestrations, EBS IREP and ISG, Fusion REST catalogues); the inventory's file format; how the closed 19-verb list is applied during normalization and what happens to operations that do not map; how harvested candidates enter intake (W0-Q4) rather than bypassing it; and the relation to the probe and to W0-Q8.
+
+- [ ] **W0-Q11** — Cloud agent execution — owner review (deferred)
+  - model: human
+  - deps: none
+  - wave: 0
+  - reads: 04#3, CLAUDE.md §3.1 and §6
+  - touches: none until decided
+  - context: With the repo now on GitHub (`W0-P8`), tasks could run as Claude Code agents in the cloud, from claude.ai/code, scheduled routines, or a GitHub Actions trigger, each on its own `forge/<taskId>-<slug>` branch for review. The owner deferred this on 25 Sep 2026. Facts to decide with: (1) cloud sandboxes are Linux with no route to this machine, so there is no JDE instance, no `forge probe`, no OS keychain for `EncryptedFileStore`, and no `.mcpforge/` state. Suitable work is codegen, validate, unit, contract and policy tests, portal work and design notes; the human gates, probes and approvals stay local; (2) the build lane `tools/build/` is **empty** (only `.gitkeep`), so the PowerShell `Invoke-ForgeBuild.ps1` that 04 and this file describe does not exist in the repo, and a cloud run would need its own task-selection entry point; (3) `forge consumer issue-credential` already refuses when `CI=true`, which is the right behaviour for a cloud agent; (4) every `OPUS_GUARDED_PATHS` diff still needs its security review pass, whoever wrote it.
+  - done: the owner decides whether, how and for which task classes cloud runs are allowed; the decision is recorded here; any setup (environment setup script, allowed network, branch protection on `main`) is then a separate task.
+
+- [ ] **W0-Q12** — The live external-agent conversation, end to end
+  - model: human
+  - deps: none
+  - wave: 0
+  - reads: 01#7, 05#1.3
+  - touches: consumers/**, approvals/**
+  - context: The console's "what a first delivery contains", item 3, is *"a live agent conversation: an assistant answering a genuine functional question end to end, and showing its audit trail — the moment the idea lands with an audience."* The portal removed the Walkthrough page on purpose (03 §5.1), but the deliverable itself has not been shown yet. A read-only external consumer `test-agent-1` has been staged for exactly this since 19 Sep 2026: `.mcpforge/proposals/2026-09-19-consumer-registration-test-agent-1/`. Its approval record deliberately has blank `approver`/`approvedAt`, because nothing in the repo approves on a human's behalf.
+  - done: the owner reviews and approves the staged registration and merges it into `consumers/` and `approvals/`; `forge consumer issue-credential test-agent-1` is run locally; an external MCP client completes `forge.find` → `forge.describe` → a read tool call against the gateway; the call appears in `/activity` with its consumer and human subject. That walkthrough is recorded here as evidence.
 
 ---
 
@@ -1219,7 +1341,8 @@ The lane's checkpoint generator uses this table to pre-fill agenda item 1. **A c
 | M Carried backlog | 3 | — | 3 | — |
 | **N Consumer governance, access control, credentials** | **14** | **9** | **5** | — |
 | **P Audit-found completeness gaps (24 Sep 2026)** | **9** | **7** | **1** | **1** |
-| **Total** | **120** | **50** | **61** | **9** |
+| **Q Prototype-parity gaps (25 Sep 2026)** | **12** | **4** | **6** | **2** |
+| **Total** | **132** | **54** | **67** | **11** |
 
 **43 Opus / 60 Sonnet / 8 human** — about **42%** of automated tasks on Opus, concentrated in tracks B, C, D, E, F, G, H and N, which are the security-sensitive two-thirds of the build. Track J is 19 Sonnet tasks and 2 Opus ones, and the two Opus ones (`W0-J12` change model, `W0-J18` roles editor) are governance mechanisms wearing a UI costume — which is exactly why routing the portal as a block would be a mistake. **The Opus share rose four points because Phase 5's additions sit almost entirely on the security spine: the consumer record and the anomaly-event schema fire Test 1, and every gate in track N fires Test 2. That is the correct place for the share to rise and the wrong place to economise.**
 
