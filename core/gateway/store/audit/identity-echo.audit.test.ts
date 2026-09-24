@@ -22,7 +22,11 @@ import {
   compileGeneratedSchema,
   createFunctionExecutor,
 } from '@mcpforge/adapter-function';
-import { createMockAisServer } from '@mcpforge/adapter-function/testing';
+import {
+  createMockAisServer,
+  TEST_EXECUTION_GRANT,
+  TEST_GRANTS,
+} from '@mcpforge/adapter-function/testing';
 import type { ToolManifest } from '@mcpforge/shared/manifest';
 import { openRuntimeStore } from '../store.js';
 import type { RuntimeStore } from '../repository.js';
@@ -120,9 +124,9 @@ describe('the runtime identity echo reaches the real audit row (02 §3.5, W0-H3)
       executesAs: 'BIKASH',
       echoStep: 'MCPFORGE_PROBE_WHOAMI',
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
-    const result = await exec.execute(descriptor, {
+    const result = await exec.execute(descriptor, { executionGrant: TEST_EXECUTION_GRANT,
       args,
       correlationId: 'audit-echo-ok',
       validate,
@@ -157,12 +161,12 @@ describe('the runtime identity echo reaches the real audit row (02 §3.5, W0-H3)
         MCPFORGE_PROBE_WHOAMI: { MCPFORGE_EXECUTING_USER: 'JDE_SVC' },
       }),
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     let succeeded = false;
     let caught: unknown;
     try {
-      await exec.execute(descriptor, {
+      await exec.execute(descriptor, { executionGrant: TEST_EXECUTION_GRANT,
         args,
         correlationId: 'audit-echo-bad',
         validate,

@@ -31,6 +31,7 @@ import {
   voucherCreateSchema,
   voucherCreateSchemaOpen,
 } from './fixtures.test-support.js';
+import { TEST_EXECUTION_GRANT, TEST_GRANTS } from './testing/index.js';
 
 const CALLER = 'bikash';
 const EXECUTE_REF = 'MCPFORGE_AP_VOUCHER_CREATE_EXECUTE';
@@ -39,7 +40,13 @@ const args = { supplier: '4242', amount: 18400, company: '00100' } as const;
 const validate = compileGeneratedSchema(voucherCreateSchema);
 
 function callInput(): FunctionCallInput {
-  return { args: { ...args }, correlationId: 'corr-1', validate, principalSubject: CALLER };
+  return {
+    args: { ...args },
+    correlationId: 'corr-1',
+    validate,
+    principalSubject: CALLER,
+    executionGrant: TEST_EXECUTION_GRANT,
+  };
 }
 
 /** Probe evidence saying the sibling is there. The happy path's precondition. */
@@ -103,11 +110,16 @@ describe('W0-H2 — the descriptor is manifest-derived and nothing else', () => 
     // schema, is what keeps a caller-supplied orchestration name off the wire.
     const server = createMockAisServer({ executesAs: CALLER });
     const dispatcher = createDryRunDispatcher({
-      executor: createFunctionExecutor({ client: server, echoSampler: createAlwaysSampler() }),
+      executor: createFunctionExecutor({
+        grants: TEST_GRANTS,
+        client: server,
+        echoSampler: createAlwaysSampler(),
+      }),
       registry: PAIR_PRESENT,
     });
     const descriptor = buildDryRunDescriptor(voucherCreateManifest);
     await dispatcher.dryRun(descriptor, {
+      executionGrant: TEST_EXECUTION_GRANT,
       ...callInput(),
       validate: compileGeneratedSchema(voucherCreateSchemaOpen),
       args: { ...args, orchestration: 'MCPFORGE_AP_VOUCHER_CREATE_EXECUTE' },
@@ -121,11 +133,18 @@ describe('W0-H2 (a) — validate-pair dispatches to the X_VALIDATE sibling', () 
   it('dispatches the sibling, never the EXECUTE orchestration', async () => {
     const server = createMockAisServer({ executesAs: CALLER });
     const dispatcher = createDryRunDispatcher({
-      executor: createFunctionExecutor({ client: server, echoSampler: createAlwaysSampler() }),
+      executor: createFunctionExecutor({
+        grants: TEST_GRANTS,
+        client: server,
+        echoSampler: createAlwaysSampler(),
+      }),
       registry: PAIR_PRESENT,
     });
 
-    const outcome = await dispatcher.dryRun(buildDryRunDescriptor(voucherCreateManifest), callInput());
+    const outcome = await dispatcher.dryRun(
+      buildDryRunDescriptor(voucherCreateManifest),
+      callInput(),
+    );
 
     expect(outcome.dispatched).toBe(true);
     expect(outcome.plan.effectiveStrategy).toBe('validate-pair');
@@ -148,14 +167,14 @@ describe('W0-H2 (a) — validate-pair dispatches to the X_VALIDATE sibling', () 
     const validateServer = createMockAisServer(behaviour);
 
     const executeError = await refusal(
-      createFunctionExecutor({ client: executeServer }).execute(
+      createFunctionExecutor({ grants: TEST_GRANTS, client: executeServer }).execute(
         buildFunctionBindingDescriptor(voucherCreateManifest),
         callInput(),
       ),
     );
     const dryRunError = await refusal(
       createDryRunDispatcher({
-        executor: createFunctionExecutor({ client: validateServer }),
+        executor: createFunctionExecutor({ grants: TEST_GRANTS, client: validateServer }),
         registry: PAIR_PRESENT,
       }).dryRun(buildDryRunDescriptor(voucherCreateManifest), callInput()),
     );
@@ -175,9 +194,10 @@ describe('W0-H2 (a) — validate-pair dispatches to the X_VALIDATE sibling', () 
     const server = createMockAisServer({ executesAs: CALLER });
     const error = await refusal(
       createDryRunDispatcher({
-        executor: createFunctionExecutor({ client: server }),
+        executor: createFunctionExecutor({ grants: TEST_GRANTS, client: server }),
         registry: PAIR_PRESENT,
       }).dryRun(buildDryRunDescriptor(voucherCreateManifest), {
+        executionGrant: TEST_EXECUTION_GRANT,
         ...callInput(),
         args: { supplier: '4242' }, // `amount` is required
       }),
@@ -227,7 +247,7 @@ describe('W0-H2 (b) — the degradation ladder', () => {
   it('dispatches NOTHING when degraded — no sibling call, no execute call', async () => {
     const server = createMockAisServer({ executesAs: CALLER });
     const outcome = await createDryRunDispatcher({
-      executor: createFunctionExecutor({ client: server }),
+      executor: createFunctionExecutor({ grants: TEST_GRANTS, client: server }),
       registry: PAIR_ABSENT,
     }).dryRun(buildDryRunDescriptor(voucherCreateManifest), callInput());
 
@@ -293,7 +313,7 @@ describe('W0-H2 — degradation comes from probe evidence, never from a runtime 
   it('a failing _VALIDATE call propagates the error and does NOT silently degrade', async () => {
     const server = createMockAisServer({ throws: new Error('fetch failed') });
     const dispatcher = createDryRunDispatcher({
-      executor: createFunctionExecutor({ client: server }),
+      executor: createFunctionExecutor({ grants: TEST_GRANTS, client: server }),
       registry: PAIR_PRESENT,
     });
     const error = await refusal(
@@ -302,9 +322,9 @@ describe('W0-H2 — degradation comes from probe evidence, never from a runtime 
     expect(error.code).toBe('TARGET_UNAVAILABLE');
     // The plan was, and remains, validate-pair: a transient target failure is
     // not a licence to remove the dry run from a financial write.
-    expect(resolveDryRunPlan(buildDryRunDescriptor(voucherCreateManifest), PAIR_PRESENT).degraded).toBe(
-      false,
-    );
+    expect(
+      resolveDryRunPlan(buildDryRunDescriptor(voucherCreateManifest), PAIR_PRESENT).degraded,
+    ).toBe(false);
   });
 
   it('keeps the identity echo on the sibling — a _VALIDATE with no echo fails the dry run', async () => {
@@ -314,7 +334,11 @@ describe('W0-H2 — degradation comes from probe evidence, never from a runtime 
     const server = createMockAisServer({}); // no `executesAs` — no echo in the body
     const error = await refusal(
       createDryRunDispatcher({
-        executor: createFunctionExecutor({ client: server, echoSampler: createAlwaysSampler() }),
+        executor: createFunctionExecutor({
+          grants: TEST_GRANTS,
+          client: server,
+          echoSampler: createAlwaysSampler(),
+        }),
         registry: PAIR_PRESENT,
       }).dryRun(buildDryRunDescriptor(voucherCreateManifest), callInput()),
     );

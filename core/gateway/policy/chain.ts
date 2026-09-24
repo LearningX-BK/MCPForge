@@ -26,6 +26,7 @@
 
 import { forgeError, type ForgeError } from '@mcpforge/shared';
 import { POLICY_STAGES } from './stages.js';
+import { mintExecutionGrant } from './execution-grant/grant.js';
 import type {
   ConfirmedCall,
   PolicyCall,
@@ -43,6 +44,12 @@ export type PolicyDecision =
       readonly stagesRun: readonly PolicyStageId[];
       /** 6g's verified token, or null for a read tool. The executor spends its nonce. */
       readonly confirmed: ConfirmedCall | null;
+      /**
+       * W0-P9 — the signed permission to dispatch THIS call, minted here and
+       * nowhere else. A binding executor refuses without it. `null` when the
+       * runtime carries no grant keyring, which fails closed at the executor.
+       */
+      readonly executionGrant: string | null;
     }
   /** A stage refused. `error` is closed-taxonomy and carries a non-empty `next`. */
   | {
@@ -151,10 +158,41 @@ export async function runPolicyChain(
       // Unreachable for a well-typed outcome, and a denial if it ever is not.
       return internalDenial(stage.id, call, 'it returned an unknown outcome kind', stagesRun);
     }
+
+    // W0-P9 — every stage said `continue`, so this is the one point at which
+    // the chain may say "this exact call may reach its target". Inside the
+    // try: a mint that throws (no resolved subject, no catalogue entry) is a
+    // DENIAL like any other runner failure, never a grant-less proceed.
+    let executionGrant: string | null = null;
+    const keyring = ctx.runtime.executionGrantKeyring;
+    if (keyring !== undefined) {
+      const entry = ctx.catalogue.find((candidate) => candidate.toolId === call.toolId);
+      if (entry === undefined) {
+        return internalDenial(
+          current,
+          call,
+          'no catalogue entry to bind the execution grant to',
+          stagesRun,
+        );
+      }
+      executionGrant = mintExecutionGrant(
+        {
+          purpose: 'execute',
+          toolId: call.toolId,
+          bindingRef: entry.bindingRef,
+          args: call.args,
+          callerSubject: ctx.scope.session.principal.subject,
+          consumerId: ctx.scope.session.consumer.consumerId,
+          correlationId: call.correlationId,
+          now: ctx.scope.now,
+        },
+        keyring,
+      );
+    }
+
+    return { outcome: 'proceed', stagesRun, confirmed: state.confirmed ?? null, executionGrant };
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : String(cause);
     return internalDenial(current, call, `the policy chain itself failed (${detail})`, stagesRun);
   }
-
-  return { outcome: 'proceed', stagesRun, confirmed: state.confirmed ?? null };
 }

@@ -29,6 +29,7 @@ import { applyInputMapping } from './mapping.js';
 import type {
   AisClient,
   EchoSampler,
+  ExecutionGrantCheck,
   FunctionBindingDescriptor,
   FunctionCallInput,
   FunctionCallResult,
@@ -36,6 +37,11 @@ import type {
 
 export interface FunctionExecutorOptions {
   readonly client: AisClient;
+  /**
+   * W0-P9 — required, no default. Every `execute()` is refused unless this
+   * confirms the call carries a grant minted by the gateway's policy chain.
+   */
+  readonly grants: ExecutionGrantCheck;
   /** Shared across every descriptor so the limit is per orchestration, not per executor. */
   readonly concurrency?: ConcurrencyRegistry;
   /**
@@ -73,6 +79,11 @@ function describeValidationErrors(validate: FunctionCallInput['validate']): stri
 export function createFunctionExecutor(options: FunctionExecutorOptions): FunctionExecutor {
   const registry = options.concurrency ?? new ConcurrencyRegistry();
   const client = options.client;
+  const grants = options.grants;
+  if (grants === undefined || typeof grants.check !== 'function') {
+    // Reachable only from untyped JavaScript; TypeScript already requires it.
+    throw new Error('createFunctionExecutor requires `grants` (W0-P9); there is no default.');
+  }
   const echoSampler = options.echoSampler ?? createDeterministicSampler();
 
   return {
@@ -82,6 +93,21 @@ export function createFunctionExecutor(options: FunctionExecutorOptions): Functi
     ): Promise<FunctionCallResult> {
       const { correlationId } = input;
       const caps = descriptor.execution;
+
+      // 0. W0-P9 — the gateway is the only door. Before validation, admission
+      //    or dispatch: was THIS call (tool, binding ref, business arguments,
+      //    caller, correlation id) authorized by the policy chain? A call that
+      //    did not come through the chain has no grant, and nothing below runs.
+      const grant = grants.check(input.executionGrant, {
+        toolId: descriptor.toolId,
+        bindingRef: descriptor.ref,
+        args: input.args,
+        callerSubject: input.principalSubject,
+        correlationId,
+      });
+      if (!grant.ok) {
+        throw adapterErrors.executionNotGranted(descriptor, correlationId, grant.reason);
+      }
 
       // 1. Validate against the GENERATED schema. Not a second validator: the
       //    caller passes in the compiled Ajv function built from the same

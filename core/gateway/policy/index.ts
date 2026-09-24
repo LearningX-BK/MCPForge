@@ -7,6 +7,7 @@
 export * from './types.js';
 export * from './binding-auth/index.js';
 export * from './confirm/index.js';
+export * from './execution-grant/index.js';
 export * from './guardrails/index.js';
 export * from './idempotency/index.js';
 export * from './stages.js';

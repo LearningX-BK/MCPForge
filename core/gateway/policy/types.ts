@@ -31,6 +31,7 @@
 import type { ErrorCode, Guardrail } from '@mcpforge/shared';
 import type { ReversalContract, ResultKeySpec } from '../reversal/types.js';
 import type { ScopeCatalogueEntry, ScopeContext, ToolId } from '../scope/index.js';
+import type { ExecutionGrantKeyring } from './execution-grant/grant.js';
 
 /**
  * The two entry points a tool id can arrive through. They are named here so the
@@ -237,6 +238,14 @@ export interface PolicyRuntime {
   readonly guardrails: GuardrailEvaluator;
   readonly writeGate: WriteGate;
   readonly idempotency: IdempotencyGate;
+  /**
+   * W0-P9 — the key the chain signs execution grants with at `proceed`
+   * (`./execution-grant/grant.ts`). Optional in the TYPE only: with no keyring
+   * the chain returns `executionGrant: null`, and a binding executor refuses
+   * a null grant, so omitting it fails closed at dispatch. The gateway
+   * assembly (W0-P11) must supply it.
+   */
+  readonly executionGrantKeyring?: ExecutionGrantKeyring;
 }
 
 /**

@@ -262,3 +262,27 @@ export function internal(
     correlationId,
   );
 }
+
+/**
+ * W0-P9 — a dispatch without a valid execution grant: some code path reached
+ * the executor without the gateway's policy chain. Nothing was sent to the
+ * target. `INTERNAL` rather than a new code, because the closed taxonomy
+ * (02 §3.1.5) is not this file's to extend and, from the agent's side, this is
+ * an MCPForge defect, not something the agent did wrong.
+ */
+export function executionNotGranted(
+  descriptor: FunctionBindingDescriptor,
+  correlationId: string,
+  reason: string,
+): ForgeError {
+  return forgeError(
+    'INTERNAL',
+    `${descriptor.toolId}: refused to dispatch ${descriptor.ref} — the call carried no valid execution grant from the gateway policy chain (${reason}). Nothing was sent to the target.`,
+    correlationId,
+    {
+      condition:
+        'The binding executor was reached without the gateway policy chain authorizing this exact call.',
+      next: `Call ${descriptor.toolId} through the MCPForge gateway (tools/call or forge.invoke), which runs the policy chain and issues the grant. If you already did, report correlationId ${correlationId} to the MCPForge operator; no business record was created or changed.`,
+    },
+  );
+}

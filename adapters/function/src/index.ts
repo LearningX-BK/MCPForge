@@ -53,6 +53,7 @@ export { DEFAULT_MAX_CONCURRENCY } from './types.js';
 export type {
   AisClient,
   EchoSampler,
+  ExecutionGrantCheck,
   FunctionBindingIdentity,
   IdentityEchoObservation,
   AisRequest,

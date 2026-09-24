@@ -15,6 +15,7 @@ import {
   voucherCreateSchemaOpen,
 } from './fixtures.test-support.js';
 import type { FunctionBindingDescriptor } from './types.js';
+import { TEST_EXECUTION_GRANT, TEST_GRANTS } from './testing/index.js';
 
 const descriptor = buildFunctionBindingDescriptor(voucherCreateManifest);
 const validate = compileGeneratedSchema(voucherCreateSchema);
@@ -41,7 +42,7 @@ async function expectForgeError(p: Promise<unknown>): Promise<ForgeError> {
 describe('binding.ref is the only source of the orchestration name (02 §3.5)', () => {
   it('dispatches the manifest ref, ignoring every orchestration-shaped argument', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     // The attack: every plausible way a caller might try to name an
     // orchestration, on an OPEN schema so nothing else can be credited with
@@ -56,6 +57,7 @@ describe('binding.ref is the only source of the orchestration name (02 §3.5)', 
     };
 
     const result = await exec.execute(descriptor, {
+      executionGrant: TEST_EXECUTION_GRANT,
       args: hostile,
       correlationId: 'c1',
       principalSubject: CALLER,
@@ -101,9 +103,10 @@ describe('binding.ref is the only source of the orchestration name (02 §3.5)', 
 describe('input validation against the generated schema', () => {
   it('refuses a missing required argument with INPUT_INVALID and never dispatches', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: { supplier: '4242' },
         correlationId: 'c2',
         validate,
@@ -117,9 +120,10 @@ describe('input validation against the generated schema', () => {
 
   it('refuses a wrong-typed argument', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: { supplier: '4242', amount: 'lots' },
         correlationId: 'c3',
         validate,
@@ -131,9 +135,10 @@ describe('input validation against the generated schema', () => {
 
   it('refuses an extra argument under the real (closed) generated schema', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: { ...goodArgs, sneaky: 'value' },
         correlationId: 'c4',
         validate,
@@ -147,8 +152,9 @@ describe('input validation against the generated schema', () => {
 describe('the generated mapping drops unmapped extras rather than forwarding them', () => {
   it('never forwards an unmapped field, even when the schema would allow it', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const result = await exec.execute(descriptor, {
+      executionGrant: TEST_EXECUTION_GRANT,
       args: { ...goodArgs, sneaky: 'value', confirm: 'cnf_abc' },
       correlationId: 'c5',
       principalSubject: CALLER,
@@ -168,8 +174,9 @@ describe('the generated mapping drops unmapped extras rather than forwarding the
 
   it('omits an absent optional rather than sending undefined', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     await exec.execute(descriptor, {
+      executionGrant: TEST_EXECUTION_GRANT,
       args: { supplier: '4242', amount: 1 },
       correlationId: 'c6',
       principalSubject: CALLER,
@@ -182,9 +189,10 @@ describe('the generated mapping drops unmapped extras rather than forwarding the
 describe('response size cap', () => {
   it('discards an oversized response with a cap error naming the get_status counterpart', async () => {
     const client = createMockAisServer({ bodyBytes: descriptor.execution.responseBytesMax + 1 });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c7',
         validate,
@@ -202,8 +210,9 @@ describe('response size cap', () => {
       bodyBytes: descriptor.execution.responseBytesMax,
       executesAs: CALLER,
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const result = await exec.execute(descriptor, {
+      executionGrant: TEST_EXECUTION_GRANT,
       args: goodArgs,
       correlationId: 'c8',
       principalSubject: CALLER,
@@ -216,10 +225,11 @@ describe('response size cap', () => {
 describe('timeout', () => {
   it('fires TARGET_TIMEOUT on a hung target and tells a write caller not to retry blindly', async () => {
     const client = createMockAisServer({ hang: true });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const started = Date.now();
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c9',
         validate,
@@ -234,7 +244,7 @@ describe('timeout', () => {
 
   it('releases the concurrency slot after a timeout', async () => {
     const client = createMockAisServer({ hang: true });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const slim: FunctionBindingDescriptor = {
       ...descriptor,
       ref: 'SLOT_RELEASE_TEST',
@@ -242,6 +252,7 @@ describe('timeout', () => {
     };
     await expectForgeError(
       exec.execute(slim, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c10',
         validate,
@@ -251,6 +262,7 @@ describe('timeout', () => {
     // If the slot leaked, this second call would be refused rather than time out.
     const second = await expectForgeError(
       exec.execute(slim, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c11',
         validate,
@@ -276,7 +288,7 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
   it('never admits a 5th simultaneous call — the 5th queues, it is not over-admitted', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
     client.gate();
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const gated: FunctionBindingDescriptor = {
       ...descriptor,
       ref: 'CONCURRENCY_QUEUE_TEST',
@@ -285,6 +297,7 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
 
     const calls = Array.from({ length: 5 }, (_v, i) =>
       exec.execute(gated, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: `q${i}`,
         validate,
@@ -309,7 +322,7 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
   it('refuses rather than over-admits when the queue wait exceeds the timeout', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
     client.gate();
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const tight: FunctionBindingDescriptor = {
       ...descriptor,
       ref: 'CONCURRENCY_REFUSE_TEST',
@@ -318,6 +331,7 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
 
     const held = [0, 1].map((i) =>
       exec.execute(tight, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: `h${i}`,
         validate,
@@ -328,6 +342,7 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
 
     const e = await expectForgeError(
       exec.execute(tight, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'h2',
         validate,
@@ -348,7 +363,7 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
   it('shares one limit across two tools pointing at the same orchestration', async () => {
     const client = createMockAisServer({ executesAs: CALLER });
     client.gate();
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const base: FunctionBindingDescriptor = {
       ...descriptor,
       ref: 'SHARED_REF_TEST',
@@ -358,18 +373,21 @@ describe('per-orchestration maxConcurrency (default 4)', () => {
 
     const calls = [
       exec.execute(base, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 's0',
         validate,
         principalSubject: CALLER,
       }),
       exec.execute(base, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 's1',
         validate,
         principalSubject: CALLER,
       }),
       exec.execute(twin, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 's2',
         validate,
@@ -390,9 +408,10 @@ describe('target failures map onto the closed taxonomy', () => {
     const client = createMockAisServer({
       targetError: { message: 'F0411 insert rejected: invalid company' },
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c12',
         validate,
@@ -406,9 +425,10 @@ describe('target failures map onto the closed taxonomy', () => {
     const client = createMockAisServer({
       targetError: { message: 'PO 0000451 is not receipted', precondition: true },
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c13',
         validate,
@@ -422,9 +442,10 @@ describe('target failures map onto the closed taxonomy', () => {
     const client = createMockAisServer({
       throws: new Error('connect ECONNREFUSED 127.0.0.1:9302'),
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
     const e = await expectForgeError(
       exec.execute(descriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args: goodArgs,
         correlationId: 'c14',
         validate,
@@ -433,5 +454,94 @@ describe('target failures map onto the closed taxonomy', () => {
     );
     expect(e.code).toBe('TARGET_UNAVAILABLE');
     expect(e.retryable).toBe(true);
+  });
+});
+
+describe('W0-P9 — the executor refuses a call the policy chain did not grant', () => {
+  it('refuses a call with NO grant, before anything reaches the target', async () => {
+    const client = createMockAisServer({ executesAs: CALLER });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
+    const e = await expectForgeError(
+      exec.execute(descriptor, {
+        args: goodArgs,
+        correlationId: 'p9-none',
+        principalSubject: CALLER,
+        validate,
+      }),
+    );
+    expect(e.code).toBe('INTERNAL');
+    expect(e.message).toContain('no valid execution grant');
+    expect(e.next).toContain('tools/call or forge.invoke');
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it('refuses a grant the check does not accept', async () => {
+    const client = createMockAisServer({ executesAs: CALLER });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
+    await expectForgeError(
+      exec.execute(descriptor, {
+        executionGrant: 'egr_forged.by.caller',
+        args: goodArgs,
+        correlationId: 'p9-forged',
+        principalSubject: CALLER,
+        validate,
+      }),
+    );
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it('checks the grant FIRST: an ungranted call with invalid arguments is refused as ungranted, not validated', async () => {
+    const client = createMockAisServer({ executesAs: CALLER });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
+    const e = await expectForgeError(
+      exec.execute(descriptor, {
+        args: { supplier: 42 },
+        correlationId: 'p9-order',
+        principalSubject: CALLER,
+        validate,
+      }),
+    );
+    expect(e.code).toBe('INTERNAL');
+    expect(client.calls).toHaveLength(0);
+  });
+
+  it('asks the check about exactly this call: tool, binding ref, arguments, caller, correlation id', async () => {
+    const seen: unknown[] = [];
+    const client = createMockAisServer({ executesAs: CALLER });
+    const exec = createFunctionExecutor({
+      client,
+      grants: {
+        check(grant, binding) {
+          seen.push({ grant, binding });
+          return { ok: true };
+        },
+      },
+    });
+    await exec.execute(descriptor, {
+      executionGrant: 'g-1',
+      args: goodArgs,
+      correlationId: 'p9-binding',
+      principalSubject: CALLER,
+      validate,
+    });
+    expect(seen).toEqual([
+      {
+        grant: 'g-1',
+        binding: {
+          toolId: descriptor.toolId,
+          bindingRef: descriptor.ref,
+          args: goodArgs,
+          callerSubject: CALLER,
+          correlationId: 'p9-binding',
+        },
+      },
+    ]);
+  });
+
+  it('cannot be constructed without a grant check — there is no default', () => {
+    const client = createMockAisServer({ executesAs: CALLER });
+    expect(() =>
+      createFunctionExecutor({ client } as unknown as Parameters<typeof createFunctionExecutor>[0]),
+    ).toThrow(/requires `grants`/);
   });
 });

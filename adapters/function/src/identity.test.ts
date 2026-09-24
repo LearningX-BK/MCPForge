@@ -18,6 +18,7 @@ import { compileGeneratedSchema } from './schema.js';
 import { createMockAisServer } from './testing/mock-ais-server.js';
 import { voucherCreateManifest, voucherCreateSchema } from './fixtures.test-support.js';
 import type { ToolManifest } from '@mcpforge/shared/manifest';
+import { TEST_EXECUTION_GRANT, TEST_GRANTS } from './testing/index.js';
 
 const CALLER = 'bikash';
 const args = { supplier: '4242', amount: 18400, company: '00100' } as const;
@@ -95,9 +96,10 @@ describe('a matching identity is a success carrying the audit values', () => {
       executesAs: 'BIKASH',
       echoStep: 'MCPFORGE_PROBE_WHOAMI',
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     const result = await exec.execute(writeDescriptor, {
+      executionGrant: TEST_EXECUTION_GRANT,
       args,
       correlationId: 'echo-ok',
       validate,
@@ -119,10 +121,11 @@ describe('a mismatched identity is a failure, and never a success', () => {
       executesAs: 'JDE_SVC',
       echoStep: 'MCPFORGE_PROBE_WHOAMI',
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     const err = await refusal(
       exec.execute(writeDescriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args,
         correlationId: 'echo-mismatch',
         validate,
@@ -155,11 +158,12 @@ describe('a mismatched identity is a failure, and never a success', () => {
         MCPFORGE_PROBE_WHOAMI: { MCPFORGE_EXECUTING_USER: 'JDE_SVC' },
       }),
     });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     let resolved: unknown = 'nothing resolved';
     await exec
       .execute(writeDescriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args,
         correlationId: 'echo-mismatch-2',
         validate,
@@ -178,10 +182,11 @@ describe('a mismatched identity is a failure, and never a success', () => {
 
   it('a missing echo on a required check fails rather than being assumed fine', async () => {
     const client = createMockAisServer(); // composed without the echo step
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     const err = await refusal(
       exec.execute(writeDescriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args,
         correlationId: 'echo-absent',
         validate,
@@ -195,10 +200,15 @@ describe('a mismatched identity is a failure, and never a success', () => {
 
   it('a required check with no caller subject is IDENTITY_UNRESOLVED — there is no fallback', async () => {
     const client = createMockAisServer({ executesAs: 'BIKASH' });
-    const exec = createFunctionExecutor({ client });
+    const exec = createFunctionExecutor({ grants: TEST_GRANTS, client });
 
     const err = await refusal(
-      exec.execute(writeDescriptor, { args, correlationId: 'echo-nosubject', validate }),
+      exec.execute(writeDescriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
+        args,
+        correlationId: 'echo-nosubject',
+        validate,
+      }),
     );
     expect(err.code).toBe('IDENTITY_UNRESOLVED');
     expect(err.condition).toMatch(/no fallback subject/i);
@@ -214,11 +224,16 @@ describe('reads are sampled 1-in-N, default 20 (02 §3.5)', () => {
   it('exactly one read in twenty is checked, and it is the first of each run', async () => {
     const readDescriptor = buildFunctionBindingDescriptor(readManifest('sampled'));
     const client = createMockAisServer({ executesAs: 'BIKASH' });
-    const exec = createFunctionExecutor({ client, echoSampler: createDeterministicSampler(20) });
+    const exec = createFunctionExecutor({
+      grants: TEST_GRANTS,
+      client,
+      echoSampler: createDeterministicSampler(20),
+    });
 
     const checked: number[] = [];
     for (let i = 0; i < 60; i += 1) {
       const r = await exec.execute(readDescriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args,
         correlationId: `r${i}`,
         validate,
@@ -248,10 +263,15 @@ describe('reads are sampled 1-in-N, default 20 (02 §3.5)', () => {
   it('a sampled read whose identity mismatches still fails', async () => {
     const readDescriptor = buildFunctionBindingDescriptor(readManifest('sampled'));
     const client = createMockAisServer({ executesAs: 'JDE_SVC' });
-    const exec = createFunctionExecutor({ client, echoSampler: createDeterministicSampler(20) });
+    const exec = createFunctionExecutor({
+      grants: TEST_GRANTS,
+      client,
+      echoSampler: createDeterministicSampler(20),
+    });
 
     const err = await refusal(
       exec.execute(readDescriptor, {
+        executionGrant: TEST_EXECUTION_GRANT,
         args,
         correlationId: 'read-mismatch',
         validate,

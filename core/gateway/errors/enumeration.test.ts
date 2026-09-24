@@ -538,9 +538,11 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       "adapters/function/src/errors.ts's targetTimeout() branches its next on descriptor.write — driven here through the REAL executor + a real timing-out in-process AIS fake, write branch (a write tool must never be told to retry blind).",
     dynamicCheck: async () => {
       const { createFunctionExecutor } = await import('@mcpforge/adapter-function');
-      const { createMockAisServer } = await import('@mcpforge/adapter-function/testing');
+      const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } = await import(
+        '@mcpforge/adapter-function/testing'
+      );
       const client = createMockAisServer({ hang: true });
-      const executor = createFunctionExecutor({ client });
+      const executor = createFunctionExecutor({ grants: TEST_GRANTS, client });
       const descriptor = {
         toolId: 'jde.ap.voucher.create',
         toolVersion: '1.0.0',
@@ -552,7 +554,7 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       };
       const validate = Object.assign(() => true, { errors: null });
       try {
-        await executor.execute(descriptor as never, {
+        await executor.execute(descriptor as never, { executionGrant: TEST_EXECUTION_GRANT,
           args: {},
           correlationId: 'req_enum_timeout',
           validate: validate as never,
@@ -569,9 +571,11 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       "adapters/function/src/errors.ts's responseTooLarge() branches its next on descriptor.write — driven here through the REAL executor + a real oversized in-process AIS fake, non-write branch.",
     dynamicCheck: async () => {
       const { createFunctionExecutor } = await import('@mcpforge/adapter-function');
-      const { createMockAisServer } = await import('@mcpforge/adapter-function/testing');
+      const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } = await import(
+        '@mcpforge/adapter-function/testing'
+      );
       const client = createMockAisServer({ bodyBytes: 1000 });
-      const executor = createFunctionExecutor({ client });
+      const executor = createFunctionExecutor({ grants: TEST_GRANTS, client });
       const descriptor = {
         toolId: 'jde.ap.voucher.search',
         toolVersion: '1.0.0',
@@ -583,7 +587,7 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       };
       const validate = Object.assign(() => true, { errors: null });
       try {
-        await executor.execute(descriptor as never, {
+        await executor.execute(descriptor as never, { executionGrant: TEST_EXECUTION_GRANT,
           args: {},
           correlationId: 'req_enum_cap',
           validate: validate as never,
@@ -624,9 +628,11 @@ async function echoRefusalNext(
   principalSubject: string | undefined = 'bikash',
 ): Promise<string> {
   const { createFunctionExecutor } = await import('@mcpforge/adapter-function');
-  const { createMockAisServer } = await import('@mcpforge/adapter-function/testing');
+  const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } = await import(
+        '@mcpforge/adapter-function/testing'
+      );
   const client = createMockAisServer(behaviour);
-  const executor = createFunctionExecutor({ client });
+  const executor = createFunctionExecutor({ grants: TEST_GRANTS, client });
   const descriptor = {
     toolId: 'jde.ap.voucher.create',
     toolVersion: '1.0.0',
@@ -639,7 +645,7 @@ async function echoRefusalNext(
   };
   const validate = Object.assign(() => true, { errors: null });
   try {
-    await executor.execute(descriptor as never, {
+    await executor.execute(descriptor as never, { executionGrant: TEST_EXECUTION_GRANT,
       args: {},
       correlationId: 'req_enum_echo',
       validate: validate as never,

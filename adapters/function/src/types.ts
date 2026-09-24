@@ -151,6 +151,35 @@ export interface FunctionCallInput {
    * no fallback subject and no default (CLAUDE.md #1).
    */
   readonly principalSubject?: string;
+  /**
+   * W0-P9 — the policy chain's signed permission for THIS call
+   * (`PolicyDecision.executionGrant`). Checked by `ExecutionGrantCheck` before
+   * anything else happens; absent or invalid means nothing is dispatched.
+   */
+  readonly executionGrant?: string;
+}
+
+/**
+ * W0-P9 — how the executor asks "did the gateway's policy chain authorize this
+ * exact call?". Declared here because this package depends on
+ * `@mcpforge/shared` only; the gateway supplies the implementation
+ * (`executionGrantCheck` in `core/gateway/policy/execution-grant/grant.ts`,
+ * HMAC over tool, binding ref, business arguments, caller and correlation id).
+ * **Required** by `createFunctionExecutor`, with no default and no permissive
+ * implementation anywhere in production code, so an executor that skips the
+ * check cannot be built by omission.
+ */
+export interface ExecutionGrantCheck {
+  check(
+    grant: string | undefined,
+    binding: {
+      readonly toolId: string;
+      readonly bindingRef: string;
+      readonly args: Readonly<Record<string, unknown>>;
+      readonly callerSubject: string | undefined;
+      readonly correlationId: string;
+    },
+  ): { readonly ok: true } | { readonly ok: false; readonly reason: string };
 }
 
 export interface CompiledSchemaValidator {

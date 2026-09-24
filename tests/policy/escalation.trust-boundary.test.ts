@@ -30,7 +30,7 @@
 // downstream (auth, scope, policy) is reached.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -189,32 +189,116 @@ describe('W0-E8 case 1 — the gateway is the only door (Wave 0 exit criterion 5
     await client.close();
   });
 
-  it('EGRESS half, recorded not faked: no binding executor exists outside the gateway to be called around it', () => {
-    // 02 §4.8's egress controls are network-level and belong to a deployed
-    // environment. What is checkable in this repository today is the weaker but
-    // true statement that there is no second code path to a target at all: if
-    // an executor appears under adapters/** while criterion 5 still has no
-    // live egress-refusal job, this assertion fails and forces the question.
+  // W0-P9 replaced the tripwire that stood here. It asserted that NO
+  // TypeScript binding executor existed under adapters/, with the instruction
+  // that when one appeared, criterion 5 needed a live egress-refusal job.
+  // `adapters/function` appeared, and that job is now
+  // ./escalation.egress-grant.test.ts. Its network-level half remains a
+  // recorded Wave 0 waiver (TASKS.md). The tripwire's PURPOSE survives below:
+  // a NEW executor package still fails this suite until it enforces the
+  // execution grant and has its own egress job.
+  it('EGRESS half: every TypeScript binding executor under adapters/ is one with a live egress-refusal job', () => {
+    // Executor packages proven by a live job, and the job that proves each.
+    const GRANT_ENFORCING: Readonly<Record<string, string>> = {
+      function: 'tests/policy/escalation.egress-grant.test.ts',
+    };
     const adapters = join(repoRoot, 'adapters');
-    const executables: string[] = [];
+    const packagesWithCode = readdirSync(adapters).filter((name) => {
+      // The Python worker is out of scope: 02 §1.4, it never speaks MCP, never
+      // decides policy, and is driven BY the gateway, not around it.
+      if (name === 'oracle-worker') return false;
+      const dir = join(adapters, name);
+      if (!statSync(dir).isDirectory()) return false;
+      let found = false;
+      const walk = (d: string): void => {
+        for (const entryName of readdirSync(d)) {
+          const full = join(d, entryName);
+          if (statSync(full).isDirectory()) {
+            if (entryName === 'node_modules' || entryName === 'dist') continue;
+            walk(full);
+          } else if (entryName.endsWith('.ts') && !entryName.endsWith('.test.ts')) {
+            found = true;
+          }
+        }
+      };
+      walk(dir);
+      return found;
+    });
+
+    expect(
+      packagesWithCode.sort(),
+      'A new TypeScript binding executor exists under adapters/. It must refuse dispatch without a policy-chain execution grant (core/gateway/policy/execution-grant) and have its own live egress-refusal job before it is listed in GRANT_ENFORCING here. Wave 0 exit criterion 5, 02 §4.8.',
+    ).toEqual(Object.keys(GRANT_ENFORCING).sort());
+    for (const job of Object.values(GRANT_ENFORCING)) {
+      expect(statSync(join(repoRoot, job)).isFile(), `${job} is missing`).toBe(true);
+    }
+  });
+
+  it('EGRESS half: only the policy chain mints a grant, and no production file builds an executor or imports test doubles', () => {
+    // A grant minted outside core/gateway/policy/** would be a second door. An
+    // executor constructed outside the gateway assembly would be a dispatch
+    // path the assembly does not know about. The adapter's `testing` subpath
+    // holds the mock target and the test-only grant check, and must never
+    // reach production.
+    //
+    // W0-P11 (assemble the live /mcp path) adds the gateway assembly to
+    // EXECUTOR_CONSTRUCTORS, and only that.
+    const EXECUTOR_CONSTRUCTORS: readonly string[] = [];
+    const sources: string[] = [];
     const walk = (dir: string): void => {
       for (const name of readdirSync(dir)) {
         const full = join(dir, name);
         if (statSync(full).isDirectory()) {
-          // The Python worker is out of scope: 02 §1.4 — it never speaks MCP,
-          // never decides policy, and is driven BY the gateway, not around it.
-          if (name === 'oracle-worker' || name === 'node_modules' || name === 'dist') continue;
+          if (['node_modules', 'dist', '.next', 'testing', 'generated'].includes(name)) continue;
           walk(full);
-          continue;
+        } else if (
+          (name.endsWith('.ts') || name.endsWith('.tsx')) &&
+          !/\.test\.tsx?$/.test(name) &&
+          !name.endsWith('.test-support.ts') &&
+          !name.endsWith('.fixtures.ts') &&
+          !name.endsWith('.d.ts')
+        ) {
+          sources.push(full);
         }
-        if (name.endsWith('.ts') && !name.endsWith('.test.ts')) executables.push(full);
       }
     };
-    walk(adapters);
+    walk(join(repoRoot, 'core'));
+    walk(join(repoRoot, 'adapters'));
 
-    expect(
-      executables,
-      'A TypeScript binding executor now exists under adapters/. Wave 0 exit criterion 5 needs a LIVE egress-refusal job against it (02 §4.8) — this suite currently evidences the ingress door only.',
-    ).toEqual([]);
+    const rel = (p: string): string =>
+      p
+        .slice(repoRoot.length + 1)
+        .split('\\')
+        .join('/');
+    const minting: string[] = [];
+    const constructing: string[] = [];
+    const importingTestDoubles: string[] = [];
+    for (const file of sources) {
+      const path = rel(file);
+      const text = readFileSync(file, 'utf8');
+      if (/\bmintExecutionGrant\(/.test(text) && !path.startsWith('core/gateway/policy/')) {
+        minting.push(path);
+      }
+      if (
+        /\bcreateFunctionExecutor\(/.test(text) &&
+        path !== 'adapters/function/src/executor.ts' &&
+        !EXECUTOR_CONSTRUCTORS.includes(path)
+      ) {
+        constructing.push(path);
+      }
+      // Real import/export statements and dynamic import() only, never a comment that names the path.
+      if (
+        /(?:\bfrom\s*|\bimport\s*\(?\s*)['"][^'"]*(?:@mcpforge\/adapter-function\/testing|\/testing\/(?:index|grants|mock-ais-server)\.js)['"]/.test(
+          text,
+        )
+      ) {
+        importingTestDoubles.push(path);
+      }
+    }
+    expect(minting, 'mintExecutionGrant called outside core/gateway/policy/**').toEqual([]);
+    expect(constructing, 'createFunctionExecutor constructed outside the gateway assembly').toEqual(
+      [],
+    );
+    expect(importingTestDoubles, 'a production file imports the adapter test doubles').toEqual([]);
   });
 });
