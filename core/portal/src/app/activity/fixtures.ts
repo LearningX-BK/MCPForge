@@ -34,17 +34,20 @@ const NOW = new Date('2026-09-15T12:00:00.000Z').getTime();
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
-function iso(msAgo: number): string {
-  return new Date(NOW - msAgo).toISOString();
+// `from` defaults to the fixed anchor (page renders stay deterministic) but a
+// caller's `now` is honoured. Before W0-P10 the loaders discarded `now`
+// (`void now`), so a test passing `Date.now()` compared wall-clock time
+// against 15 Sep timestamps and broke once the real clock moved on.
+function iso(msAgo: number, from: number = NOW): string {
+  return new Date(from - msAgo).toISOString();
 }
 
 /** The full detail records. Summaries are derived from these — one source of truth. */
 export function loadActivityCallDetails(now: number = NOW): readonly ActivityCallDetail[] {
-  void now;
   return [
     {
       id: 'call_a1f9e0',
-      ts: iso(2 * DAY),
+      ts: iso(2 * DAY, now),
       correlationId: 'corr_7d2c1a',
       sessionId: 'sess_9f21',
       callerSubject: CURRENT_USER_SUBJECT,
@@ -106,7 +109,7 @@ export function loadActivityCallDetails(now: number = NOW): readonly ActivityCal
     },
     {
       id: 'call_rv3391',
-      ts: iso(1 * DAY),
+      ts: iso(1 * DAY, now),
       correlationId: 'corr_1b7f9c',
       callerSubject: CURRENT_USER_SUBJECT,
       callerDisplay: 'Priya Raman',
@@ -149,7 +152,7 @@ export function loadActivityCallDetails(now: number = NOW): readonly ActivityCal
       // Abandoned intent: phase 'plan', no matching execute exists anywhere
       // in this fixture set for its correlationId.
       id: 'call_pln7a02',
-      ts: iso(3 * HOUR),
+      ts: iso(3 * HOUR, now),
       correlationId: 'corr_pln7a02',
       callerSubject: 'daniel.owusu@example.com',
       callerDisplay: 'Daniel Owusu',
@@ -186,7 +189,7 @@ export function loadActivityCallDetails(now: number = NOW): readonly ActivityCal
       // Read call, older than a week — present in "everything", excluded
       // from "this week".
       id: 'call_rd8b41',
-      ts: iso(10 * DAY),
+      ts: iso(10 * DAY, now),
       correlationId: 'corr_rd8b41',
       callerSubject: CURRENT_USER_SUBJECT,
       callerDisplay: 'Priya Raman',
@@ -218,7 +221,7 @@ export function loadActivityCallDetails(now: number = NOW): readonly ActivityCal
       // — this is the row `ReversalAction` renders as a live, actionable
       // control rather than a "reversed by …" link.
       id: 'call_ex4402',
-      ts: iso(1 * HOUR),
+      ts: iso(1 * HOUR, now),
       correlationId: 'corr_ex4402',
       callerSubject: CURRENT_USER_SUBJECT,
       callerDisplay: 'Priya Raman',
@@ -269,7 +272,7 @@ export function loadActivityCallDetails(now: number = NOW): readonly ActivityCal
     {
       // Policy-denied reject, this week, different caller — outcome variety.
       id: 'call_dn5c17',
-      ts: iso(5 * HOUR),
+      ts: iso(5 * HOUR, now),
       correlationId: 'corr_dn5c17',
       callerSubject: 'daniel.owusu@example.com',
       callerDisplay: 'Daniel Owusu',
