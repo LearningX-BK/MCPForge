@@ -1,0 +1,23 @@
+{
+  "name": "@mcpforge/consumer-access-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "W0-N14 — the four Wave 0 exit-criterion-14 demonstrations (01 §11.5): the front door and elevated-binding posture, assembled as one checkpoint-ready suite over the REAL consumer registry, policy chain, kill switch and codegen compiler built by W0-N1..N4, W0-N11 and W0-HG8. Each test is named after the criterion letter it proves. Run by `pnpm --filter @mcpforge/consumer-access-tests test`, which also emits `EVIDENCE.md`.",
+  "scripts": {
+    "test": "vitest run && tsx scripts/generate-evidence.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mcpforge/codegen": "workspace:*",
+    "@mcpforge/gateway": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

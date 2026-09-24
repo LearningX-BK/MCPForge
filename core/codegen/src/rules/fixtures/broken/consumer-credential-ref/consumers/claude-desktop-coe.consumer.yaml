@@ -1,0 +1,27 @@
+apiVersion: mcpforge/v1
+kind: Consumer
+id: claude-desktop-coe
+label: Claude Desktop (LTM CoE)
+class: interactive-client
+owner: LTM Oracle AI Practice
+steward: A. Named Person
+status: active
+expiresAt: "2027-08-27"
+credential:
+  method: client-secret
+  # A credential is a secretRef://, never a value (CLAUDE.md #8, 02 §11.5).
+  ref: not-a-secret-ref
+  boundIssuers: [ltm-ad]
+  rotation: { intervalDays: 90, lastRotatedAt: "2026-08-27" }
+authorizations:
+  bindingTypes: [rest]
+  maxSensitivity: internal
+  writeAllowed: false
+  roles: []
+  packages: []
+limits:
+  callsPerMinute: 60
+  writesPerDay: 0
+  concurrentSessions: 4
+attestation:
+  humanInTheLoop: true

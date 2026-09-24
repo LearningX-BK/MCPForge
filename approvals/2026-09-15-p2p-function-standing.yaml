@@ -1,0 +1,24 @@
+# MCPForge approval record — the standing authorization for p2p × function
+# (W0-HG8, second decision: 02 §11.4.4 / 05 §3.3.4, CLAUDE.md non-negotiable 7).
+# Without this record, every Wave 0 write tool (all six are `function`
+# bindings) requires a per-call human approval and the demo becomes a parade
+# of approval dialogs. Granting it is a real, recorded, EXPIRING decision —
+# it removes nothing else: plan -> confirm, guardrails, SoD and the identity
+# requirement all still run on every call.
+apiVersion: mcpforge/v1
+kind: Approval
+id: 2026-09-15-p2p-function-standing
+status: approved
+decision: approved
+subject:
+  kind: BindingGrant
+  role: p2p
+  bindingType: function
+action: standing-authorization
+summary: "Grant role p2p a standing authorization to execute function-binding writes through the ordinary plan -> confirm path without a per-call human approval, for the local Wave 0 demo."
+requestedBy: pattnaikbikash@gmail.com
+requestedAt: 2026-09-15T00:00:00.000Z
+approver: Admin
+approvedAt: 2026-09-15
+expiresAt: 2027-03-14
+note: "Provisional approval by Admin (W0-HG8), user decision 2026-09-15 — re-review as needed once real stewards/approvers are named. Expiry set to the 180-day default (02 §11.4)."

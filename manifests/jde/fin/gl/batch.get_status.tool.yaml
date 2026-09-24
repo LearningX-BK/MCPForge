@@ -1,0 +1,59 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.fin.batch.get_status
+version: 1.0.0
+server: jde-fin-gl
+title: Check batch status
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Return a batch's approval, post status and out-of-balance flag.
+aliases: [batch status, is this batch posted]
+archetype: transactional
+verb: get_status
+entity: batch
+app: jde
+module: fin
+functionalArea: General Ledger
+processTags: [P2P]
+sensitivity: financial
+write: false
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: BATCH_STATUS
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: sampled
+  execution:
+    timeoutMs: 15000
+    maxConcurrency: 8
+    responseBytesMax: 65536
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: batch_number, type: string, required: true, desc: JDE batch number to check. }
+  - { name: batch_type,   type: string, required: false, desc: "Batch type code, narrows a shared number." }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Batch {batch_number}: {status}, out of balance: {out_of_balance}."
+  resultKeys:
+    - { name: batch_number, path: "$.batch.batchNumber" }
+    - { name: status,       path: "$.batch.status" }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-gl/intents.yaml
+  minIntents: 10

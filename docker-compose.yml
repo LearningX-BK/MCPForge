@@ -1,0 +1,33 @@
+# MCPForge — W0-K4, the local Docker stack.
+#
+# One service, matching the single `mcpforge-core` box in 02 §6.6's topology
+# diagram: the gateway (MCP endpoint, policy, audit) and — because
+# MCPFORGE_MODE defaults to `full` — the portal, spawned as a sibling process
+# by the gateway itself (core/gateway/launch.ts). No cloud account, no OCI
+# service, no managed database: the SQLite file is a bind-mounted volume, not
+# a database container, per 02 §10.1 item 2.
+#
+# `docker compose up --build` is the whole stack. `pnpm dev` (README /
+# CLAUDE.md §3.1) remains the no-Docker path and this file does not touch it.
+
+services:
+  mcpforge-core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mcpforge-core:local
+    ports:
+      # Gateway MCP endpoint (Streamable HTTP) and the portal (Next.js).
+      - '3939:3939'
+      - '3000:3000'
+    environment:
+      MCPFORGE_MODE: ${MCPFORGE_MODE:-full}
+      MCPFORGE_GATEWAY_PORT: '3939'
+      PORT: '3000'
+    volumes:
+      # The ONLY persistent state (02 §10.3: definitions are git, events are
+      # the store). Bind-mounted so `docker compose down && up` — and even
+      # `rm -rf` of the container — leaves the SQLite file exactly where a
+      # developer would find it if they had run `pnpm dev` instead.
+      - ./.mcpforge:/app/.mcpforge
+    restart: unless-stopped

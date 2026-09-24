@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/common.schema.json",
+  "title": "mcpforge/v1 — shared manifest vocabulary",
+  "description": "Vocabulary shared by every kind. The runtime-validation counterpart of core/shared/src/manifest/common.ts — the two must agree field for field. 02 §2.2, §2.6, §11.5.",
+  "$defs": {
+    "apiVersion": {
+      "description": "Required on every manifest. Exactly 'mcpforge/v1'. An unknown value is rejected BY NAME with the required migration named — never a silent best-effort parse (02 §2.6).",
+      "type": "string",
+      "const": "mcpforge/v1"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["Tool", "Server", "Role", "Package", "Consumer"]
+    },
+    "verb": {
+      "description": "The closed 19-item verb list (CLAUDE.md §5, 02 §2.2). Widened from 17 to 19 by owner decision (W0-I2) for get_receipt_status and get_approval_status, both cited verbatim as tool ids in 01 §10.3 and seed/tools.yaml.",
+      "type": "string",
+      "enum": [
+        "search",
+        "get",
+        "list",
+        "create",
+        "update",
+        "cancel",
+        "submit",
+        "approve",
+        "release",
+        "run_report",
+        "run_process",
+        "get_status",
+        "get_receipt_status",
+        "get_approval_status",
+        "download",
+        "simulate",
+        "reconcile",
+        "explain",
+        "resolve"
+      ]
+    },
+    "toolId": {
+      "description": "{app}.{module}.{entity}.{verb}, lower snake. The closed verb list is STRUCTURAL — inlined into the pattern, never a lookup table the schema could drift from (02 §2.2). Ids are immutable; renaming is a retire-and-create pair.",
+      "type": "string",
+      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.[a-z0-9_]+\\.(search|get|list|create|update|cancel|submit|approve|release|run_report|run_process|get_status|get_receipt_status|get_approval_status|download|simulate|reconcile|explain|resolve)$"
+    },
+    "slugId": {
+      "description": "An id for a Server, Role, Package or Consumer: lower kebab/snake.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]*$",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "isoDate": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "sensitivity": {
+      "type": "string",
+      "enum": ["public", "internal", "confidential", "financial", "personal"]
+    },
+    "bindingType": {
+      "description": "The five handshakes (02 §3.7).",
+      "type": "string",
+      "enum": ["rest", "database", "plsql", "function", "wrapped-vendor"]
+    },
+    "secretRef": {
+      "description": "secretRef://<scope>/<subject>/<purpose>. The ONLY form a credential ever takes in git, a manifest, an overlay, a consumer record, an audit row, a log line, a portal screen or a CLI output (02 §11.5, CLAUDE.md #8).",
+      "type": "string",
+      "pattern": "^secretRef://[a-z0-9-]+/[a-z0-9._-]+/[a-z0-9._-]+$"
+    },
+    "bindingGrant": {
+      "description": "Phase 5, 02 §11.4. Being in scope is NOT permission to execute an elevated binding (CLAUDE.md #7). Explicit, named, EXPIRING, approval-recorded. Compiled into the scope artefact so widening a grant is as visible in a diff as widening a role.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bindingType", "approvalRef", "approver", "expiresAt"],
+      "properties": {
+        "bindingType": { "$ref": "#/$defs/bindingType" },
+        "names": {
+          "description": "For plsql, the wrapper package (MCPFORGE_WRAP.<PKG>); for function, the orchestration family. Reconciled against the database-side EXECUTE grant by the probe (02 §11.4.3).",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "approvalRef": {
+          "description": "The approval record in approvals/ that issued this grant.",
+          "type": "string",
+          "minLength": 1
+        },
+        "approver": { "type": "string", "minLength": 1 },
+        "expiresAt": {
+          "description": "Grants expire — default 180 days. Renewal is a re-approval, never a rollover.",
+          "$ref": "#/$defs/isoDate"
+        },
+        "standingAuthorization": {
+          "description": "An approvalRef: a recorded, expiring, named-approver decision that this role may execute this binding type's writes through the ordinary plan -> confirm path without a per-call human approval (02 §11.4.4). It removes NOTHING else.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

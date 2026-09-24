@@ -1,0 +1,510 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/probe-report.schema.json",
+  "title": "mcpforge/v1 — probe-report.json",
+  "description": "The capability probe's machine-readable artefact (02 §4.5), extended by 02 §11.4.3's bindingGrantReconciliation. Every tool in the deployed catalogue carries exactly one status from the closed enum, with its failing check, owningTeam, remediation and agentMessage. There is no third state and no silent failure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "target",
+    "startedAt",
+    "finishedAt",
+    "tools",
+    "summary"
+  ],
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "mcpforge/v1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "ProbeReport"
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "finishedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/toolReport"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    }
+  },
+  "$defs": {
+    "probeStatus": {
+      "description": "02 §4.5's closed status enum. Seven values, no third state.",
+      "type": "string",
+      "enum": [
+        "resolved",
+        "degraded_readonly",
+        "disabled_missing_binding",
+        "disabled_no_grant",
+        "disabled_identity_unverified",
+        "disabled_schema_drift",
+        "disabled_kill_switch"
+      ]
+    },
+    "environmentClass": {
+      "description": "02 §7.1 / 03 §11.1. `prod` is the class the runner refuses every mutating check against.",
+      "type": "string",
+      "enum": [
+        "local",
+        "probe",
+        "staging",
+        "prod"
+      ]
+    },
+    "bindingType": {
+      "type": "string",
+      "enum": [
+        "rest",
+        "database",
+        "plsql",
+        "function",
+        "wrapped-vendor"
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "environmentClass",
+        "deploymentId",
+        "mutatingChecksRefused"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environmentClass": {
+          "$ref": "#/$defs/environmentClass"
+        },
+        "deploymentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mutatingChecksRefused": {
+          "description": "Always true: probe plans are read-only or validate-only by construction and the runner refuses a mutating check outright.",
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "result",
+        "detail"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "fail",
+            "not_applicable"
+          ]
+        },
+        "detail": {
+          "description": "Never empty — a bare pass/fail names nothing a human or an agent can act on.",
+          "type": "string",
+          "minLength": 1
+        },
+        "identityCarriage": {
+          "description": "[W0-H5] Present only on a check that actually established identity carriage (the function binding's whoami check). pass/fail cannot separate 02 §3.5's `no` (a service account came back) from `unverified` (the probe binding is missing or errored).",
+          "$ref": "#/$defs/identityCarriage"
+        },
+        "observedIdentity": {
+          "description": "[W0-H5] The identity the target reported executing under; null when it named none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "identityCarriage": {
+      "description": "[W0-H5] 02 §3.5's tri-state. NON-NEGOTIABLE #2: `verified` appears in this schema and never in tool.schema.json, whose manifest-side enum is `unverified | no`. Only the capability probe may write `verified`, and it writes it here.",
+      "type": "string",
+      "enum": [
+        "verified",
+        "no",
+        "unverified"
+      ]
+    },
+    "toolIdentity": {
+      "description": "[W0-H5] The probe-time identity verdict for one tool and the automatic constraint it forced (02 §3.5, 01 §8 R1).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "carries",
+        "probeBinding",
+        "testIdentity",
+        "observedIdentity",
+        "disposition",
+        "constrainedTo",
+        "autoDisabled",
+        "detail"
+      ],
+      "properties": {
+        "carries": {
+          "$ref": "#/$defs/identityCarriage"
+        },
+        "probeBinding": {
+          "description": "The probe binding called — MCPFORGE_PROBE_WHOAMI for function bindings (02 §3.5).",
+          "type": "string",
+          "minLength": 1
+        },
+        "testIdentity": {
+          "description": "The designated test user the probe authenticated as; null when none was configured (which is itself an `unverified` verdict — there is no default identity).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "observedIdentity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "disposition": {
+          "description": "binding.identity.onServiceAccount as actually applied, after the fail-closed default to `block`. DETECTION, never substitution.",
+          "type": "string",
+          "enum": [
+            "block",
+            "readonly-lowsens"
+          ]
+        },
+        "constrainedTo": {
+          "description": "The status this verdict forced, or null when it forced none (the `verified` case).",
+          "oneOf": [
+            {
+              "$ref": "#/$defs/probeStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "autoDisabled": {
+          "type": "boolean"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "bindingGrantReconciliation": {
+      "description": "[P5] 02 §11.4.3 — the gateway's compiled bindingGrants against the database-side EXECUTE grants. Built at Wave 0 against a fixture; exercised live at Wave 2.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence",
+        "gatewayGrants",
+        "databaseGrants",
+        "gatewayOnly",
+        "databaseOnly",
+        "reconciled"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "string",
+          "enum": [
+            "fixture",
+            "live",
+            "unavailable"
+          ]
+        },
+        "gatewayGrants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "databaseGrants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "gatewayOnly": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "databaseOnly": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reconciled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "validatePair": {
+      "description": "[W0-H2] 02 §3.5's validate-pair convention, reported per function-binding WRITE tool. `present` is true ONLY when the validate_sibling check passed: a failed check, a check that never ran, and an unreachable target all report false, because the degradation ladder must treat \"could not tell\" exactly like \"not there\". A missing pair is an enablement-backlog entry and `enablementAction` names the owning team and the action.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedRef",
+        "present",
+        "evidence",
+        "detail",
+        "effectiveDryRunStrategy",
+        "humanApprovalForced",
+        "enablementAction"
+      ],
+      "properties": {
+        "expectedRef": {
+          "description": "The X_VALIDATE sibling looked for; null when binding.ref is unknown to the probe.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "evidence": {
+          "description": "`not_probed` is an absence of evidence, never evidence of presence.",
+          "type": "string",
+          "enum": [
+            "probe_check",
+            "not_probed"
+          ]
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        },
+        "effectiveDryRunStrategy": {
+          "description": "02 §3.5: where a validate pair does not exist, dryRun.strategy degrades to precondition-read.",
+          "type": "string",
+          "enum": [
+            "validate-pair",
+            "precondition-read"
+          ]
+        },
+        "humanApprovalForced": {
+          "description": "02 §3.5: humanApprovalRequired is forced to true for any tool with sensitivity: financial whose validate pair is missing.",
+          "type": "boolean"
+        },
+        "enablementAction": {
+          "description": "The enablement-backlog line, naming the owning team and the action. null exactly when the pair is present.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "toolReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "toolId",
+        "status",
+        "bindingType",
+        "checks",
+        "identityCarries",
+        "identity",
+        "commitsInternally",
+        "owningTeam",
+        "remediation",
+        "agentMessage"
+      ],
+      "properties": {
+        "toolId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "#/$defs/probeStatus"
+        },
+        "bindingType": {
+          "$ref": "#/$defs/bindingType"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/check"
+          }
+        },
+        "identityCarries": {
+          "description": "Non-negotiable #2's field. Written by the capability probe, into this report, and nowhere else — never into a manifest. null when no identity check ran.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "identity": {
+          "$ref": "#/$defs/toolIdentity"
+        },
+        "commitsInternally": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "owningTeam": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remediation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "agentMessage": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindingGrantReconciliation": {
+          "$ref": "#/$defs/bindingGrantReconciliation"
+        },
+        "validatePair": {
+          "$ref": "#/$defs/validatePair"
+        }
+      },
+      "allOf": [
+        {
+          "description": "[P5] the reconciliation block is required for plsql tools and forbidden for every other binding type.",
+          "if": {
+            "properties": {
+              "bindingType": {
+                "const": "plsql"
+              }
+            },
+            "required": [
+              "bindingType"
+            ]
+          },
+          "then": {
+            "required": [
+              "bindingGrantReconciliation"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "bindingGrantReconciliation"
+              ]
+            }
+          }
+        },
+        {
+          "description": "[W0-H2] the validate-pair block belongs to the function binding type alone (02 §3.5's X_EXECUTE/X_VALIDATE convention) and is forbidden on every other tool, so an absent block on a non-function tool is never read as a missing pair. The report does not carry `write`, so \"required for function WRITE tools\" is asserted by the runner and its tests rather than by this schema.",
+          "if": {
+            "properties": {
+              "bindingType": {
+                "not": {
+                  "const": "function"
+                }
+              }
+            },
+            "required": [
+              "bindingType"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "validatePair"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "toolCount",
+        "byStatus"
+      ],
+      "properties": {
+        "toolCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "byStatus": {
+          "description": "Every one of the seven statuses is a key, zero counts included.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolved",
+            "degraded_readonly",
+            "disabled_missing_binding",
+            "disabled_no_grant",
+            "disabled_identity_unverified",
+            "disabled_schema_drift",
+            "disabled_kill_switch"
+          ],
+          "properties": {
+            "resolved": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "degraded_readonly": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disabled_missing_binding": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disabled_no_grant": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disabled_identity_unverified": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disabled_schema_drift": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "disabled_kill_switch": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

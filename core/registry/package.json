@@ -1,0 +1,25 @@
+{
+  "name": "@mcpforge/registry",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge registry — the catalogue index build artefact (02 §5.4.1), its boot-time loader, and the six-stage ranking pipeline over it (02 §5.4.2, §5.4.3). The stage 6 score floor (02 §5.4.4) is a pluggable stage, not an implementation.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./index": "./src/index/index.ts",
+    "./index/server": "./src/index/server.ts",
+    "./rank": "./src/rank/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcpforge/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

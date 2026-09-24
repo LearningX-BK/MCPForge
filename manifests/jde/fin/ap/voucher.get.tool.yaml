@@ -1,0 +1,65 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.get
+version: 1.0.0
+server: jde-fin-ap
+title: Get a voucher
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Read one AP voucher by document number, type and company.
+aliases: [read a voucher, look up an invoice, voucher detail]
+disambiguation: >
+  Reads ONE existing voucher by document number and changes nothing. To find
+  vouchers by supplier, date or amount use jde.ap.voucher.search; to create one
+  use jde.ap.voucher.create; to void one use jde.ap.voucher.cancel.
+archetype: transactional
+verb: get
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+processTags: [P2P]
+sensitivity: financial
+write: false
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: AP_VOUCHER_GET
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: sampled
+  execution:
+    timeoutMs: 15000
+    maxConcurrency: 8
+    responseBytesMax: 262144
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: document_number,  type: string, required: true, desc: Voucher document number. }
+  - { name: document_type,    type: string, required: true, desc: Voucher document type code. }
+  - { name: document_company, type: string, required: true, desc: Voucher document company. }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Voucher {document_number}: {amount} {currency}, status {status}."
+  resultKeys:
+    - { name: document_number, path: "$.voucher.docNumber" }
+    - { name: document_type,   path: "$.voucher.docType" }
+    - { name: pay_status,      path: "$.voucher.payStatus" }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

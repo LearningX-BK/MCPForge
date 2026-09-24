@@ -1,0 +1,115 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.scm.purchase_order.create
+version: 1.0.0
+server: jde-scm-po
+title: Raise a purchase order
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) ---------
+purpose: Create a purchase order for a supplier against a business unit.
+aliases: [raise a po, create purchase order, issue a po, place an order]
+disambiguation: >
+  Creates a NEW purchase order. To approve one that already exists use
+  jde.scm.purchase_order.approve; to check what has been received against one
+  use jde.scm.purchase_order.get_receipt_status.
+archetype: transactional
+verb: create
+entity: purchase_order
+app: jde
+module: scm
+functionalArea: Procurement
+processTags: [P2P]
+sensitivity: financial
+write: true
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: PO_CREATE
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+# --- inputs ------------------------------------------------------------------
+# The W0-HG2 spec (§5) names `lines` as an array. `mcpforge/v1` inputs are
+# scalar only (schema `input.type` enum), so Wave 0 declares the SINGLE-LINE
+# order: one item, one quantity, one unit cost. A multi-line PO is a schema
+# change (an array input type), not a manifest change, and it is flagged to the
+# steward rather than faked with numbered columns.
+input:
+  - { name: supplier_number, type: string, required: true,  desc: JDE address book number of the supplier., example: "4242" }
+  - { name: company,         type: string, required: true,  desc: JDE company code., example: "00100" }
+  - { name: business_unit,   type: string, required: true,  desc: Business unit the order is charged to. }
+  - { name: item_number,     type: string, required: true,  desc: Item number or a short line description. }
+  - { name: quantity,        type: number, required: true,  desc: Quantity ordered in the item's unit., minimum: 0.001 }
+  - { name: unit_cost,       type: number, required: true,  desc: Cost per unit in the order currency., minimum: 0.01 }
+  - { name: currency,        type: string, required: true,  desc: "ISO currency code, e.g. GBP.", example: "GBP" }
+  - { name: required_date,   type: string, required: false, desc: "Date goods are required, YYYY-MM-DD.", format: date }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Purchase order {order_number} raised for supplier {supplier_number}."
+  resultKeys:
+    - { name: order_number,   path: "$.purchaseOrder.orderNumber" }
+    - { name: order_type,     path: "$.purchaseOrder.orderType" }
+    - { name: order_company,  path: "$.purchaseOrder.orderCompany" }
+
+# --- write safety (required whenever write: true) ----------------------------
+writeSafety:
+  dryRun:
+    strategy: validate-pair
+    ref: PO_CREATE_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Raise a purchase order in JD Edwards with supplier {supplier_number},
+      company {company}, business unit {business_unit}, for {quantity} of
+      {item_number} at {unit_cost} {currency} each, required {required_date}.
+      This creates a COMMITTED PURCHASE ORDER in JD Edwards: the spend is
+      committed against {business_unit} and the order can be sent to the
+      supplier once it is approved.
+  humanApprovalRequired: false
+  # `native-reverse`, and the honest reading of it: JD Edwards itself cancels
+  # or closes an open, unreceipted purchase order — that is the first-class way
+  # back and it is not an invention. Wave 0 exposes no
+  # `jde.scm.purchase_order.cancel` TOOL (the 11-tool set is fixed by 01 §10.3),
+  # so `forge audit reverse` on a PO create refuses with `no_reversing_tool` and
+  # names the manual action. That refusal is correct and it is why this is not
+  # declared as `compensating-tool` pointing at a tool that does not exist.
+  reversal:
+    class: native-reverse
+    windowHours: 720
+    preconditions: >
+      The order must still be open with no receipt and no voucher matched
+      against any line.
+  idempotency: { scopeHours: 24 }
+  guardrails:
+    # No `message` override — see the note on jde.ap.voucher.create's guardrail.
+    # The built-in message names field, actual value and limit; a static string
+    # here could name only the limit, which 03 §10.3 does not accept.
+    - { kind: maxNumeric, field: unit_cost, value: 250000 }
+    # The call-time half of the segregation-of-duties pair (02 §3.1.3, §4.3).
+    # Declared on BOTH ends of the pair because the duty is symmetric: whichever
+    # of the two a caller who holds both reaches first is the one refused.
+    - { kind: sodConflict, with: jde.scm.purchase_order.approve, scope: sameEntityChain }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: Supply Chain Engineering — JDE SCM
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-scm-po/intents.yaml
+  minIntents: 10

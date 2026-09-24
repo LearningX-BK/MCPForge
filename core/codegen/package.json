@@ -1,0 +1,37 @@
+{
+  "name": "@mcpforge/codegen",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge codegen — the mcpforge/v1 manifest JSON Schema (Draft 2020-12) and its compiled Ajv validator. Manifests are the sole source of truth (02 §2.1).",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts",
+    "./validate": "./src/validate/index.ts",
+    "./rules": "./src/rules/index.ts",
+    "./rules/elevated-binding-types": "./src/rules/elevated-binding-types.ts",
+    "./emit": "./src/emit/index.ts",
+    "./compile": "./src/compile/index.ts",
+    "./budget": "./src/budget/index.ts",
+    "./budget/server": "./src/budget/server.ts",
+    "./templates": "./src/templates/index.ts",
+    "./templates/server": "./src/templates/server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcpforge/registry": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "prettier": "^3.9.6",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

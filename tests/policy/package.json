@@ -1,0 +1,22 @@
+{
+  "name": "@mcpforge/policy-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The privilege-escalation suite (W0-E8). Every case is an attempt to get more than the caller is entitled to, and every case must fail closed. Run by `pnpm test:policy`, which is stage 8 of `forge ci`.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mcpforge/codegen": "workspace:*",
+    "@mcpforge/gateway": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

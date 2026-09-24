@@ -1,0 +1,21 @@
+{
+  "name": "@mcpforge/write-path-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "W0-F7 — the four Wave 0 exit-criterion-7 demonstrations (01 §10.4), assembled as one checkpoint-ready suite over the REAL policy chain, write dispatcher and SQLite store built by W0-F1..F6. Each test is named after the criterion letter it proves. Run by `pnpm --filter @mcpforge/write-path-tests test`, which also emits `EVIDENCE.md`.",
+  "scripts": {
+    "test": "vitest run && tsx scripts/generate-evidence.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mcpforge/gateway": "workspace:*",
+    "@mcpforge/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

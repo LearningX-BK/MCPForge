@@ -1,0 +1,36 @@
+{
+  "name": "mcpforge",
+  "private": true,
+  "version": "0.0.0",
+  "description": "MCPForge — governed control plane and runtime gateway turning Oracle application capability into MCP tools.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0 <23.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "lint": "eslint . && pnpm -r --if-present run lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:policy": "pnpm --filter @mcpforge/policy-tests run test",
+    "test:mocks": "pnpm --filter @mcpforge/mocks run test",
+    "test:postgres": "pnpm --filter @mcpforge/gateway run test:postgres",
+    "build": "pnpm -r --if-present run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@mcpforge/shared": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "eslint": "^10.9.1",
+    "globals": "^17.11.0",
+    "prettier": "^3.9.6",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^3.2.4"
+  }
+}

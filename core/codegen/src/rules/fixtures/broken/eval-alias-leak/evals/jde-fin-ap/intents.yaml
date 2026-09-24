@@ -1,0 +1,8 @@
+# Benchmark intents, authored by the module steward (never by a tool's author).
+# 02 §5.4.1 — these strings are deliberately NOT indexed. An intent that also
+# appears as an alias makes the benchmark measure itself.
+server: jde-fin-ap
+intents:
+  - { text: book a payable, expect: jde.ap.voucher.create }
+  - { text: raise a supplier bill against PO 4711, expect: jde.ap.voucher.create }
+  - { text: adjust a payroll deduction, expect: no_tool }

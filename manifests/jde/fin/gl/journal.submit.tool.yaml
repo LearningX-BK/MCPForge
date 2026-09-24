@@ -1,0 +1,112 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.fin.journal.submit
+version: 1.0.0
+server: jde-fin-gl
+title: Post a GL journal batch
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Post an existing unposted GL journal batch to the ledger.
+aliases: [post a journal, submit a batch for posting, post the JE]
+disambiguation: >
+  Posts an EXISTING unposted batch created by jde.fin.journal.create — it
+  never creates one. To read a batch's current post status use
+  jde.fin.batch.get_status; to find the batch use jde.fin.gl_journal.search.
+archetype: transactional
+verb: submit
+entity: journal
+app: jde
+module: fin
+functionalArea: General Ledger
+processTags: [P2P]
+sensitivity: financial
+write: true
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: GL_JE_SUBMIT
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+bindingCustom: true
+
+# --- inputs ------------------------------------------------------------------
+# Exactly the four result keys jde.fin.journal.create returns. That identity of
+# shape is what makes the create -> submit two-step a real chain rather than a
+# declared one.
+input:
+  - { name: batch_number,     type: string, required: true, desc: Batch number returned by jde.fin.journal.create. }
+  - { name: document_number,  type: string, required: true, desc: Document number returned by jde.fin.journal.create. }
+  - { name: document_type,    type: string, required: true, desc: Journal document type code., example: "JE" }
+  - { name: document_company, type: string, required: true, desc: Document company returned by jde.fin.journal.create. }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Batch {batch_number} posted, document {document_number}, status {batch_status}."
+  resultKeys:
+    - { name: batch_number,     path: "$.batch.batchNumber" }
+    - { name: document_number,  path: "$.batch.docNumber" }
+    - { name: document_type,    path: "$.batch.docType" }
+    - { name: document_company, path: "$.batch.docCo" }
+    - { name: batch_status,     path: "$.batch.status" }
+
+# --- write safety (required whenever write: true) ----------------------------
+writeSafety:
+  dryRun:
+    # GL_JE_SUBMIT_VALIDATE's success return carries `batch_total` and
+    # `currency` alongside the echoed identifiers. Those two are NOT inputs to
+    # this tool — submit's four arguments are all identifiers — so they reach
+    # planTemplate through the dry run's `planValues` channel
+    # (core/gateway/policy/confirm/plan.ts), exactly as jde.ap.voucher.create's
+    # {supplier_name} does. They exist in the orchestration contract solely so
+    # this plan string can name the amount, as CLAUDE.md §5 requires; the
+    # contract was extended for it on 2026-09-08 by owner decision, recorded in
+    # docs/build-plan/w0-hg2-validate-orchestrations.md pair 2. They are
+    # load-bearing: if the authored orchestration omits them the human is asked
+    # to approve a posting with no amount in the sentence.
+    strategy: validate-pair
+    ref: GL_JE_SUBMIT_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Post GL journal batch {batch_number} in JD Edwards, document
+      {document_type} {document_number}, company {document_company}, total
+      {batch_total} {currency}. This POSTS the journal to the general ledger:
+      the amounts change account balances immediately and the only way back is
+      a reversing journal in an open period.
+  humanApprovalRequired: true
+  reversal:
+    class: native-reverse
+    argMap:
+      batch_number: "$.result.batch_number"
+      document_number: "$.result.document_number"
+      document_type: "$.result.document_type"
+      document_company: "$.result.document_company"
+    windowHours: 720
+    preconditions: >
+      JDE's own journal reversal writes a reversing entry against this posted
+      batch. The fiscal period the reversal is dated into must be open for the
+      company, and the batch must not already carry a reversal.
+  idempotency: { scopeHours: 24 }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-gl/intents.yaml
+  minIntents: 10

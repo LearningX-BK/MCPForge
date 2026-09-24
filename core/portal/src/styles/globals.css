@@ -1,0 +1,125 @@
+/* MCPForge — Tailwind v4 wiring (03 §13.3).
+ *
+ * Import order matters: primitives first (raw values), then semantic
+ * (the theme file — light on :root, dark overrides), then the Tailwind
+ * @theme block that maps each semantic token to a utility. Components
+ * write `bg-surface text-text-1 border-line`; because those utilities
+ * resolve to `var(--bg-surface)` etc., a theme switch needs zero
+ * component changes.
+ *
+ * tokens.component.css (Tier 3) is not imported yet — it does not exist
+ * on disk as of W0-J2 (it lands with the component work in later J
+ * tasks per 03 §13.1/§13.7) and this task's `touches` is scoped to
+ * src/styles/** and layout.tsx, not src/design/**. Add the import here
+ * when that file lands.
+ */
+@import 'tailwindcss';
+@import '../design/tokens.primitives.css';
+@import '../design/tokens.semantic.css';
+
+@theme inline {
+  /* --- Surfaces and text (§4.4) -------------------------------------- */
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-2: var(--bg-surface-2);
+  --color-surface-3: var(--bg-surface-3);
+  --color-sidebar: var(--bg-sidebar);
+  --color-inset: var(--bg-inset);
+
+  --color-text-1: var(--text-1);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-text-disabled: var(--text-disabled);
+
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+
+  /* --- Brand and interaction (§4.4) ----------------------------------- */
+  --color-accent: var(--accent);
+  --color-accent-solid-bg: var(--accent-solid-bg);
+  --color-accent-solid-fg: var(--accent-solid-fg);
+  --color-accent-tint: var(--accent-tint);
+  --color-accent-border: var(--accent-border);
+  --color-focus-ring: var(--focus-ring);
+
+  /* --- Status semantics (§4.4) ---------------------------------------- */
+  --color-status-read: var(--status-read);
+  --color-status-read-bg: var(--status-read-bg);
+  --color-status-read-border: var(--status-read-border);
+  --color-status-read-strong: var(--status-read-strong);
+
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-bg: var(--status-ok-bg);
+  --color-status-ok-border: var(--status-ok-border);
+  --color-status-ok-strong: var(--status-ok-strong);
+
+  --color-status-write: var(--status-write);
+  --color-status-write-bg: var(--status-write-bg);
+  --color-status-write-border: var(--status-write-border);
+  --color-status-write-strong: var(--status-write-strong);
+
+  --color-status-platform: var(--status-platform);
+  --color-status-platform-bg: var(--status-platform-bg);
+  --color-status-platform-border: var(--status-platform-border);
+  --color-status-platform-strong: var(--status-platform-strong);
+
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-border: var(--status-neutral-border);
+  --color-status-neutral-strong: var(--status-neutral-strong);
+
+  --color-status-danger: var(--status-danger);
+  --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-border: var(--status-danger-border);
+  --color-status-danger-strong: var(--status-danger-strong);
+
+  /* --- Typography (§4.5) ----------------------------------------------- */
+  --font-display: Cambria, Georgia, 'Times New Roman', serif;
+  --font-sans: var(--font-inter), 'Segoe UI', system-ui, -apple-system, Calibri, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+
+  --radius: 10px;
+
+  /* --- shadcn/ui vocabulary aliases (W0-J4, 03 §13.7 step 4) -----------
+   * The vendored primitives under src/components/ui/** are unmodified
+   * shadcn/ui source and reference shadcn's own slot names (bg-background,
+   * text-foreground, bg-primary, ...). Rather than hand-edit every vendored
+   * file — and rather than defining a second, competing colour scale — each
+   * shadcn slot below is aliased straight onto the semantic tokens already
+   * defined above (which are themselves generated from tokens.semantic.css
+   * Tier 2, never a literal here). This is the one legitimate colour
+   * definition site outside tokens.*.css: an alias of an alias, still
+   * zero raw hex, still one source of truth.
+   *
+   * `input` and `ring` intentionally point at --line-strong / --focus-ring
+   * rather than --line: 03 §4.6's non-text contrast rule requires any
+   * control whose only boundary is a border (inputs, unfilled buttons,
+   * checkbox outlines) to clear 3:1 against its background, which is what
+   * --line-strong is calibrated for — --line is a decorative divider only.
+   */
+  --color-background: var(--bg-canvas);
+  --color-foreground: var(--text-1);
+  --color-card: var(--bg-surface);
+  --color-card-foreground: var(--text-1);
+  --color-popover: var(--bg-surface-2);
+  --color-popover-foreground: var(--text-1);
+  --color-primary: var(--accent-solid-bg);
+  --color-primary-foreground: var(--accent-solid-fg);
+  --color-secondary: var(--bg-surface-3);
+  --color-secondary-foreground: var(--text-1);
+  --color-muted: var(--bg-surface-3);
+  --color-muted-foreground: var(--text-2);
+  --color-destructive: var(--status-danger);
+  --color-destructive-foreground: var(--accent-solid-fg);
+  --color-border: var(--line);
+  --color-input: var(--line-strong);
+  --color-ring: var(--focus-ring);
+}
+
+/* §13.2 rule 3: <body> always has an explicit canvas background so it
+ * never borrows whatever is behind it. */
+body {
+  background: var(--bg-canvas);
+  color: var(--text-1);
+}

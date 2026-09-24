@@ -1,0 +1,83 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.create
+version: 1.0.0
+server: jde-fin-ap
+title: Create a voucher
+
+purpose: Create an AP voucher against a supplier, optionally matched to a PO.
+aliases: [supplier invoice, enter a bill, AP invoice entry, book a payable]
+disambiguation: >
+  Creates a NEW voucher. To find existing vouchers use jde.ap.voucher.search;
+  to read one use jde.ap.voucher.get; to reverse one use jde.ap.voucher.cancel.
+archetype: transactional
+verb: create
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+processTags: [P2P]
+sensitivity: financial
+write: true
+coreForRoles: [p2p]
+
+binding:
+  type: plsql
+  technology: JDE AIS Orchestration
+  ref: APPS.AP_INVOICE_API.CREATE_INVOICE
+  refVersion: "1.4"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+input:
+  - { name: supplier_number, type: string,  required: true,  desc: JDE address book number of the supplier., example: "4242" }
+  - { name: po_number,       type: string,  required: false, desc: Purchase order to match against. }
+  - { name: amount,          type: number,  required: true,  desc: Gross amount in company currency., minimum: 0.01 }
+  - { name: currency,        type: string,  required: true,  desc: ISO currency code., enumRef: iso_currency }
+  - { name: company,         type: string,  required: true,  desc: JDE company code. }
+  - { name: gl_date,         type: string,  required: false, desc: "GL date, YYYY-MM-DD. Defaults to today.", format: date }
+
+output:
+  summaryTemplate: "Voucher {document_number} created for {supplier_number}, {amount} {currency}."
+  resultKeys:
+    - { name: document_number,  path: "$.voucher.docNumber" }
+    - { name: document_type,    path: "$.voucher.docType" }
+    - { name: document_company, path: "$.voucher.docCo" }
+
+writeSafety:
+  dryRun:
+    strategy: validate-pair
+    ref: AP_VOUCHER_CREATE_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Create an AP voucher for supplier {supplier_number} ({supplier_name}) for
+      {amount} {currency}, company {company}, GL date {gl_date}, matched to PO
+      {po_number}. This creates an OPEN PAYABLE in JD Edwards.
+  humanApprovalRequired: false
+  reversal:
+    class: compensating-tool
+    tool: jde.ap.voucher.cancel
+    argMap: { document_number: "$.result.document_number", document_type: "$.result.document_type", document_company: "$.result.document_company" }
+    windowHours: 720
+    preconditions: Voucher must be unpaid and not yet posted to a closed period.
+  idempotency: { scopeHours: 24 }
+  guardrails:
+    - { kind: maxNumeric, field: amount, value: 250000, message: Voucher amount exceeds the MCPForge ceiling for this tool. }
+
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: A. Named Person
+
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

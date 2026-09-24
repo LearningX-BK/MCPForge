@@ -1,0 +1,14 @@
+apiVersion: mcpforge/v1
+kind: Role
+id: p2p
+label: Procure-to-Pay
+description: Raise and approve purchase orders, voucher against them, and post the resulting journals.
+includes:
+  - jde.ap.voucher.*
+excludes: []
+sensitivityCeiling: financial
+writeAllowed: true
+coreTools: []
+budgetTokens: 1300
+segregationOfDuties: []
+mutuallyExclusiveWith: []

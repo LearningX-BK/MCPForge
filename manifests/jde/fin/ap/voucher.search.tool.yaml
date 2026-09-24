@@ -1,0 +1,67 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.search
+version: 1.0.0
+server: jde-fin-ap
+title: Find AP vouchers
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Search AP vouchers by supplier, GL date, pay status or document type.
+aliases: [find vouchers, supplier invoice search, AP voucher lookup]
+disambiguation: >
+  Finds vouchers by supplier, date or amount when you do not know the
+  document number. To read one known voucher use jde.ap.voucher.get; to
+  create one use jde.ap.voucher.create; to void one use jde.ap.voucher.cancel.
+archetype: transactional
+verb: search
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+processTags: [P2P]
+sensitivity: financial
+write: false
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: AP_Voucher_Search
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: sampled
+  execution:
+    timeoutMs: 15000
+    maxConcurrency: 8
+    responseBytesMax: 262144
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: supplier_number, type: string,  required: true,  desc: JDE address book number of the supplier. }
+  - { name: company,         type: string,  required: false, desc: JDE company code. }
+  - { name: pay_status,      type: string,  required: false, desc: Payment status code to filter by. }
+  - { name: document_type,   type: string,  required: false, desc: Voucher document type code. }
+  - { name: gl_date_from,    type: string,  required: false, desc: "Earliest GL date, YYYY-MM-DD.", format: date }
+  - { name: gl_date_to,      type: string,  required: false, desc: "Latest GL date, YYYY-MM-DD.", format: date }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "{count} vouchers found for supplier {supplier_number}."
+  resultKeys:
+    - { name: document_number, path: "$.vouchers[0].docNumber" }
+    - { name: document_type,   path: "$.vouchers[0].docType" }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

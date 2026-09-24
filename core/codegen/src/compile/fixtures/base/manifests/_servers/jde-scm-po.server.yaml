@@ -1,0 +1,10 @@
+apiVersion: mcpforge/v1
+kind: Server
+id: jde-scm-po
+label: JD Edwards Supply Chain — Purchase Orders
+app: jde
+module: scm
+version: 1.0.0
+mode: A
+owner: JDE Procurement CoE
+steward: A. Named Person

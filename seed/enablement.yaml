@@ -1,0 +1,232 @@
+# MCPForge seed — application enablement, extracted once from the concept console (W0-A7).
+# NOT a manifest. Each entry's `probe: {resolved, disabled}` is illustrative
+# demo data (R11), not a real probe run. See EXTRACTION_REPORT.md.
+- key: "jde"
+  name: "JD Edwards EnterpriseOne"
+  appKeys:
+    - "jde"
+  appLabels:
+    - "JD Edwards"
+  effort: "Low — 1–2 weeks"
+  effortCls: "ef-low"
+  wave: "Wave 1"
+  route: "AIS Server plus Orchestrator Studio. Orchestrations are already tool-shaped — named, typed inputs, governed — so the binding is close to one-to-one."
+  gate: "AIS Server deployed and reachable; Orchestrator Studio available on the Tools release in use."
+  steps:
+    - "Deploy and expose the AIS Server, and confirm it is reachable from where the module server will run."
+    - "Compose or publish the orchestrations that back each tool — low-code work, not development."
+    - "Issue AIS tokens and confirm per-user tokens (not a shared service account) are used."
+    - "Confirm Orchestrator security, row security and action security are set for the calling users."
+  owners: "JDE CNC for the AIS server, tokens and security; a JDE functional analyst for composing the orchestrations. No developer needed."
+  bindings:
+    - "function"
+    - "rest"
+  bindingNote: "Function / orchestration is the primary binding here — the AIS REST call is only the transport. No PL/SQL and no direct database binding is used or needed."
+  probeChecks:
+    - "AIS endpoint responds and issues a token."
+    - "Each named orchestration resolves and returns its declared input schema."
+    - "The calling user’s row and action security permits the orchestration."
+  gotcha: "Because orchestrations are already governed objects, the temptation is to expose every existing one. Only orchestrations with a stable, typed contract belong in the catalogue."
+  probe:
+    resolved: 15
+    disabled: 2
+- key: "ebs"
+  name: "Oracle E-Business Suite"
+  appKeys:
+    - "ebs"
+  appLabels:
+    - "E-Business Suite"
+  effort: "High — parallel track from day one"
+  effortCls: "ef-high"
+  wave: "Runs in parallel from day one"
+  route: "Hybrid. Integrated SOA Gateway (ISG) for APIs Oracle has annotated in the Integration Repository, plus ORDS over a dedicated wrapper schema for everything else."
+  gate: "ISG deployed. Each interface must be deployed individually from IREP by a user holding the ISG responsibility, and coverage is limited to what Oracle annotated. Custom packages need annotation and an IREP upload first."
+  steps:
+    - "Deploy ISG and grant the ISG responsibility to the person who will deploy interfaces."
+    - "Deploy each required interface individually from the Integration Repository."
+    - "Annotate and upload any custom package that is not already in IREP."
+    - "Create a dedicated ORDS wrapper schema — never expose APPS directly, and never grant EXECUTE on APPS-owned packages to the wrapper."
+    - "Initialise FND user, responsibility and org context (MO_GLOBAL) explicitly on every call."
+  owners: "Apps DBA for ORDS, the wrapper schema and ISG deployment; an EBS technical developer for annotation and wrapper packages; the functional lead for responsibility and org mapping; security for the wrapper-schema grants."
+  bindings:
+    - "plsql"
+    - "database"
+  bindingNote: "PL/SQL package is the primary binding; reporting views bind as Database / SQL with a mandatory row cap. REST / OAuth is reachable only where ISG already exposes the interface."
+  probeChecks:
+    - "Is the ISG interface actually deployed for this instance, or only annotated?"
+    - "Does the wrapper schema exist, with grants on exactly the declared packages?"
+    - "Is the ORDS module enabled and mapped?"
+    - "Does MO_GLOBAL initialisation succeed for the test user and org?"
+  gotcha: "EBS instances differ more from each other than any other application in the estate. Assume nothing carries between customers — this is why the probe exists."
+  probe:
+    resolved: 14
+    disabled: 12
+- key: "psft"
+  name: "PeopleSoft"
+  appKeys:
+    - "psft"
+  appLabels:
+    - "PeopleSoft"
+  effort: "Medium — 3–6 weeks (Low on 8.59+ with PS Query only)"
+  effortCls: "ef-medium"
+  wave: "Wave 2"
+  route: "Application Services Framework (ASF) — REST-first, JSON native, OAuth2 at URI level, and it auto-generates an OpenAPI spec that feeds the harvest stage directly. Far lighter than classic Integration Broker."
+  gate: "PeopleTools 8.59 or later. ASF was introduced in 8.59, consumer REST arrived in 8.60, and it is current through 8.63. Below 8.59 there is no ASF and effort roughly doubles on the classic Integration Broker path. Check the Tools release first, always."
+  steps:
+    - "Confirm the PeopleTools release — this single fact decides the whole effort estimate."
+    - "Register the required ASF services and retrieve the generated OpenAPI spec."
+    - "Configure OAuth2 at the URI level for the consuming module server."
+    - "Grant permission lists and confirm query security trees for the calling users."
+    - "For read-only coverage, expose PS Query REST — it needs no development at all and is the fastest route to a large read-only tool set."
+  owners: "PeopleSoft administrator for the Tools release, ASF/IB configuration and OAuth; security administrator for permission lists and query security trees; the functional lead to choose which queries and component interfaces matter."
+  bindings:
+    - "rest"
+    - "function"
+    - "database"
+  bindingNote: "ASF services bind as REST / OAuth. Component Interfaces bind as Function / orchestration. PS Query REST behaves as a query layer and is treated as a Database / SQL binding, with a row cap."
+  probeChecks:
+    - "PeopleTools release is 8.59 or later."
+    - "Each declared ASF service is registered and its OpenAPI spec is retrievable."
+    - "Query security tree grants resolve for the test user."
+    - "Each declared Component Interface is exposed and callable."
+  gotcha: "The version threshold is binary, not gradual. A customer on 8.57 is a different project, not a slower one."
+  probe:
+    resolved: 8
+    disabled: 2
+- key: "siebel"
+  name: "Siebel"
+  appKeys:
+    - "siebel"
+  appLabels:
+    - "Siebel"
+  effort: "Medium–High — 6–10 weeks"
+  effortCls: "ef-medium"
+  wave: "Wave 3"
+  route: "Siebel REST through the Application Interface (AI) component, plus repository work to expose business service methods and Integration Objects for REST access."
+  gate: "Siebel IP17 or later. IP16 and earlier have no Application Interface at all; the fallback is EAI HTTP inbound, which is materially harder. An AI profile must be configured and deployed through the Siebel Management Console."
+  steps:
+    - "Confirm the Siebel release is IP17 or later."
+    - "Configure and deploy an Application Interface profile via the Siebel Management Console."
+    - "Do the repository work: expose the required business service methods and configure Integration Objects for REST access."
+    - "Compile and deploy the SRF, then confirm responsibilities and view access for calling users."
+  owners: "Siebel administrator for the Management Console, AI profile and deployment; a Siebel configurator/developer for the repository, business services and Integration Objects; security for responsibilities and visibility rules."
+  bindings:
+    - "function"
+    - "rest"
+  bindingNote: "Business service methods are the primary binding and classify as Function / orchestration — whether the method carries the caller’s context has to be verified per method. Integration Object resources bind as REST / OAuth."
+  probeChecks:
+    - "Siebel release is IP17 or later and the AI profile responds."
+    - "Each declared business service method resolves."
+    - "Each declared Integration Object is exposed for REST."
+    - "View access and visibility rules resolve for the test user."
+  gotcha: "The repository work is the real cost, not the AI profile. Budget configurator time, not just admin time."
+  probe:
+    resolved: 3
+    disabled: 5
+- key: "hyperion"
+  name: "Hyperion / Essbase (on-prem EPM 11.2)"
+  appKeys:
+    - "hyperion"
+  appLabels:
+    - "Hyperion"
+  effort: "High on our side, low on the customer’s"
+  effortCls: "ef-high"
+  wave: "Wave 4"
+  route: "Essbase 21c under 11.2 has a proper REST API — use it wherever the tool touches Essbase. Everything else is reached by wrapping MaxL, the CLI and LCM. That wrapping is LTM-side development, not customer configuration."
+  gate: "EPM 11.2 with Essbase 21c for the REST paths. A reachable, credentialled host for MaxL/CLI/LCM execution for everything else."
+  steps:
+    - "Confirm the Essbase version and enable its REST API."
+    - "Provide a MaxL/CLI execution host reachable from the module server, with credentials."
+    - "Provision Shared Services groups and application roles for the calling users."
+    - "Register the LCM jobs and calc scripts that back each tool."
+  owners: "Hyperion/EPM administrator for provisioning, Shared Services groups and MaxL/LCM access. The wrapper itself is built by LTM — the customer configures access, not code."
+  bindings:
+    - "function"
+    - "rest"
+  bindingNote: "MaxL, CalcScript and LCM wraps classify as Function / orchestration and run under whatever account the wrapper host uses — so the identity question must be answered explicitly here. Only Essbase 21c REST paths carry the caller’s identity natively."
+  probeChecks:
+    - "Essbase REST endpoint is reachable and authenticates."
+    - "The MaxL/CLI host is reachable and credentials work."
+    - "Each declared calc script or LCM job resolves."
+    - "Shared Services group mapping exists for the test user."
+  gotcha: "Do not describe on-prem EPM as end-of-life. Oracle Premier Support is confirmed through at least 2033, with annual review. The difficulty is the missing unified REST surface, not the support status — earlier drafts got this wrong."
+  probe:
+    resolved: 5
+    disabled: 3
+- key: "saas"
+  name: "Oracle SaaS — Fusion, EPM Cloud, OFSC, Commerce, Sales, CPQ"
+  appKeys:
+    - "fusion"
+    - "epm"
+    - "ofsc"
+    - "commerce"
+    - "sales"
+    - "cpq"
+  appLabels:
+    - "Oracle Fusion"
+    - "Oracle EPM Cloud"
+    - "Oracle Field Service (OFSC)"
+    - "Oracle Commerce Cloud"
+    - "Oracle Sales Cloud"
+    - "Oracle CPQ Cloud"
+  effort: "Provisioning only — days"
+  effortCls: "ef-provision"
+  wave: "Wave 1"
+  route: "Provisioning, not development. An OAuth client or integration user, role grants, and an allow-list of REST resources and ESS jobs."
+  gate: "None beyond an active subscription and an identity-domain administrator who can create the OAuth client."
+  steps:
+    - "Create the OAuth client / integration user in the identity domain."
+    - "Grant the job and duty roles the tools need — no more."
+    - "Allow-list the specific REST resources and ESS job definitions each tool binds to."
+    - "Confirm per-user JWT assertion works end to end, so identity is carried rather than shared."
+  owners: "SaaS security administrator for roles and data security policies; the IDCS/IAM administrator for the OAuth client and JWT assertion; the functional lead to choose the resources and ESS jobs."
+  bindings:
+    - "rest"
+  bindingNote: "REST / OAuth only — the one place in the estate where the caller’s identity carries end to end with no compensating control needed."
+  probeChecks:
+    - "The OAuth client issues a token."
+    - "Each allow-listed REST resource answers a metadata call."
+    - "Each declared ESS job definition resolves."
+    - "Role grants are sufficient for every declared scope, and no broader."
+  gotcha: "The speed here is the trap: it is easy to over-grant roles because provisioning is quick. Grant per declared scope, not per application."
+  probe:
+    resolved: 55
+    disabled: 0
+- key: "platform"
+  name: "Platform & analytics services — OIC, OAC, FDI, AI Data Platform, Autonomous AI DB"
+  appKeys:
+    - "oic"
+    - "oac"
+    - "fdi"
+    - "aidp"
+    - "adb"
+  appLabels:
+    - "Oracle Integration Cloud"
+    - "Oracle Analytics Cloud"
+    - "Fusion Data Intelligence"
+    - "Oracle AI Data Platform"
+    - "Oracle Autonomous AI Database"
+  effort: "Provisioning only — days"
+  effortCls: "ef-provision"
+  wave: "Wave 1"
+  route: "These are shortcuts rather than applications. OIC turns every integration already built into a typed, governed endpoint; OAC and FDI expose governed read paths over a semantic model; AI Data Platform and Autonomous AI DB are first-party surfaces that get wrapped, not rebuilt."
+  gate: "Existing subscriptions plus per-user token issuance. For Autonomous AI DB, governed semantic views must exist — no raw schema is ever exposed."
+  steps:
+    - "Issue per-user tokens for OAC and FDI so row-level security in the semantic model still applies."
+    - "For OIC, decide per integration whether user context is threaded through or the integration runs under a service account."
+    - "For Autonomous AI DB, create or confirm the governed semantic views the tools bind to."
+    - "For AI Data Platform, confirm data-product entitlement and catalogue governance are in place."
+  owners: "OIC administrator; OAC/FDI administrator for the semantic model and row-level security; a DBA for the governed views on Autonomous AI DB."
+  bindings:
+    - "database"
+    - "rest"
+    - "wrapped-vendor"
+  bindingNote: "OAC and FDI read paths are treated as Database / SQL bindings — row caps apply, and no raw schema is reachable. OIC integrations bind as REST / OAuth but carry the service-account caveat flagged in Governance. AI Data Platform and Autonomous AI DB are Wrapped-vendor bindings."
+  probeChecks:
+    - "Per-user token issues and row-level security is observed on a test query."
+    - "Each declared OIC integration endpoint resolves, and its execution identity is reported."
+    - "Each governed semantic view exists and returns within the declared row cap."
+  gotcha: "OIC is the one place where a tool can silently run as a service account and quietly grant everyone the same access. Either thread user context through the integration or restrict those tools to read-only, low-sensitivity data — see the highlighted row in Governance."
+  probe:
+    resolved: 26
+    disabled: 0

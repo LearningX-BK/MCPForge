@@ -1,0 +1,67 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.scm.purchase_order.create
+version: 1.0.0
+server: jde-scm-po
+title: Create a purchase order
+
+purpose: Create a purchase order for a supplier.
+disambiguation: >
+  Creates a NEW purchase order. To approve an existing one use
+  jde.scm.purchase_order.approve.
+archetype: transactional
+verb: create
+entity: purchase_order
+app: jde
+module: scm
+functionalArea: Procurement
+processTags: [P2P]
+sensitivity: financial
+write: true
+
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: PO_CREATE
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+input:
+  - { name: supplier_number, type: string, required: true, desc: JDE address book number of the supplier. }
+  - { name: amount, type: number, required: true, desc: Gross order amount., minimum: 0.01 }
+
+output:
+  summaryTemplate: "Purchase order {order_number} created."
+  resultKeys:
+    - { name: order_number, path: "$.order.number" }
+
+writeSafety:
+  dryRun:
+    strategy: precondition-read
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Create a purchase order for supplier {supplier_number} for {amount}. This
+      creates a COMMITMENT in JD Edwards.
+  humanApprovalRequired: true
+  reversal:
+    class: irreversible
+  idempotency: { scopeHours: 24 }
+
+governance:
+  reviewPath: standard
+  owner: JDE Procurement CoE
+  steward: A. Named Person
+
+eval:
+  intentsFile: evals/jde-scm-po/intents.yaml
+  minIntents: 10

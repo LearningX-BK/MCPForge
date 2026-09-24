@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "recorded": "2026-09-04",
+  "coverage": {
+    "toolsInCatalogue": 0,
+    "intents": 0,
+    "servers": 0,
+    "rolesWithManifest": 0
+  },
+  "summary": {
+    "sa1.overall": 1,
+    "sa1.direct": 1,
+    "sa1.near_miss": 1,
+    "sa1.negative": 1,
+    "sa1.sod_negative": 1,
+    "ttfc.core-hit.max": 0,
+    "ttfc.core-miss.max": 0,
+    "ttfc.cold.max": 0,
+    "vtc.max": 4,
+    "dh.median": 0,
+    "dh.p95": 0,
+    "mtb.card.max": 0,
+    "mtb.resident.max": 0,
+    "mtb.describe.max": 0,
+    "mtb.role-core-set.max": 0,
+    "mtb.meta-resident": 315
+  },
+  "notes": [
+    "PROVISIONAL BASELINE — recorded over an EMPTY catalogue and/or an empty intents suite. Every zero below is \"nothing was measured\", not \"measured at zero\", and every SA@1 of 1 is vacuous (0 of 0 intents). The only real measurement here is mtb.meta-resident: the four meta-tools, which exist.",
+    "WHOEVER RUNS TRACK I: once manifests/, roles/ and evals/<server>/intents.yaml are populated, re-record with `forge bench --record-baseline` and commit the diff. Until then the vacuous SA@1 of 1 will fail `forge ci` stage 10 on the first real run — deliberately, so the baseline is re-recorded by a human rather than drifting silently.",
+    "Session preamble charged at 150 tokens — 02 §5.7's own figure for \"initialize + server info\". Assumed, not measured: rank-1 mode has no live transport.",
+    "No Tool manifests in this repo, so MTB has nothing to measure beyond the four meta-tools. Populate manifests/ (Track I) before reading MTB as a real number."
+  ]
+}

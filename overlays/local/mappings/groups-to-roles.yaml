@@ -1,0 +1,54 @@
+# MCPForge — group -> role mapping for the "local" deployment. W0-D4, 02 §4.4.
+#
+# "overlays/<deployment>/mappings/groups-to-roles.yaml maps AD group DNs (or
+# local group names) to MCPForge role ids. This means the role grant is
+# reviewable in a pull request rather than buried in a directory, and it
+# means the Wave 0 local store and the Wave 1 AD deployment use *the same
+# mapping file format*."
+#
+# The `groups` map below is the proof of that claim: `finance-ap-clerks` (a
+# local group name, from LocalUserStore, W0-D2) and the `CN=...` key (an AD
+# group DN, from OidcProvider / LTM AD, W0-D3) are both just string keys in
+# the same map, resolved by the identical code path in
+# core/cli/src/lib/group-role-mapping.ts. Nothing here or downstream branches
+# on which kind of string a group key is.
+#
+# A widened grant — a new role added to an existing group, or a new group
+# added — shows up as an ordinary `git diff` on this file, which is the whole
+# governance point: the grant is reviewable in a pull request, not buried in
+# a directory or a database row.
+apiVersion: mcpforge/v1
+kind: GroupRoleMapping
+deployment: local
+
+groups:
+  # Wave 0 local groups (LocalUserStore, W0-D2) — bare names.
+  finance-ap-clerks:
+    roles:
+      - p2p-ap-clerk
+  finance-ap-approvers:
+    roles:
+      - p2p-ap-clerk
+      - p2p-ap-approver
+  mcpforge-admins:
+    roles:
+      - p2p-admin
+
+  # Wave 1 LTM AD groups (OidcProvider, W0-D3) — distinguished names. Same
+  # map, same key type as above: a group key is a group key.
+  'CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com':
+    roles:
+      - p2p-ap-clerk
+  'CN=Finance-AP-Approvers,OU=Groups,DC=corp,DC=example,DC=com':
+    roles:
+      - p2p-ap-clerk
+      - p2p-ap-approver
+
+# Per-subject exceptions, independent of group membership. This is the ONLY
+# place a Principal.subject value (core/gateway/identity/types.ts) appears in
+# this file, and it exists so `forge identity remap --from <old> --to <new>`
+# has something to rewrite when a subject value changes at an IdP swap (02
+# §4.4 item 3): group membership itself is re-resolved from the new IdP and
+# needs no rewrite, but a named per-subject exception written against the OLD
+# subject would silently stop applying unless something rewrites it.
+subjectOverrides: {}

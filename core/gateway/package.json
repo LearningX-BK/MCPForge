@@ -1,0 +1,63 @@
+{
+  "name": "@mcpforge/gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge gateway — the MCP endpoint, the policy chain, and the runtime store. The store is the only sanctioned path to runtime state (02 §10.2).",
+  "exports": {
+    ".": "./index.ts",
+    "./store": "./store/index.ts",
+    "./store/server": "./store/server.ts",
+    "./identity": "./identity/index.ts",
+    "./transport": "./transport/index.ts",
+    "./scope": "./scope/index.ts",
+    "./flags": "./flags/index.ts",
+    "./policy": "./policy/index.ts",
+    "./reversal": "./reversal/index.ts",
+    "./errors": "./errors/index.ts",
+    "./caps": "./caps/index.ts",
+    "./consumer": "./consumer/index.ts",
+    "./anomaly": "./anomaly/index.ts",
+    "./secrets": "./secrets/index.ts",
+    "./secrets/server": "./secrets/server.ts",
+    "./telemetry": "./telemetry/index.ts",
+    "./meta": "./meta/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run",
+    "test:postgres": "vitest run --config vitest.postgres.config.ts",
+    "test:keycloak": "vitest run --config vitest.keycloak.config.ts",
+    "db:generate": "drizzle-kit generate --config=drizzle.sqlite.config.ts && drizzle-kit generate --config=drizzle.postgres.config.ts"
+  },
+  "dependencies": {
+    "@mcpforge/registry": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-trace-base": "^2.11.0",
+    "@opentelemetry/sdk-trace-node": "^2.11.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "age-encryption": "^0.3.1",
+    "better-sqlite3": "^12.2.0",
+    "drizzle-orm": "^0.44.0",
+    "hash-wasm": "^4.12.0",
+    "jose": "^6.2.10",
+    "otpauth": "^9.5.1",
+    "pg": "^8.13.1",
+    "yaml": "^2.6.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@mcpforge/adapter-function": "workspace:*",
+    "@testcontainers/postgresql": "^12.1.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.10.2",
+    "@types/pg": "^8.11.10",
+    "drizzle-kit": "^0.31.0",
+    "testcontainers": "^12.1.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

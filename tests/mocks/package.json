@@ -1,0 +1,25 @@
+{
+  "name": "@mcpforge/mocks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The offline mock/recorded-target harness (W0-H6). Versioned fixture recording + deterministic replay for 'a target' across test tiers, so unit/contract/policy tests run with no live Oracle instance and no network (02 §7.1, §7.3). `refresh:fixtures` is the opt-in, real-target leg — it is a no-op unless MCPFORGE_LIVE_TARGET_URL is set, matching W0-C5/W0-D3's Postgres/Keycloak gating convention.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --build --force",
+    "refresh:fixtures": "tsx scripts/refresh-fixtures.ts"
+  },
+  "dependencies": {
+    "@mcpforge/adapter-function": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

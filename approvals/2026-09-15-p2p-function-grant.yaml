@@ -1,0 +1,22 @@
+# MCPForge approval record — the bindingGrant itself (distinct from the
+# standing authorization it separately carries). CLAUDE.md non-negotiable 7:
+# being in scope is not permission to execute an elevated binding; a `function`
+# binding needs this named, expiring, approval-recorded grant.
+apiVersion: mcpforge/v1
+kind: Approval
+id: 2026-09-15-p2p-function-grant
+status: approved
+decision: approved
+subject:
+  kind: BindingGrant
+  role: p2p
+  bindingType: function
+  names: [AP_VOUCHER, GL_JOURNAL, PO_ORCHESTRATION]
+action: grant
+summary: "Grant role p2p permission to execute function-binding writes (the AP_VOUCHER, GL_JOURNAL and PO_ORCHESTRATION orchestration families) for the local Wave 0 demo."
+requestedBy: pattnaikbikash@gmail.com
+requestedAt: 2026-09-15T00:00:00.000Z
+approver: Admin
+approvedAt: 2026-09-15
+expiresAt: 2027-03-14
+note: "Provisional approval by Admin (W0-HG8), user decision 2026-09-15 — re-review as needed once real stewards/approvers are named."

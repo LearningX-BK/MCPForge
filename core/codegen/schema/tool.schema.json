@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/tool.schema.json",
+  "title": "mcpforge/v1 — kind: Tool",
+  "description": "The sole source of truth for a tool (02 §2.1). Field for field with the worked example at 02 §2.2 (jde.ap.voucher.create), plus the Phase 5 binding.credentialClass (02 §11.5.1). STRUCTURAL rules only — the ~40 policy rules are W0-B3 and live in core/codegen/rules/**.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "id",
+    "version",
+    "server",
+    "title",
+    "purpose",
+    "archetype",
+    "verb",
+    "entity",
+    "app",
+    "module",
+    "functionalArea",
+    "sensitivity",
+    "write",
+    "binding",
+    "input",
+    "output",
+    "governance",
+    "eval"
+  ],
+  "properties": {
+    "apiVersion": { "$ref": "common.schema.json#/$defs/apiVersion" },
+    "kind": { "const": "Tool" },
+    "id": { "$ref": "common.schema.json#/$defs/toolId" },
+    "version": { "$ref": "common.schema.json#/$defs/semver" },
+    "server": {
+      "description": "The module server this tool belongs to.",
+      "$ref": "common.schema.json#/$defs/slugId"
+    },
+    "title": { "type": "string", "minLength": 1 },
+
+    "purpose": {
+      "description": "Agent-facing UI copy, verb-first, <=14 words. The word count is a policy rule (W0-B3), not a structural one.",
+      "type": "string",
+      "minLength": 1
+    },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "maxItems": 8
+    },
+    "disambiguation": {
+      "description": "Mandatory and MUTUAL on any two tools sharing an {app}.{module}.{entity} prefix (02 §5.5). Mutuality is cross-manifest and therefore a W0-B3 rule.",
+      "type": "string",
+      "minLength": 1
+    },
+    "archetype": {
+      "type": "string",
+      "enum": ["transactional", "analytical", "platform", "wrapped"]
+    },
+    "verb": { "$ref": "common.schema.json#/$defs/verb" },
+    "entity": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "app": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "module": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "functionalArea": { "type": "string", "minLength": 1 },
+    "processTags": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "sensitivity": { "$ref": "common.schema.json#/$defs/sensitivity" },
+    "write": { "type": "boolean" },
+    "coreForRoles": {
+      "description": "Counts against each named role's resident token budget (02 §5.3).",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/slugId" }
+    },
+
+    "binding": { "$ref": "#/$defs/binding" },
+    "input": { "type": "array", "items": { "$ref": "#/$defs/input" } },
+    "output": { "$ref": "#/$defs/output" },
+    "writeSafety": { "$ref": "#/$defs/writeSafety" },
+    "governance": { "$ref": "#/$defs/governance" },
+    "eval": { "$ref": "#/$defs/eval" },
+
+    "status": {
+      "description": "02 §2.6 — deprecated keeps a tool callable but out of every tools/list; retired is findable, not callable.",
+      "type": "string",
+      "enum": ["active", "deprecated", "retired"]
+    },
+    "supersededBy": { "$ref": "common.schema.json#/$defs/toolId" },
+    "bindingCustom": {
+      "description": "02 §2.4 — when true, codegen creates generated/tools/<id>/binding.custom.ts once and never writes it again.",
+      "type": "boolean"
+    }
+  },
+
+  "allOf": [
+    {
+      "description": "CLAUDE.md #4 — a write tool must carry a writeSafety block. Its completeness (non-'none' dry run, reversal.class, irreversible => humanApprovalRequired) is enforced structurally here and reinforced by the W0-B3 policy rules.",
+      "if": {
+        "type": "object",
+        "properties": { "write": { "const": true } },
+        "required": ["write"]
+      },
+      "then": { "required": ["writeSafety"] }
+    }
+  ],
+
+  "$defs": {
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "technology", "ref", "identity", "execution"],
+      "properties": {
+        "type": { "$ref": "common.schema.json#/$defs/bindingType" },
+        "technology": { "type": "string", "minLength": 1 },
+        "ref": {
+          "description": "Allowlisted name; NEVER taken from a parameter (02 §2.2).",
+          "type": "string",
+          "minLength": 1
+        },
+        "refVersion": { "type": "string", "minLength": 1 },
+        "identity": { "$ref": "#/$defs/bindingIdentity" },
+        "execution": { "$ref": "#/$defs/bindingExecution" },
+        "credentialClass": {
+          "description": "Phase 5 (02 §11.5.1). module-scoped-stored is legitimate only when all four parts of the stored-credential test hold; otherwise it is a service-account fallback and CLAUDE.md #1 forbids it. The two validate rules (reject module-scoped-stored where the probe reports identity.carries: verified; reject per-user-exchanged on plsql) are W0-B3.",
+          "type": "string",
+          "enum": ["per-user-exchanged", "module-scoped-stored", "none"]
+        },
+        "credentialRef": {
+          "description": "A REFERENCE. Never a value. Ever (02 §11.5, CLAUDE.md #8).",
+          "$ref": "common.schema.json#/$defs/secretRef"
+        }
+      }
+    },
+
+    "bindingIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["carries", "onServiceAccount", "echoOn"],
+      "properties": {
+        "carries": {
+          "description": "'verified' is STRUCTURALLY UNAVAILABLE to a hand-authored manifest — only the capability probe may ever write it, and it writes it into the probe report, never into a manifest (CLAUDE.md #2, 02 §2.2). This enum is the manifest-side enum, and it deliberately omits 'verified'; the probe report has its own schema.",
+          "type": "string",
+          "enum": ["unverified", "no"]
+        },
+        "probe": { "type": "string", "minLength": 1 },
+        "onServiceAccount": {
+          "description": "DETECTION of a service account, never substitution for one — what the gateway does when the probe reports the target saw one. There is no value here that supplies a shared credential in place of an unresolved identity (CLAUDE.md #1).",
+          "type": "string",
+          "enum": ["block", "readonly-lowsens"]
+        },
+        "echoOn": {
+          "type": "string",
+          "enum": ["never", "write", "sampled", "always"]
+        }
+      }
+    },
+
+    "bindingExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeoutMs", "maxConcurrency", "responseBytesMax"],
+      "properties": {
+        "timeoutMs": { "type": "integer", "exclusiveMinimum": 0 },
+        "maxConcurrency": { "type": "integer", "exclusiveMinimum": 0 },
+        "responseBytesMax": { "type": "integer", "exclusiveMinimum": 0 }
+      }
+    },
+
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "required", "desc"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "type": { "type": "string", "enum": ["string", "number", "integer", "boolean"] },
+        "required": { "type": "boolean" },
+        "desc": {
+          "description": "Agent-facing UI copy, <=12 words (word count is a W0-B3 rule).",
+          "type": "string",
+          "minLength": 1
+        },
+        "example": { "type": ["string", "number", "boolean"] },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" },
+        "format": { "type": "string", "minLength": 1 },
+        "enum": {
+          "description": "Inline enums are capped at 12 values by a W0-B3 token-budget rule; longer lists must use enumRef.",
+          "type": "array",
+          "items": { "type": ["string", "number"] },
+          "minItems": 1
+        },
+        "enumRef": {
+          "description": "A shared lookup list in enums/. Referential integrity is W0-B2.",
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        }
+      },
+      "not": { "required": ["enum", "enumRef"] }
+    },
+
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summaryTemplate", "resultKeys"],
+      "properties": {
+        "summaryTemplate": { "type": "string", "minLength": 1 },
+        "resultKeys": {
+          "description": "The business keys. These ARE the reversal handle (02 §2.2).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "path"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+              "path": {
+                "description": "JSONPath into the raw target response.",
+                "type": "string",
+                "pattern": "^\\$"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "writeSafety": {
+      "description": "Required whenever write: true. The full path: plan/dry-run -> confirmation bound to a canonical argument hash -> execute -> immutable audit record -> a declared and tested reversal (CLAUDE.md #4).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dryRun", "confirm", "humanApprovalRequired", "reversal", "idempotency"],
+      "properties": {
+        "dryRun": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["strategy"],
+          "properties": {
+            "strategy": {
+              "description": "'none' is absent from this enum on purpose: a write tool's dry-run strategy may never be none (CLAUDE.md #4), and writeSafety only exists on write tools.",
+              "type": "string",
+              "enum": [
+                "native",
+                "validate-pair",
+                "precondition-read",
+                "shadow-write",
+                "transactional"
+              ]
+            },
+            "ref": { "type": "string", "minLength": 1 }
+          }
+        },
+        "confirm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "tokenTtlSeconds", "planTemplate"],
+          "properties": {
+            "required": { "const": true },
+            "tokenTtlSeconds": { "type": "integer", "exclusiveMinimum": 0 },
+            "planTemplate": {
+              "description": "The highest-stakes copy in the product: names the system, the object, the amounts and the business consequence in plain words (CLAUDE.md §5).",
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "humanApprovalRequired": { "type": "boolean" },
+        "reversal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["class"],
+          "properties": {
+            "class": {
+              "type": "string",
+              "enum": ["native-reverse", "compensating-tool", "transactional", "irreversible"]
+            },
+            "tool": { "$ref": "common.schema.json#/$defs/toolId" },
+            "argMap": {
+              "type": "object",
+              "additionalProperties": { "type": "string", "minLength": 1 }
+            },
+            "windowHours": { "type": "integer", "exclusiveMinimum": 0 },
+            "preconditions": { "type": "string", "minLength": 1 }
+          },
+          "allOf": [
+            {
+              "if": { "properties": { "class": { "const": "compensating-tool" } } },
+              "then": { "required": ["tool"] }
+            }
+          ]
+        },
+        "idempotency": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scopeHours"],
+          "properties": { "scopeHours": { "type": "integer", "exclusiveMinimum": 0 } }
+        },
+        "guardrails": { "type": "array", "items": { "$ref": "#/$defs/guardrail" } }
+      },
+      "allOf": [
+        {
+          "description": "reversal.class: irreversible forces humanApprovalRequired: true (02 §2.2).",
+          "if": {
+            "type": "object",
+            "properties": {
+              "reversal": {
+                "type": "object",
+                "properties": { "class": { "const": "irreversible" } }
+              }
+            }
+          },
+          "then": { "properties": { "humanApprovalRequired": { "const": true } } }
+        }
+      ]
+    },
+
+    "guardrail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "description": "02 §3.1.3's five kinds, and only those five: maxNumeric/minNumeric, allowedValues, rateLimit, sodConflict, timeWindow. minNumeric, rateLimit and timeWindow were added by W0-F4 so every kind the runtime engine implements can actually be declared. requiresField was RETIRED by W0-F8: 02 §3.1.3 never defined it, so the gateway had no evaluator for it and refused every call to a tool that declared one while this schema passed the manifest clean — 'presence of an argument' is enforced completely by input[].required.",
+          "type": "string",
+          "enum": [
+            "maxNumeric",
+            "minNumeric",
+            "sodConflict",
+            "allowedValues",
+            "rateLimit",
+            "timeWindow"
+          ]
+        },
+        "field": { "type": "string", "minLength": 1 },
+        "value": {
+          "type": ["number", "string", "array"],
+          "items": { "type": ["string", "number"] }
+        },
+        "with": { "$ref": "common.schema.json#/$defs/toolId" },
+        "scope": { "type": "string", "minLength": 1 },
+        "limit": {
+          "description": "rateLimit: N executes of this tool per caller per window (02 §3.1.3).",
+          "type": "integer",
+          "minimum": 1
+        },
+        "windowSeconds": {
+          "description": "rateLimit: the window the limit is counted over.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "ref": {
+          "description": "timeWindow: the named precondition read the window is evaluated from, e.g. the open-period check for a GL posting (02 §3.1.3).",
+          "type": "string",
+          "minLength": 1
+        },
+        "message": { "type": "string", "minLength": 1 }
+      }
+    },
+
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reviewPath", "owner", "steward"],
+      "properties": {
+        "reviewPath": {
+          "description": "expedited is structurally unavailable for plsql/function bindings and for irreversible writes — a W0-B3 cross-field rule.",
+          "type": "string",
+          "enum": ["standard", "expedited"]
+        },
+        "owner": { "type": "string", "minLength": 1 },
+        "steward": {
+          "description": "A named person, filled at intake. Never an agent's invention.",
+          "type": "string",
+          "minLength": 1
+        },
+        "policyException": {
+          "description": "02 §11.4.7 — any tool carrying one is ELEVATED posture regardless of binding type.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+
+    "eval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intentsFile", "minIntents"],
+      "properties": {
+        "intentsFile": { "type": "string", "minLength": 1 },
+        "minIntents": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

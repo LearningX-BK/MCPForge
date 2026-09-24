@@ -1,0 +1,21 @@
+{
+  "letter": "a",
+  "criterion": "(a) A call presenting a valid user identity from an unregistered consumer is refused at session establishment with CONSUMER_UNREGISTERED, and no tools/list is served.",
+  "testName": "refuses initialize with CONSUMER_UNREGISTERED and serves zero catalogue bytes",
+  "pass": true,
+  "detail": {
+    "httpStatus": 401,
+    "errorCode": "CONSUMER_UNREGISTERED",
+    "errorNext": "Register this client via the portal's Consumers registration flow before retrying; see the operator for onboarding.",
+    "zeroCatalogueBytesAsserted": [
+      "tools",
+      "capabilities",
+      "forge.transport.stub.get"
+    ],
+    "identityResolutionsRun": 0,
+    "sessionsMinted": 0,
+    "secondaryToolsListStatus": 400,
+    "realMechanism": "core/gateway/transport/http.ts createGatewayHttpTransport + core/gateway/transport/consumer-auth/authenticate.ts ConsumerAuthenticator — the same code core/gateway/transport/consumer-auth/consumer-auth.http.test.ts (W0-N2) exercises, driven here over a real node:http server via fetch."
+  },
+  "capturedAt": "2026-09-24T03:34:09.458Z"
+}

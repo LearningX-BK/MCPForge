@@ -1,0 +1,22 @@
+apiVersion: mcpforge/v1
+kind: Role
+id: p2p
+label: Procure-to-Pay
+description: Raise and approve purchase orders, voucher against them, and post the resulting journals.
+includes:
+  - jde.ap.voucher.*
+excludes: []
+sensitivityCeiling: financial
+writeAllowed: true
+coreTools:
+  - jde.ap.voucher.create
+budgetTokens: 1300
+segregationOfDuties: []
+mutuallyExclusiveWith: []
+bindingGrants:
+  - bindingType: plsql
+    names: [MCPFORGE_WRAP.AP_VOUCHER]
+    approvalRef: appr-2026-08-27-p2p-plsql
+    approver: A. Named Approver
+    expiresAt: "2027-02-23"
+    standingAuthorization: appr-2026-08-27-p2p-plsql

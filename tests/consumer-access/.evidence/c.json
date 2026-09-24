@@ -1,0 +1,44 @@
+{
+  "letter": "c",
+  "criterion": "(c) An elevated-binding tool held in the caller's role scope but with no elevated grant is refused with ELEVATED_GRANT_REQUIRED through both a direct tools/call and forge.invoke, and is absent from tools/list while remaining findable through forge.find with its agentMessage.",
+  "testName": "ELEVATED_GRANT_REQUIRED via tools/call AND forge.invoke; absent from tools/list; findable via forge.find with an agentMessage",
+  "pass": true,
+  "detail": {
+    "elevatedTool": "jde.ap.voucher.create",
+    "toolsCallRefusalCode": "ELEVATED_GRANT_REQUIRED",
+    "toolsCallRefusalStage": "6e′",
+    "toolsCallRefusalNext": "This tool requires an elevated binding grant (a function bindingGrant naming ORCH_AP_VOUCHER_CREATE) on the role that grants you this tool. Ask the approver named on the grant's approval record to issue or renew it in approvals/; role scope alone does not cover it, and no plan was created for this call.",
+    "forgeInvokeRefusalCode": "ELEVATED_GRANT_REQUIRED",
+    "forgeInvokeRefusalStage": "6e′",
+    "identicalAcrossEntryPoints": true,
+    "listableWithoutGrant": [
+      "jde.ap.voucher.cancel",
+      "jde.ap.voucher.search",
+      "jde.ap.voucher.submit",
+      "jde.ap.voucher.update",
+      "jde.scm.purchase_order.create"
+    ],
+    "findableWithoutGrant": [
+      "jde.scm.purchase_order.create",
+      "jde.ap.voucher.create",
+      "jde.ap.voucher.search",
+      "jde.ap.voucher.cancel",
+      "jde.ap.voucher.update",
+      "jde.ap.voucher.submit"
+    ],
+    "accessLevelWithoutGrant": "requires_grant",
+    "agentMessageWithoutGrant": "This capability exists but you hold no elevated grant for it: it needs a function bindingGrant naming ORCH_AP_VOUCHER_CREATE. Do not attempt to call it; it will refuse with ELEVATED_GRANT_REQUIRED until the approver named on that grant's approval record in approvals/ issues the grant as an approval record in approvals/.",
+    "forgeFindSurfacedIt": true,
+    "baselineWithGrantOutcome": "proceed",
+    "listableWithGrant": [
+      "jde.ap.voucher.cancel",
+      "jde.ap.voucher.create",
+      "jde.ap.voucher.search",
+      "jde.ap.voucher.submit",
+      "jde.ap.voucher.update",
+      "jde.scm.purchase_order.create"
+    ],
+    "realMechanism": "core/gateway/policy/binding-auth/authorize.ts authorizeBinding (stage 6e′) via core/gateway/policy/entry-points.ts (identical chain) and core/gateway/meta/visibility.ts resolveDiscovery (same authorizeBinding call, for listing only) — the mechanisms tests/policy/escalation.elevated-posture.test.ts (W0-N3) and core/gateway/meta/*.test.ts (W0-G4) already prove."
+  },
+  "capturedAt": "2026-09-24T03:34:07.918Z"
+}

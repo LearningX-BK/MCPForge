@@ -1,0 +1,41 @@
+apiVersion: mcpforge/v1
+kind: Role
+id: p2p
+label: Procure-to-Pay
+description: Raise and approve purchase orders, voucher against them, and post the resulting journals.
+excludes: []
+sensitivityCeiling: financial
+writeAllowed: true
+coreTools:                       # the resident set. Counts against budgetTokens.
+  - jde.scm.purchase_order.create
+  - jde.scm.purchase_order.approve
+  - jde.ap.voucher.create
+  - jde.fin.journal.create
+  - jde.fin.journal.submit
+  - jde.ap.voucher.search
+budgetTokens: 1300               # CI-enforced ceiling on the resident set (§5.6)
+segregationOfDuties:
+  - conflict: [jde.scm.purchase_order.create, jde.scm.purchase_order.approve]
+    disposition: warn-and-require-exception
+mutuallyExclusiveWith: []
+bindingGrants:
+  - bindingType: function
+    names: [AP_VOUCHER, GL_JOURNAL, PO_ORCHESTRATION]
+    approvalRef: approvals/2026-09-15-p2p-function-grant.yaml
+    approver: Admin
+    expiresAt: '2027-03-14'
+    standingAuthorization: 2026-09-15-p2p-function-standing
+# `includes` is deliberately the LAST field: it is a populated block sequence,
+# so a keyboard-only edit that moves to the very end of the file and appends
+# `\n  - <glob>` (03 §12.2's "completable without a mouse" rule, exercised by
+# tests/a11y/keyboard/role-edit.spec.ts) extends this real list rather than
+# landing after a flow-style empty collection (`excludes: []` /
+# `mutuallyExclusiveWith: []`), which a YAML parser cannot attach a trailing
+# indented block-sequence item to. See role-edit.spec.ts's own history in
+# TASKS.md W0-J21 for the failure this ordering fixes.
+includes:
+  - jde.scm.purchase_order.*
+  - jde.ap.voucher.*
+  - jde.fin.journal.*
+  - jde.fin.gl_journal.search
+  - jde.fin.batch.get_status

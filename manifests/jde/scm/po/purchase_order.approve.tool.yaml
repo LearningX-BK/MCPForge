@@ -1,0 +1,99 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.scm.purchase_order.approve
+version: 1.0.0
+server: jde-scm-po
+title: Approve a purchase order
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) ---------
+purpose: Approve a purchase order, releasing it to the supplier.
+aliases: [approve a po, release purchase order, sign off a po]
+disambiguation: >
+  Approves an EXISTING purchase order. To raise a new one use
+  jde.scm.purchase_order.create; to check what has been received against one use
+  jde.scm.purchase_order.get_receipt_status.
+archetype: transactional
+verb: approve
+entity: purchase_order
+app: jde
+module: scm
+functionalArea: Procurement
+processTags: [P2P]
+sensitivity: financial
+write: true
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: PO_APPROVE
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: po_number, type: string, required: true, desc: Purchase order number awaiting approval., example: "0000451" }
+  - { name: company,   type: string, required: true, desc: JDE order company code., example: "00100" }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Purchase order {order_number} is now {approval_status}."
+  resultKeys:
+    - { name: order_number,     path: "$.purchaseOrder.orderNumber" }
+    - { name: order_company,    path: "$.purchaseOrder.orderCompany" }
+    - { name: approval_status,  path: "$.purchaseOrder.approvalStatus" }
+
+# --- write safety (required whenever write: true) ----------------------------
+writeSafety:
+  dryRun:
+    strategy: validate-pair
+    ref: PO_APPROVE_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Approve purchase order {po_number} in company {company} in JD Edwards.
+      This RELEASES THE ORDER TO THE SUPPLIER: the spend is authorised, the
+      order can be transmitted, and goods may be received and vouchered
+      against it.
+  humanApprovalRequired: false
+  # JD Edwards' own approval routing re-sets an approved order to pending
+  # approval — that is the first-class way back, and it is JDE's, not a second
+  # MCPForge tool. Wave 0 exposes no un-approve tool, so `forge audit reverse`
+  # refuses with `no_reversing_tool` and names the manual action rather than
+  # constructing a call against a tool that does not exist.
+  reversal:
+    class: native-reverse
+    windowHours: 720
+    preconditions: >
+      The order must not yet have been transmitted to the supplier, receipted
+      or vouchered.
+  idempotency: { scopeHours: 24 }
+  guardrails:
+    # THE call-time half of W0-I5's segregation-of-duties demonstration
+    # (02 §3.1.3, §4.3). The design-time half is `sod.implicit-create-approve`
+    # at role-compile time, which catches a badly designed ROLE; this one
+    # catches a caller who legitimately holds two individually fine roles and
+    # so ends up holding both ends of the create/approve pair. Neither
+    # substitutes for the other.
+    - { kind: sodConflict, with: jde.scm.purchase_order.create, scope: sameEntityChain }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: Supply Chain Engineering — JDE SCM
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-scm-po/intents.yaml
+  minIntents: 10

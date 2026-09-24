@@ -1,0 +1,24 @@
+{
+  "name": "@mcpforge/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge shared kernel — the manifest type model, the closed error taxonomy, and the pinned-tokenizer token counter.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./manifest": "./src/manifest/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./tokens": "./src/tokens/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "js-tiktoken": "1.0.21"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

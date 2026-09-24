@@ -1,0 +1,14 @@
+apiVersion: mcpforge/v1
+kind: Role
+id: p2p
+label: Procure-to-Pay (duplicate)
+description: A second Role manifest that reuses the id "p2p" — a referential-integrity violation.
+includes:
+  - jde.ap.voucher.*
+excludes: []
+sensitivityCeiling: financial
+writeAllowed: true
+coreTools: []
+budgetTokens: 1300
+segregationOfDuties: []
+mutuallyExclusiveWith: []

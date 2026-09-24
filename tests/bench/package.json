@@ -1,0 +1,22 @@
+{
+  "name": "@mcpforge/bench-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The `forge bench` mock-gateway + intents-generator suite (W0-G6, 02 §5.9). Runs the real catalogue index and the real scoping code against a synthetic fixture catalogue — no live Oracle instance, no real Wave 0 manifests required.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mcpforge/cli": "workspace:*",
+    "@mcpforge/gateway": "workspace:*",
+    "@mcpforge/registry": "workspace:*",
+    "@mcpforge/ci": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

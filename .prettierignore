@@ -1,0 +1,8 @@
+node_modules
+dist
+build
+.next
+.forge-build
+.mcpforge
+pnpm-lock.yaml
+adapters/oracle-worker

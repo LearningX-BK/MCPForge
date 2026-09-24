@@ -1,0 +1,19 @@
+apiVersion: mcpforge/v1
+kind: Role
+id: p2p
+label: Procure-to-Pay
+description: Raise and approve purchase orders, voucher against them, and post the resulting journals.
+includes:
+  - jde.ap.voucher.*
+sensitivityCeiling: financial
+writeAllowed: true
+coreTools: []
+budgetTokens: 1300
+bindingGrants:
+  # The grant names an APPS-owned package, not the MCPFORGE_WRAP wrapper the
+  # database-side EXECUTE grant is held on (02 §11.4.3, §3.4).
+  - bindingType: plsql
+    names: [APPS.AP_INVOICE_API]
+    approvalRef: appr-2026-08-27-p2p-plsql
+    approver: A. Named Approver
+    expiresAt: "2027-02-23"

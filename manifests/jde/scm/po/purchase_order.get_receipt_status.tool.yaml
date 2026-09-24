@@ -1,0 +1,71 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.scm.purchase_order.get_receipt_status
+version: 1.0.0
+server: jde-scm-po
+title: Is this PO fully receipted?
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+# `purpose` is deliberately left at 8 words: this card measures exactly 60
+# tokens, on the 02 §5.3(a) ceiling, so any addition here fails the codegen
+# budget gate. The card's `title` ("Is this PO fully receipted?") already names
+# the object, so "per line" is unambiguous in the card the agent actually sees.
+purpose: Return ordered, received and open quantities per line.
+aliases: [po receipt status, is this po received, three-way match check]
+disambiguation: >
+  Reads an EXISTING purchase order and changes nothing. To raise a new one use
+  jde.scm.purchase_order.create; to approve one use
+  jde.scm.purchase_order.approve.
+archetype: transactional
+verb: get_receipt_status
+entity: purchase_order
+app: jde
+module: scm
+functionalArea: Procurement
+processTags: [P2P]
+sensitivity: internal
+write: false
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: PO_RECEIPT_STATUS
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: sampled
+  execution:
+    timeoutMs: 15000
+    maxConcurrency: 8
+    responseBytesMax: 262144
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: order_number,  type: string, required: true,  desc: Purchase order number. }
+  - { name: order_type,    type: string, required: false, desc: "Order type code, narrows a shared number." }
+  - { name: order_company, type: string, required: false, desc: "Order company, narrows a shared number." }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "PO {order_number}: {received_quantity} of {ordered_quantity} received, {receipt_status}."
+  resultKeys:
+    - { name: order_number,       path: "$.purchaseOrder.orderNumber" }
+    - { name: ordered_quantity,   path: "$.purchaseOrder.orderedQuantity" }
+    - { name: received_quantity,  path: "$.purchaseOrder.receivedQuantity" }
+    - { name: open_quantity,      path: "$.purchaseOrder.openQuantity" }
+    - { name: receipt_status,     path: "$.purchaseOrder.receiptStatus" }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: Supply Chain Engineering — JDE SCM
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-scm-po/intents.yaml
+  minIntents: 10

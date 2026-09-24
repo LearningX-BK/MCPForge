@@ -1,0 +1,20 @@
+# MCPForge approval record — the per-tool governance approval for jde.fin.journal.create
+# (W0-HG6, CLAUDE.md non-negotiable 2, Wave 0 exit criterion 8). Every Wave 0
+# tool is a `function` binding, so every one takes the standard review path —
+# expedited is structurally unavailable.
+apiVersion: mcpforge/v1
+kind: Approval
+id: 2026-09-15-hg6-jde-fin-journal-create
+status: approved
+decision: approved
+subject:
+  kind: Tool
+  id: jde.fin.journal.create
+action: governance-review
+summary: "Standard governance review of jde.fin.journal.create for Wave 0 release."
+requestedBy: pattnaikbikash@gmail.com
+requestedAt: 2026-09-15T00:00:00.000Z
+approver: Admin
+approvedAt: 2026-09-15
+expiresAt: 2027-09-15
+note: "Provisional approval by Admin (W0-HG6), user decision 2026-09-15 — marked approved for now, to be re-reviewed by a named steward/approver as needed."

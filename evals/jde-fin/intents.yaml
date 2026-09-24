@@ -1,0 +1,35 @@
+# Auto-generated ONCE by `forge bench` (W0-G6, 02 §5.9). Never overwritten —
+# this file is safe to hand-edit; re-running `forge bench` will not touch it
+# again once it exists.
+#
+# negatives and near-miss pairs below are auto-derived from the catalogue
+# index; the positives are the steward's to add (see the TODO block).
+  - intent: "What is the weather like today?"
+    expect: "none"
+    category: negative
+    role: p2p
+  - intent: "Change this employee's payroll tax withholding."
+    expect: "none"
+    category: negative
+    role: p2p
+  - intent: "Show me that journal again"
+    expect: "jde.fin.journal.create"
+    category: near_miss
+    role: p2p
+# ---------------------------------------------------------------------------
+# STEWARD TODO (CLAUDE.md §8 — not fabricated by codegen; 02 §5.9, TASKS.md
+# W0-HG7): add >= 10 positive (category: direct) intents below, authored by
+# this module's STEWARD, not by whoever built its tools. Composition rules
+# (02 §5.9, corrected by 02 §10):
+#   - >= 20% of ALL intents in this file must be category: near_miss
+#   - >= 10% of ALL intents in this file must be category: negative
+#   - >= 30% of POSITIVE intents must resolve to a write tool
+#   - at least one category: sod_negative per role that has an SoD pair
+# Example shape (02 §5.9):
+#   - intent: "Book the invoice we just got from ACME against PO 451"
+#     expect: jde.ap.voucher.create
+#     category: direct
+#     role: p2p
+#     cold: false
+#     author: <steward>
+# ---------------------------------------------------------------------------

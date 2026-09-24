@@ -1,0 +1,18 @@
+{
+  "letter": "d3",
+  "criterion": "(d) ... a credential rotation each produced an approval record in approvals/, and each is visible as a compiled-artefact diff in its change proposal.",
+  "testName": "(3) a CREDENTIAL ROTATION: approval record + a visible diff in the proposed consumer record (not the derived authorization artefact, by the compiler's own design)",
+  "pass": true,
+  "detail": {
+    "consumerId": "claude-desktop-coe",
+    "approvalRecordPath": "approvals/2026-09-25-consumer-claude-desktop-coe-rotate-credential-schedule.yaml",
+    "approvalAction": "rotate-credential-schedule",
+    "rotationLastRotatedAtBefore": "2026-08-27",
+    "rotationLastRotatedAtAfter": "2026-09-25",
+    "proposedRecordDiffKind": "credential.rotation.lastRotatedAt changed — visible in the change proposal file",
+    "compiledAuthorizationSubstantiveFieldsUnchanged": true,
+    "compiledAuthorizationProvenanceLineChanged": true,
+    "note": "core/codegen/src/compile/consumer.ts deliberately excludes the credential block (rotation schedule included) from generated/consumers/<id>.authorization.json. The rotation's visible diff is therefore in the PROPOSED consumers/<id>.consumer.yaml, which is the artefact the change proposal actually carries — confirmed here by every substantive field of the derived authorization artefact staying identical across the rotation (only its provenance line changes, because that line hashes the source file's bytes, which changed). Flagged per CLAUDE.md §8 in this file's own header as a deliberate scope distinction, not an oversight."
+  },
+  "capturedAt": "2026-09-24T03:33:47.342Z"
+}

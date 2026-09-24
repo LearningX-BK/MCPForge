@@ -1,0 +1,60 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.get
+version: 1.0.0
+server: jde-fin-ap
+title: Read a voucher
+
+purpose: Read one AP voucher by document number, type and company.
+disambiguation: >
+  Reads ONE existing voucher. To create one use jde.ap.voucher.create; to
+  reverse one use jde.ap.voucher.cancel.
+archetype: transactional
+verb: get
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+sensitivity: financial
+write: false
+
+# A legitimate module-scoped stored credential: the four parts of 02 §11.5.1
+# all hold — plsql structurally cannot carry a per-user session and the probe
+# binding is named, a per-user identity is still resolved (block, never a
+# substitute), the wrapper echoes the identity into the audit record, and the
+# credential is scoped to this module.
+binding:
+  type: plsql
+  technology: Oracle EBS PL/SQL wrapper
+  ref: MCPFORGE_WRAP.AP_VOUCHER.GET_VOUCHER
+  refVersion: "1.0"
+  credentialClass: module-scoped-stored
+  credentialRef: secretRef://binding/ebs-p2p-ap/wrapper-schema
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: sampled
+  execution:
+    timeoutMs: 15000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+input:
+  - { name: document_number,  type: string, required: true, desc: Voucher document number. }
+  - { name: document_type,    type: string, required: true, desc: Voucher document type. }
+  - { name: document_company, type: string, required: true, desc: Voucher document company. }
+
+output:
+  summaryTemplate: "Voucher {document_number}: {amount} {currency}, status {status}."
+  resultKeys:
+    - { name: document_number, path: "$.voucher.docNumber" }
+
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: A. Named Person
+
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

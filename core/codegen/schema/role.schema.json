@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/role.schema.json",
+  "title": "mcpforge/v1 — kind: Role",
+  "description": "Field for field with the worked example at 02 §4.3, plus the Phase 5 bindingGrants (02 §11.4). A role is a GRANT plus a narrowing lens: no runtime, no orchestration, no composite tools, no execution order.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "id",
+    "label",
+    "description",
+    "includes",
+    "sensitivityCeiling",
+    "writeAllowed",
+    "coreTools",
+    "budgetTokens"
+  ],
+  "properties": {
+    "apiVersion": { "$ref": "common.schema.json#/$defs/apiVersion" },
+    "kind": { "const": "Role" },
+    "id": { "$ref": "common.schema.json#/$defs/slugId" },
+    "label": { "type": "string", "minLength": 1 },
+    "description": { "type": "string", "minLength": 1 },
+    "includes": {
+      "description": "Globs, compiled by forge codegen into an explicit tool-id list so a widening grant shows up as a diff (02 §4.3).",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "excludes": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "sensitivityCeiling": { "$ref": "common.schema.json#/$defs/sensitivity" },
+    "writeAllowed": { "type": "boolean" },
+    "coreTools": {
+      "description": "The resident set. Counts against budgetTokens.",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/toolId" }
+    },
+    "budgetTokens": {
+      "description": "CI-enforced ceiling on the resident set — 1300 (02 §5.3).",
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "maximum": 1300
+    },
+    "segregationOfDuties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["conflict", "disposition"],
+        "properties": {
+          "conflict": {
+            "type": "array",
+            "items": { "$ref": "common.schema.json#/$defs/toolId" },
+            "minItems": 2
+          },
+          "disposition": {
+            "type": "string",
+            "enum": ["warn", "warn-and-require-exception", "block"]
+          }
+        }
+      }
+    },
+    "mutuallyExclusiveWith": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/slugId" }
+    },
+    "bindingGrants": {
+      "description": "Phase 5 (02 §11.4). Catalogue membership is discovery; scope is visibility; NEITHER is permission to execute an elevated binding (CLAUDE.md #7).",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/bindingGrant" }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/package.schema.json",
+  "title": "mcpforge/v1 — kind: Package",
+  "description": "Field for field with the worked example at 02 §6.1. A package is a SELECTION, not a build: a list of server ids and role ids that already exist in the base. additionalProperties is false BECAUSE of that — it is the structural half of 'no code, no manifests, no schemas, no transformation'. No branch of MCPForge is ever created for a customer.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "id", "label", "blurb", "servers", "roles", "portal"],
+  "properties": {
+    "apiVersion": { "$ref": "common.schema.json#/$defs/apiVersion" },
+    "kind": { "const": "Package" },
+    "id": { "$ref": "common.schema.json#/$defs/slugId" },
+    "label": { "type": "string", "minLength": 1 },
+    "blurb": { "type": "string", "minLength": 1 },
+    "servers": {
+      "description": "Server ids that already exist in the base. Referential integrity is W0-B2.",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/slugId" },
+      "minItems": 1
+    },
+    "roles": {
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/slugId" }
+    },
+    "portal": {
+      "description": "Headless capability, not a commercial statement (02 §6.1).",
+      "type": "string",
+      "enum": ["full", "optional", "none"]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# MCPForge consumer registration — a GRANT, and therefore a git artefact.
+# Changed only through the change-proposal -> approval -> merge flow (02 §11.2).
+# credential.ref is a REFERENCE. Never a value. Ever (CLAUDE.md #8).
+apiVersion: mcpforge/v1
+kind: Consumer
+id: portal-local
+label: MCPForge Portal (local)
+class: interactive-client
+owner: LTM Oracle AI Practice
+steward: Bikash Pattnaik
+status: active
+expiresAt: 2027-09-15
+credential:
+  method: client-secret
+  ref: secretRef://consumer/portal-local/client
+  boundIssuers:
+    - local
+  rotation:
+    intervalDays: 90
+    lastRotatedAt: 2026-09-15
+authorizations:
+  bindingTypes: [function]
+  maxSensitivity: financial
+  writeAllowed: true
+  roles: [p2p]
+  packages: [jde-fin]
+limits:
+  callsPerMinute: 60
+  writesPerDay: 50
+  concurrentSessions: 5
+attestation:
+  humanInTheLoop: true

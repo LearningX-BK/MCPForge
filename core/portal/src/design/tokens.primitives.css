@@ -1,0 +1,80 @@
+/* MCPForge — Tier 1 primitives.
+ *
+ * Raw values, theme-independent. Source: 03_UX_DESIGN_SYSTEM.md §4.3.
+ * Rarely edited (13.1). Nothing outside this file may contain a raw
+ * colour literal (hex / rgb() / hsl()) — CLAUDE.md §2 "no raw colour",
+ * lint rule `no-raw-color`. Tier 2 and Tier 3 reference these via var().
+ */
+
+:root {
+  /* --- Brand --------------------------------------------------------- */
+  --ltm-coral-300: #f5877e; /* dark-mode text on elevated surfaces */
+  --ltm-coral-500: #f2665b; /* CANONICAL. From LTM_Coral.svg. The brand value. */
+  --ltm-coral-600: #d14a38;
+  --ltm-coral-700: #c93f2e; /* canonical --coral-d. Light-mode solid fill. */
+  --ltm-coral-800: #b23a2c; /* light-mode text/link colour */
+  --ltm-coral-tint-dark: rgba(242, 102, 91, 0.12);
+  --ltm-coral-tint-light: rgba(201, 63, 46, 0.1);
+  --ltm-coral-border-dark: rgba(242, 102, 91, 0.4);
+  --ltm-coral-border-light: rgba(201, 63, 46, 0.4);
+
+  /* --- Ink (dark-mode surfaces; also the light-mode text ramp) -------- */
+  --ltm-ink-900: #1a1d21; /* canonical --ink   */
+  --ltm-ink-800: #202327; /* canonical --ink2  */
+  --ltm-ink-700: #262a2f; /* canonical --ink3  */
+  --ltm-ink-600: #2c3036; /* canonical --ink4  */
+  --ltm-ink-500: #34383d; /* canonical --line  */
+  --ltm-ink-550: #2a2e33; /* canonical --line-soft */
+
+  /* --- Neutrals -------------------------------------------------------- */
+  --ltm-grey-100: #ffffff;
+  --ltm-grey-150: #fafafb;
+  --ltm-grey-200: #f4f5f7;
+  --ltm-grey-300: #e4e6ea;
+  --ltm-grey-400: #d6d9de;
+  --ltm-grey-500: #a8adb5;
+  --ltm-grey-600: #767b82;
+  --ltm-grey-650: #6b7076; /* canonical --mute-d — also light --status-neutral{,-strong} (§4.6 follow-up below) */
+  --ltm-grey-700: #54585f;
+  --ltm-grey-750: #9ca3af; /* canonical --mute (a dark-mode text value) */
+  --ltm-grey-800: #c7cdd6; /* dark-mode secondary text */
+
+  /* light-mode --text-3 raised from #767B82 (4.26:1, marginal) to
+     #6E7379 (4.53:1) — 03 §4.6. Not part of the canonical ramp above;
+     kept here, in the primitives file, because it is still a raw value
+     and this is the only file allowed to hold one. */
+  --ltm-grey-text-3-light: #6e7379;
+
+  /* --- Status hues: 3 steps each (dark text / core / light text) ------ */
+  --ltm-blue-300: #5fa8c6;
+  --ltm-blue-500: #3e8faf;
+  --ltm-blue-700: #2a6a85;
+  --ltm-green-300: #4fbf7b;
+  --ltm-green-500: #2e9b57;
+  --ltm-green-700: #1c6e3b;
+  --ltm-amber-300: #e0a040;
+  --ltm-amber-500: #c87f16;
+  /* Darkened from #9A6110 (this task): axe `color-contrast` measured light
+     --status-write's real rendered chip — text-status-write-strong on
+     bg-status-write-bg (rgba(154,97,16,0.08)) as it actually composites atop
+     --bg-surface-3/--bg-canvas (#F4F5F7, the worst realistic card/canvas
+     backdrop) — at 4.24:1, below WCAG AA's 4.5:1 for normal text. #8B570E
+     clears 4.5:1 against that same worst-case backdrop (measured ~4.98:1)
+     and against --bg-surface/#FFFFFF (~6.06:1), and stays the same amber hue
+     family as the ramp above (dark theme's --status-write, --ltm-amber-300,
+     is unaffected — it already passed). */
+  --ltm-amber-700: #8b570e;
+  --ltm-purple-300: #a78bfa;
+  --ltm-purple-500: #6d3aae;
+  --ltm-purple-700: #4b2178;
+
+  /* --- Fixed points (not part of any ramp) ---------------------------- */
+  --ltm-white: #ffffff;
+  --ltm-bg-inset-light: #edeff2;
+  --ltm-bg-inset-dark: #16191c;
+  --ltm-line-strong-light: #b9bec6;
+  --ltm-line-strong-dark: #454a51;
+}
+
+/* Forbidden values, lint-blocked (03 §4.3): #FA5843, #4FC3F7, #B388FF,
+   #4ADE9B — the superseded scheme. Must never reappear anywhere. */

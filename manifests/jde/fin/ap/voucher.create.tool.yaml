@@ -1,0 +1,103 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.create # {app}.{module}.{entity}.{verb} — structurally enforced
+version: 1.0.0 # semver; bump rules in 02 §2.6
+server: jde-fin-ap
+title: Create a voucher
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Create an AP voucher against a supplier, optionally matched to a PO.
+aliases: [supplier invoice, enter a bill, AP invoice entry, book a payable]
+disambiguation: >
+  Creates a NEW voucher. To find existing vouchers use jde.ap.voucher.search;
+  to read one use jde.ap.voucher.get; to reverse one use jde.ap.voucher.cancel.
+archetype: transactional # transactional | analytical | platform | wrapped
+verb: create # from the closed verb list
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+processTags: [P2P]
+sensitivity: financial # public | internal | confidential | financial | personal
+write: true
+coreForRoles: [p2p] # counts against that role's resident token budget
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function # rest | database | plsql | function | wrapped-vendor
+  technology: JDE AIS Orchestration
+  ref: AP_VOUCHER_CREATE # allowlisted name; never taken from a parameter
+  refVersion: "1.4"
+  identity:
+    carries: unverified # ONLY the probe may write 'verified'
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block # block | readonly-lowsens
+    echoOn: write # never | write | sampled | always
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+# The AIS orchestration call itself is hand-owned so the generated contract test
+# can execute a real result and prove the reversal round trip below against it
+# (W0-F7(a)). Codegen creates generated/tools/<id>/binding.custom.ts once and
+# never touches it again; drift is caught by its contract-hash (02 §2.4).
+bindingCustom: true
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: supplier_number, type: string,  required: true,  desc: JDE address book number of the supplier., example: "4242" }
+  - { name: po_number,       type: string,  required: false, desc: Purchase order number to match this voucher against. }
+  - { name: amount,          type: number,  required: true,  desc: Gross amount in company currency., minimum: 0.01 }
+  - { name: currency,        type: string,  required: true,  desc: ISO currency code., enumRef: iso_currency }
+  - { name: company,         type: string,  required: true,  desc: JDE company code. }
+  - { name: gl_date,         type: string,  required: false, desc: "GL date, YYYY-MM-DD. Defaults to today.", format: date }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Voucher {document_number} created for {supplier_number}, {amount} {currency}."
+  resultKeys: # the business keys. These ARE the reversal handle.
+    - { name: document_number,  path: "$.voucher.docNumber" }
+    - { name: document_type,    path: "$.voucher.docType" }
+    - { name: document_company, path: "$.voucher.docCo" }
+
+# --- write safety (required whenever write: true) ----------------------------
+writeSafety:
+  dryRun:
+    strategy: validate-pair # native | validate-pair | precondition-read | shadow-write | transactional
+    ref: AP_VOUCHER_CREATE_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Create an AP voucher for supplier {supplier_number} ({supplier_name}) for
+      {amount} {currency}, company {company}, GL date {gl_date}, matched to PO
+      {po_number}. This creates an OPEN PAYABLE in JD Edwards.
+  humanApprovalRequired: false # true forces an out-of-band portal approval before a token is minted
+  reversal:
+    class: compensating-tool # native-reverse | compensating-tool | transactional | irreversible
+    tool: jde.ap.voucher.cancel
+    argMap: { document_number: "$.result.document_number", document_type: "$.result.document_type", document_company: "$.result.document_company" }
+    windowHours: 720
+    preconditions: Voucher must be unpaid and not yet posted to a closed period.
+  idempotency: { scopeHours: 24 }
+  guardrails:
+    # No `message` override, deliberately (W0-I6 copy pass). 03 §10.3 requires a
+    # guardrail message to state the LIMIT and the ACTUAL VALUE. A declared
+    # `message` is used verbatim by the gateway — there is no placeholder
+    # substitution (core/gateway/policy/guardrails/field.ts) — so a static string
+    # structurally cannot name the actual value. Omitting it yields the built-in
+    # message, which names field, actual value and limit:
+    #   "amount is 400000, above the maximum of 250000 this tool allows."
+    - { kind: maxNumeric, field: amount, value: 250000 }
+    - { kind: sodConflict, with: jde.scm.purchase_order.approve, scope: sameEntityChain }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard # expedited is structurally unavailable for plsql/function and for irreversible writes
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

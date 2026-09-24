@@ -1,0 +1,17 @@
+# MCPForge approval record — governance evidence, committed with the change it approves.
+apiVersion: mcpforge/v1
+kind: Approval
+id: 2026-09-15-consumer-portal-local-register
+status: approved
+decision: approved
+subject:
+  kind: Consumer
+  id: portal-local
+action: register
+summary: "Register consumer portal-local (interactive-client), scoped to the function binding type, role p2p, package jde-fin, writeAllowed: true, for the local Wave 0 demo."
+requestedBy: pattnaikbikash@gmail.com
+requestedAt: 2026-09-15T14:39:30.973Z
+approver: Admin
+approvedAt: 2026-09-15
+expiresAt: 2027-09-15
+note: "Provisional approval by Admin (W0-HG8), user decision 2026-09-15 — re-review as needed once real stewards/approvers are named."

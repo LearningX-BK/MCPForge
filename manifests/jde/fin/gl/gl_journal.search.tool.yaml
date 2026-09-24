@@ -1,0 +1,63 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.fin.gl_journal.search
+version: 1.0.0
+server: jde-fin-gl
+title: Find GL journals
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Search GL journal entries by batch, document, account or date.
+aliases: [find journal entries, GL search, journal lookup]
+archetype: transactional
+verb: search
+entity: gl_journal
+app: jde
+module: fin
+functionalArea: General Ledger
+processTags: [P2P]
+sensitivity: financial
+write: false
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: GL_JE_SEARCH
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: sampled
+  execution:
+    timeoutMs: 15000
+    maxConcurrency: 8
+    responseBytesMax: 262144
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: company,        type: string,  required: true,  desc: JDE company code. }
+  - { name: batch_number,   type: string,  required: false, desc: JDE batch number to filter by. }
+  - { name: document_type,  type: string,  required: false, desc: Journal document type code. }
+  - { name: account_number, type: string,  required: false, desc: Business unit.object.subsidiary account. }
+  - { name: date_from,      type: string,  required: false, desc: "Earliest GL date, YYYY-MM-DD.", format: date }
+  - { name: date_to,        type: string,  required: false, desc: "Latest GL date, YYYY-MM-DD.", format: date }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "{count} journal entries found."
+  resultKeys:
+    - { name: batch_number,    path: "$.journals[0].batchNumber" }
+    - { name: document_number, path: "$.journals[0].docNumber" }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-gl/intents.yaml
+  minIntents: 10

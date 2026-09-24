@@ -1,0 +1,10 @@
+apiVersion: mcpforge/v1
+kind: Server
+id: jde-fin-gl
+label: JD Edwards — General Ledger
+app: jde
+module: fin
+version: 2.0.0
+mode: A
+owner: "Supply Chain Engineering — JDE Fin" # seed/servers.yaml (W0-A7), id: jde-fin-gl
+steward: "NEEDS_HUMAN: module steward not yet named"

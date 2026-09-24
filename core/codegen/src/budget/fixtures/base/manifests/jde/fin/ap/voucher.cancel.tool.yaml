@@ -1,0 +1,68 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.cancel
+version: 1.0.0
+server: jde-fin-ap
+title: Cancel a voucher
+
+purpose: Cancel an unpaid, unposted AP voucher.
+disambiguation: >
+  Cancels an EXISTING voucher created by jde.ap.voucher.create. To find one
+  use jde.ap.voucher.search; to read one use jde.ap.voucher.get.
+archetype: transactional
+verb: cancel
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+processTags: [P2P]
+sensitivity: financial
+write: true
+
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: AP_VOUCHER_CANCEL
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+input:
+  - { name: document_number,  type: string, required: true, desc: Voucher document number to cancel. }
+  - { name: document_type,    type: string, required: true, desc: Voucher document type. }
+  - { name: document_company, type: string, required: true, desc: Voucher document company. }
+
+output:
+  summaryTemplate: "Voucher {document_number} cancelled."
+  resultKeys:
+    - { name: document_number, path: "$.voucher.docNumber" }
+
+writeSafety:
+  dryRun:
+    strategy: precondition-read
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Cancel voucher {document_number} ({document_type}/{document_company}) in
+      JD Edwards. This REMOVES the open payable.
+  humanApprovalRequired: true
+  reversal:
+    class: irreversible
+  idempotency: { scopeHours: 24 }
+
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: A. Named Person
+
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

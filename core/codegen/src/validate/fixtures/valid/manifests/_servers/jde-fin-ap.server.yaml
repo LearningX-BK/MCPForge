@@ -1,0 +1,10 @@
+apiVersion: mcpforge/v1
+kind: Server
+id: jde-fin-ap
+label: JD Edwards Financials — Accounts Payable
+app: jde
+module: ap
+version: 1.0.0
+mode: A
+owner: JDE Finance CoE
+steward: A. Named Person

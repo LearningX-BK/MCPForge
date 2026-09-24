@@ -1,0 +1,33 @@
+{
+  "name": "gl-journal-get-status",
+  "source": "synthetic",
+  "targetDescription": "SYNTHETIC — hand-authored, standing in for a JDE AIS orchestrator response. No live JDE/AIS instance exists in this environment; this is NOT captured from a real target. See scripts/refresh-fixtures.ts for how a real recording replaces this file.",
+  "cases": [
+    {
+      "requestKey": "ed2705940eff3de412fbb207",
+      "sequence": [
+        {
+          "status": 200,
+          "body": "{\"ok\":true,\"status\":\"POSTED\",\"documentNumber\":\"J0001234\",\"batchNumber\":\"B000045\"}"
+        }
+      ]
+    },
+    {
+      "requestKey": "c6dfa98ac89f4600b493f3fe",
+      "sequence": [
+        {
+          "status": 200,
+          "body": "{\"ok\":false}",
+          "targetError": { "message": "No journal entry found for the supplied document number.", "precondition": true }
+        }
+      ]
+    },
+    {
+      "requestKey": "fc755eaf555f8020ff15e186",
+      "sequence": [
+        { "status": 200, "body": "{\"ok\":true,\"status\":\"PENDING\"}" },
+        { "status": 200, "body": "{\"ok\":true,\"status\":\"POSTED\"}" }
+      ]
+    }
+  ]
+}

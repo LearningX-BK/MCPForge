@@ -1,0 +1,8 @@
+apiVersion: mcpforge/v1
+kind: Package
+id: jde-fin
+label: JD Edwards Financials
+blurb: The reference slice.
+servers: []
+roles: [does-not-exist]
+portal: optional

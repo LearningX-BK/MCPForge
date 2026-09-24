@@ -1,0 +1,66 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.scm.purchase_order.approve
+version: 1.0.0
+server: jde-scm-po
+title: Approve a purchase order
+
+purpose: Approve an existing purchase order.
+disambiguation: >
+  Approves an EXISTING purchase order. To raise a new one use
+  jde.scm.purchase_order.create.
+archetype: transactional
+verb: approve
+entity: purchase_order
+app: jde
+module: scm
+functionalArea: Procurement
+processTags: [P2P]
+sensitivity: financial
+write: true
+
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: PO_APPROVE
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+
+input:
+  - { name: order_number, type: string, required: true, desc: Purchase order number to approve. }
+
+output:
+  summaryTemplate: "Purchase order {order_number} approved."
+  resultKeys:
+    - { name: order_number, path: "$.order.number" }
+
+writeSafety:
+  dryRun:
+    strategy: precondition-read
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Approve purchase order {order_number}. This RELEASES the commitment in
+      JD Edwards.
+  humanApprovalRequired: true
+  reversal:
+    class: irreversible
+  idempotency: { scopeHours: 24 }
+
+governance:
+  reviewPath: standard
+  owner: JDE Procurement CoE
+  steward: A. Named Person
+
+eval:
+  intentsFile: evals/jde-scm-po/intents.yaml
+  minIntents: 10

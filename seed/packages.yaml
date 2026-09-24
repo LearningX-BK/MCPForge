@@ -1,0 +1,47 @@
+# MCPForge seed — packages/slices, extracted once from the concept console (W0-A7).
+# NOT a manifest. 'full' package's servers:'*' means "every server".
+# See EXTRACTION_REPORT.md.
+- id: "full"
+  label: "Full CoE instance"
+  blurb: "Everything in the registry — the LTM-managed internal instance the practice runs on."
+  servers: "*"
+- id: "jde-fin"
+  label: "JD Edwards Financials"
+  blurb: "The reference slice. General Ledger and Accounts Payable, plus Procurement — because the Procure-to-Pay role reaches across into it, which is exactly the point."
+  servers:
+    - "jde-fin-gl"
+    - "jde-fin-ap"
+    - "jde-scm-po"
+- id: "ebs-p2p"
+  label: "EBS Procure-to-Pay"
+  blurb: "A single process end to end on one application, including the system server because concurrent-process status is part of the story."
+  servers:
+    - "ebs-fin-ap"
+    - "ebs-scm-po"
+    - "ebs-scm-inv"
+    - "ebs-sys"
+- id: "saas-fin"
+  label: "Oracle SaaS Finance"
+  blurb: "Fusion Financials with ESS. Provisioning-only enablement, so the shortest path from signature to a working slice."
+  servers:
+    - "fusion-fin-ap"
+    - "fusion-fin-gl"
+    - "fusion-fin-ar"
+    - "fusion-erp-ess"
+- id: "svc-field"
+  label: "Service & Field Operations"
+  blurb: "A slice that spans two applications — Siebel and Oracle Field Service — to show that a package is bounded by process, not by product."
+  servers:
+    - "siebel-service"
+    - "siebel-account"
+    - "ofsc-activity"
+    - "ofsc-capacity"
+- id: "analytics"
+  label: "Analytics & Insights"
+  blurb: "Read-only across OAC, FDI, AI Data Platform and Autonomous AI DB. No write tool in the package at all."
+  servers:
+    - "oac-analytics"
+    - "fdi-finance"
+    - "fdi-scm"
+    - "aidp-dataproduct"
+    - "adb-nl2sql"

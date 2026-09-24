@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    // `generated/tools/**` has no node_modules of its own (it isn't a workspace
+    // package), so when a file there is pulled into this project's compile graph
+    // via a relative import crossing the workspace boundary (first done by
+    // W0-I5's c.sod-po-create-approve.test.ts), tsc's NodeNext resolution has
+    // nowhere to find `@mcpforge/shared/*`'s subpath exports by climbing
+    // directories from the generated file's own location. This path mapping is
+    // a typecheck-only fallback matching `@mcpforge/shared`'s own exports map
+    // (package.json) field-for-field; it changes no runtime behavior — vitest's
+    // resolver already handles this correctly without it.
+    "paths": {
+      "@mcpforge/shared": ["../../core/shared/src/index.ts"],
+      "@mcpforge/shared/manifest": ["../../core/shared/src/manifest/index.ts"],
+      "@mcpforge/shared/errors": ["../../core/shared/src/errors/index.ts"],
+      "@mcpforge/shared/tokens": ["../../core/shared/src/tokens/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

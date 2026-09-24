@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "paths": {
+      "@mcpforge/shared": ["../../core/shared/src/index.ts"],
+      "@mcpforge/shared/manifest": ["../../core/shared/src/manifest/index.ts"],
+      "@mcpforge/shared/errors": ["../../core/shared/src/errors/index.ts"],
+      "@mcpforge/shared/tokens": ["../../core/shared/src/tokens/index.ts"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "@mcpforge/probe",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge capability probe (02 §4.5) — the plan builder, the runner, and the schema-validated probe-report.json artefact. Every tool in the catalogue carries exactly one status from the closed enum after every run.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcpforge/adapter-function": "workspace:*",
+    "@mcpforge/registry": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@mcpforge/gateway": "workspace:*",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

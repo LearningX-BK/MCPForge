@@ -1,0 +1,21 @@
+{
+  "letter": "b",
+  "criterion": "(b) A registered consumer suspended mid-session is refused on its next call within the kill-switch poll interval, with CONSUMER_SUSPENDED.",
+  "testName": "forge kill consumer:<id> mid-session refuses the next call, within the real 5s poll, CONSUMER_SUSPENDED",
+  "pass": true,
+  "detail": {
+    "consumerId": "claude-desktop-coe",
+    "killScope": "consumer",
+    "killTarget": "claude-desktop-coe",
+    "killAuditCallId": "01a0d17a-5d75-706f-9383-09df3fbc2812",
+    "pollIntervalMs": 5000,
+    "preKillOutcome": "proceed",
+    "postKillPrePollOutcome": "proceed",
+    "postPollOutcome": "refused",
+    "postPollRefusalCode": "CONSUMER_SUSPENDED",
+    "postPollRefusalStage": "6b",
+    "postPollRefusalNext": "This client's registration is suspended (reason: W0-N14(b) checkpoint evidence — credential suspected compromised). Ask the consumer's steward to clear the kill switch for claude-desktop-coe; no tool is visible to it until then.",
+    "realMechanism": "core/gateway/flags/kill.ts applyKill + core/gateway/flags/poller.ts createPolledRuntimeFlagSource (real SQLite-backed runtime_flags) + core/gateway/scope/predicates.ts notKillSwitchedPredicate (consumer scope) + core/gateway/policy/stages.ts stage6b — the same mechanism tests/policy/escalation.consumer.test.ts (W0-E8 case 6) exercises."
+  },
+  "capturedAt": "2026-09-24T03:34:12.627Z"
+}

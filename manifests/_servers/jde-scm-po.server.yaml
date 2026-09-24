@@ -1,0 +1,10 @@
+apiVersion: mcpforge/v1
+kind: Server
+id: jde-scm-po
+label: JD Edwards — Procurement
+app: jde
+module: scm
+version: 1.8.0
+mode: A
+owner: "Supply Chain Engineering — JDE SCM" # seed/servers.yaml (W0-A7), id: jde-scm-po
+steward: "NEEDS_HUMAN: module steward not yet named"

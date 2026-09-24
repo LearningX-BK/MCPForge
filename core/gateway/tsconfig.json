@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node"],
+    "tsBuildInfoFile": "dist/.tsbuildinfo"
+  },
+  "include": [
+    "index.ts",
+    "launch.ts",
+    "launch.*.ts",
+    "store/**/*.ts",
+    "api/**/*.ts",
+    "identity/**/*.ts",
+    "consumer/**/*.ts",
+    "transport/**/*.ts",
+    "scope/**/*.ts",
+    "policy/**/*.ts",
+    "reversal/**/*.ts",
+    "errors/**/*.ts",
+    "flags/**/*.ts",
+    "caps/**/*.ts",
+    "telemetry/**/*.ts",
+    "meta/**/*.ts"
+  ]
+}

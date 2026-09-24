@@ -1,0 +1,37 @@
+apiVersion: mcpforge/v1
+kind: Consumer
+id: claude-desktop-coe
+label: Claude Desktop (LTM CoE)
+class: interactive-client
+owner: LTM Oracle AI Practice
+steward: A. Named Person
+status: active
+expiresAt: "2027-08-27"
+credential:
+  method: private-key-jwt
+  ref: secretRef://consumer/claude-desktop-coe/client
+  publicKeys:
+    # W0-N2 / 05 §A.4 — gateway-side verification material. PUBLIC, and
+    # git-committed on purpose: the private half never leaves the consumer's
+    # own machine and `credential.ref` above is resolved by the gateway never.
+    - kid: 2026-08-a
+      kty: OKP
+      crv: Ed25519
+      x: O3QTUQQYGH5QTYDE1OwtAT2EvrDums2PzEiiW7I4l50
+      addedAt: "2026-08-27"
+  boundIssuers: [ltm-ad, local]
+  rotation: { intervalDays: 90, lastRotatedAt: "2026-08-27" }
+authorizations:
+  bindingTypes: [rest, wrapped-vendor]
+  maxSensitivity: internal
+  writeAllowed: false
+  roles: [p2p]
+  packages: [jde-fin]
+limits:
+  callsPerMinute: 60
+  writesPerDay: 20
+  concurrentSessions: 4
+  operatingWindow: "Mon-Fri 07:00-20:00 Europe/London"
+attestation:
+  networkOrigins: ["10.20.0.0/16"]
+  humanInTheLoop: true

@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/consumer.schema.json",
+  "title": "mcpforge/v1 — kind: Consumer",
+  "description": "Field for field with the worked example at 02 §11.2. The consumer record is a git artefact BECAUSE it is a grant — compiled like a role, approved like a role. Every call needs BOTH a registered consumer and a resolved human identity; authorization is the INTERSECTION, never the union (CLAUDE.md #6). Dynamic Client Registration does not exist.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "id",
+    "label",
+    "class",
+    "owner",
+    "steward",
+    "status",
+    "expiresAt",
+    "credential",
+    "authorizations",
+    "limits",
+    "attestation"
+  ],
+  "properties": {
+    "apiVersion": { "$ref": "common.schema.json#/$defs/apiVersion" },
+    "kind": { "const": "Consumer" },
+    "id": {
+      "description": "Immutable, like a tool id — audit rows and consumption edges reference it. Renaming is a retire-and-register pair, both recorded (CLAUDE.md §5).",
+      "$ref": "common.schema.json#/$defs/slugId"
+    },
+    "label": { "type": "string", "minLength": 1 },
+    "class": {
+      "type": "string",
+      "enum": ["interactive-client", "autonomous-agent", "batch-service", "portal"]
+    },
+    "owner": {
+      "description": "Accountable team; a named human is required at review.",
+      "type": "string",
+      "minLength": 1
+    },
+    "steward": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "enum": ["active", "suspended", "retired"] },
+    "expiresAt": {
+      "description": "Registrations EXPIRE. Renewal is a re-approval, not a no-op (02 §11.2).",
+      "$ref": "common.schema.json#/$defs/isoDate"
+    },
+
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "ref", "boundIssuers", "rotation"],
+      "properties": {
+        "method": { "type": "string", "enum": ["mtls", "private-key-jwt", "client-secret"] },
+        "ref": {
+          "description": "A REFERENCE. Never a value. Ever. A credential.ref that is not a secretRef:// URI is rejected (02 §11.5, CLAUDE.md #8).",
+          "$ref": "common.schema.json#/$defs/secretRef"
+        },
+        "boundIssuers": {
+          "description": "Which identity issuers this consumer may present user tokens from.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "publicKeys": {
+          "description": "GATEWAY-SIDE verification material for method: private-key-jwt (05 §A.4). PUBLIC and git-committed. Note the asymmetry: credential.ref names the consumer's PRIVATE key and the gateway resolves it never; verification is against these. additionalProperties:false rejects an OKP JWK's private component 'd', so a private key pasted here fails validation outright.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kid", "kty", "crv", "x", "addedAt"],
+            "properties": {
+              "kid": { "type": "string", "minLength": 1 },
+              "kty": { "const": "OKP" },
+              "crv": { "const": "Ed25519" },
+              "x": { "type": "string", "minLength": 1 },
+              "addedAt": { "$ref": "common.schema.json#/$defs/isoDate" }
+            }
+          }
+        },
+        "rotation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["intervalDays", "lastRotatedAt"],
+          "properties": {
+            "intervalDays": { "type": "integer", "exclusiveMinimum": 0 },
+            "lastRotatedAt": { "$ref": "common.schema.json#/$defs/isoDate" }
+          }
+        }
+      },
+      "if": { "properties": { "method": { "const": "private-key-jwt" } }, "required": ["method"] },
+      "then": {
+        "required": ["publicKeys"],
+        "$comment": "05 §A.5: for private-key-jwt the record must carry at least one publicKeys[] entry, or the gateway has nothing to verify against and the registration can never authenticate."
+      }
+    },
+
+    "authorizations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bindingTypes", "maxSensitivity", "writeAllowed", "roles", "packages"],
+      "properties": {
+        "bindingTypes": {
+          "description": "The Phase 5 gate (02 §11.4). ConsumerAuthorized can only NARROW tools/list.",
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/bindingType" }
+        },
+        "maxSensitivity": {
+          "description": "Intersects with the role's sensitivityCeiling.",
+          "$ref": "common.schema.json#/$defs/sensitivity"
+        },
+        "writeAllowed": {
+          "description": "Independent of, and intersected with, the human's role.",
+          "type": "boolean"
+        },
+        "roles": {
+          "description": "May act only within these roles even if the human holds more.",
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/slugId" }
+        },
+        "packages": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/slugId" } }
+      }
+    },
+
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["callsPerMinute", "writesPerDay", "concurrentSessions"],
+      "properties": {
+        "callsPerMinute": { "type": "integer", "minimum": 0 },
+        "writesPerDay": { "type": "integer", "minimum": 0 },
+        "concurrentSessions": { "type": "integer", "minimum": 0 },
+        "operatingWindow": {
+          "description": "Optional; absent = 24/7 with a stated reason (02 §11.2).",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["humanInTheLoop"],
+      "properties": {
+        "networkOrigins": {
+          "description": "Optional CIDR or mTLS SAN pin.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "humanInTheLoop": {
+          "description": "Has teeth: false forces humanApprovalRequired: true on every write this consumer attempts, regardless of the tool's own setting (02 §11.2).",
+          "type": "boolean"
+        }
+      }
+    },
+
+    "bindingGrants": {
+      "description": "Optional on the consumer as well as the role (02 §11.4).",
+      "type": "array",
+      "items": { "$ref": "common.schema.json#/$defs/bindingGrant" }
+    }
+  }
+}

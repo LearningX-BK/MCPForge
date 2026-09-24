@@ -1,0 +1,110 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.fin.journal.create
+version: 1.0.0
+server: jde-fin-gl
+title: Create a GL journal
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+purpose: Create an unposted GL journal batch against an account.
+aliases: [enter a journal entry, book a JE, GL entry, journal voucher entry]
+disambiguation: >
+  Creates a NEW unposted journal batch and stops there. To post it use
+  jde.fin.journal.submit; to find existing journals use
+  jde.fin.gl_journal.search; to read a batch's post status use
+  jde.fin.batch.get_status.
+archetype: transactional
+verb: create
+entity: journal
+app: jde
+module: fin
+functionalArea: General Ledger
+processTags: [P2P]
+sensitivity: financial
+write: true
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: GL_JE_CREATE
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+bindingCustom: true
+
+# --- inputs ------------------------------------------------------------------
+input:
+  - { name: company,        type: string, required: true,  desc: JDE company code., example: "00001" }
+  - { name: document_type,  type: string, required: true,  desc: Journal document type code., example: "JE" }
+  - { name: gl_date,        type: string, required: true,  desc: "GL date, YYYY-MM-DD. Period must be open.", format: date }
+  - { name: account_number, type: string, required: true,  desc: Business unit.object.subsidiary account. }
+  - { name: amount,         type: number, required: true,  desc: Entry amount in the stated currency. }
+  - { name: currency,       type: string, required: true,  desc: ISO currency code., enumRef: iso_currency }
+  - { name: explanation,    type: string, required: false, desc: Free-text explanation stored on the entry. }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Journal batch {batch_number} created, document {document_number}, {amount} {currency}, unposted."
+  resultKeys:
+    # These four ARE the reversal handle AND jde.fin.journal.submit's entire
+    # input set — the two-step write shape is real because submit consumes
+    # exactly what create returns.
+    - { name: batch_number,     path: "$.journal.batchNumber" }
+    - { name: document_number,  path: "$.journal.docNumber" }
+    - { name: document_type,    path: "$.journal.docType" }
+    - { name: document_company, path: "$.journal.docCo" }
+
+# --- write safety (required whenever write: true) ----------------------------
+writeSafety:
+  dryRun:
+    strategy: validate-pair
+    ref: GL_JE_CREATE_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Create a GL journal entry in JD Edwards for company {company}, document
+      type {document_type}, account {account_number}, {amount} {currency}, GL
+      date {gl_date}. This creates an UNPOSTED journal batch in JD Edwards. It
+      does not change any account balance until jde.fin.journal.submit posts it.
+  humanApprovalRequired: false
+  reversal:
+    class: native-reverse
+    argMap:
+      batch_number: "$.result.batch_number"
+      document_number: "$.result.document_number"
+      document_type: "$.result.document_type"
+      document_company: "$.result.document_company"
+    windowHours: 720
+    preconditions: >
+      JDE's own journal reversal against this batch. While the batch is
+      unposted it is voided outright; once posted, a reversing journal is
+      written in an open period. The GL date's fiscal period must still be
+      open for the company.
+  idempotency: { scopeHours: 24 }
+  guardrails:
+    # No `message` override — see the note on jde.ap.voucher.create's guardrail.
+    # 03 §10.3 wants the limit AND the actual value; a static manifest string can
+    # only ever carry the limit, so the built-in message (which carries both) is
+    # the one that satisfies the rule.
+    - { kind: maxNumeric, field: amount, value: 250000 }
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-gl/intents.yaml
+  minIntents: 10

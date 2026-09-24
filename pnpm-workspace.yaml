@@ -1,0 +1,18 @@
+packages:
+  - "core/*"
+  - "adapters/function"
+  - "adapters/rest"
+  - "adapters/vendor"
+  - "tools/eslint-rules"
+  - "tools/ci"
+  # W0-E8 — the privilege-escalation suite. Tests only; no runtime code.
+  - "tests/policy"
+  # W0-H6 — the offline mock/recorded-target harness. Tests only; no runtime code.
+  - "tests/mocks"
+  # W0-F7 — the four Wave 0 exit-criterion-7 demonstrations. Tests only; no runtime code.
+  - "tests/write-path"
+  # W0-G6 — the `forge bench` mock-gateway and intents-generator suite. Tests only; no runtime code.
+  - "tests/bench"
+  # W0-N14 — the exit-criterion-14 demonstrations (front door + elevated bindings). Tests only; no runtime code.
+  - "tests/consumer-access"
+  # adapters/oracle-worker is Python (uv), never a pnpm workspace member — 02 §1.4.

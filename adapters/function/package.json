@@ -1,0 +1,25 @@
+{
+  "name": "@mcpforge/adapter-function",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge `function` binding executor (02 §3.5) — JDE AIS / Orchestrator Studio orchestration dispatch. The orchestration name comes from binding.ref only.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcpforge/shared": "workspace:*",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

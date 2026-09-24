@@ -1,0 +1,14 @@
+{
+  "name": "@mcpforge/eslint-rules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCPForge guard lint rules — the four rules that make the security and design non-negotiables machine-checked.",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "src"
+  ]
+}

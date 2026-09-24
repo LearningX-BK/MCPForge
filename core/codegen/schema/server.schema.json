@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpforge.ltm/schema/mcpforge/v1/server.schema.json",
+  "title": "mcpforge/v1 — kind: Server (module server)",
+  "description": "NEEDS_HUMAN — the canonical field list awaits a worked *.server.yaml example from the user. 02 has NO worked `kind: Server` example anywhere; §2.2 shows only `kind: Tool`. Every field below is one 02 §4.1 states in PROSE about a module server: an independently versioned, independently releasable bundle with its own config namespace, credential scope, kill switch, version and release train, running in Mode A (in the gateway process, the default) or Mode B (standalone). Nothing here is invented beyond that prose, and the shape is held identical to core/shared/src/manifest/server.ts (W0-A4, which raised the same gap) so the type model and its runtime validator cannot drift. Deliberately PERMISSIVE where the prose is silent: additionalProperties is true, so an unforeseen field in a real server manifest is not rejected by a schema written without one to look at. Tighten this to additionalProperties: false once a worked example exists.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["apiVersion", "kind", "id", "label", "app", "module", "version", "mode", "owner"],
+  "properties": {
+    "apiVersion": { "$ref": "common.schema.json#/$defs/apiVersion" },
+    "kind": { "const": "Server" },
+    "id": { "$ref": "common.schema.json#/$defs/slugId" },
+    "label": { "type": "string", "minLength": 1 },
+    "app": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "module": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+    "version": {
+      "description": "Independently versioned — that is what makes it a deployable artefact (02 §4.1).",
+      "$ref": "common.schema.json#/$defs/semver"
+    },
+    "mode": {
+      "description": "Mode A is in-process in the gateway and is the default; a bundle is PROMOTED to Mode B (own process) only when a promotion condition holds. Not 42 deployments (02 §4.1).",
+      "type": "string",
+      "enum": ["A", "B"]
+    },
+    "promotionReason": {
+      "description": "Required in spirit for Mode B — the reason, from 02 §4.1's promotion conditions: a different runtime, an auth boundary, a sensitivity class, a release cadence, or a wrapped vendor server.",
+      "type": "string",
+      "minLength": 1
+    },
+    "owner": { "type": "string", "minLength": 1 },
+    "steward": {
+      "description": "A named person. Optional here only because no worked example states whether it is mandatory for a Server as it is for a Tool.",
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "mode": { "const": "B" } }, "required": ["mode"] },
+      "then": { "required": ["promotionReason"] }
+    }
+  ]
+}

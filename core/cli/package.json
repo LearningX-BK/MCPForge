@@ -1,0 +1,34 @@
+{
+  "name": "@mcpforge/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The forge CLI — MCPForge's automation seam (02 §8.2). Wave 0: command skeleton only, no real behaviour yet.",
+  "bin": {
+    "forge": "./bin/forge.js"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./commands/bench": "./src/commands/bench.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mcpforge/ci": "workspace:*",
+    "@mcpforge/codegen": "workspace:*",
+    "@mcpforge/gateway": "workspace:*",
+    "@mcpforge/probe": "workspace:*",
+    "@mcpforge/registry": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "commander": "^12.1.0",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}

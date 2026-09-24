@@ -1,0 +1,104 @@
+apiVersion: mcpforge/v1
+kind: Tool
+id: jde.ap.voucher.cancel
+version: 1.0.0
+server: jde-fin-ap
+title: Cancel a voucher
+
+# --- discovery surface (see 02 §5.3 for the token budget these feed) --------
+#
+# This tool exists so that `jde.ap.voucher.create`'s declared reversal is
+# EXERCISED rather than declared (01 §10.3 row 9). It is the compensating tool
+# `create`'s `writeSafety.reversal` names, and its three inputs are exactly the
+# three result keys `create` emits, in the same names, because that is what
+# `create`'s `reversal.argMap` maps into (02 §3.1.4; W0-HG2 §4).
+purpose: Cancel an AP voucher, voiding the open payable it created.
+aliases: [void a voucher, reverse a voucher, cancel a supplier invoice]
+disambiguation: >
+  Cancels an EXISTING voucher, voiding it. To create one use
+  jde.ap.voucher.create; to read one first use jde.ap.voucher.get; to find one
+  by supplier or date use jde.ap.voucher.search.
+archetype: transactional
+verb: cancel
+entity: voucher
+app: jde
+module: ap
+functionalArea: Accounts Payable
+processTags: [P2P]
+sensitivity: financial
+write: true
+coreForRoles: [p2p]
+
+# --- binding -----------------------------------------------------------------
+binding:
+  type: function
+  technology: JDE AIS Orchestration
+  ref: AP_VOUCHER_CANCEL
+  refVersion: "1.0"
+  identity:
+    carries: unverified
+    probe: MCPFORGE_PROBE_WHOAMI
+    onServiceAccount: block
+    echoOn: write
+  execution:
+    timeoutMs: 30000
+    maxConcurrency: 4
+    responseBytesMax: 262144
+# Hand-owned for the same reason as jde.ap.voucher.create's: the reverse leg of
+# the W0-F7(a) round trip has to execute and return this voucher's business keys,
+# not an empty generic result (02 §2.4).
+bindingCustom: true
+
+# --- inputs ------------------------------------------------------------------
+# Exactly the three result keys jde.ap.voucher.create emits, by the same names:
+# this is the target of that tool's reversal.argMap (W0-HG2 §4).
+input:
+  - { name: document_number,  type: string, required: true, desc: Voucher document number to cancel. }
+  - { name: document_type,    type: string, required: true, desc: Voucher document type code. }
+  - { name: document_company, type: string, required: true, desc: Voucher document company. }
+
+# --- outputs -----------------------------------------------------------------
+output:
+  summaryTemplate: "Voucher {document_number} cancelled in company {document_company}."
+  resultKeys:
+    - { name: document_number,  path: "$.voucher.docNumber" }
+    - { name: document_type,    path: "$.voucher.docType" }
+    - { name: document_company, path: "$.voucher.docCo" }
+
+# --- write safety (required whenever write: true) ----------------------------
+writeSafety:
+  dryRun:
+    strategy: validate-pair
+    ref: AP_VOUCHER_CANCEL_VALIDATE
+  confirm:
+    required: true
+    tokenTtlSeconds: 300
+    planTemplate: >
+      Cancel AP voucher {document_number}, type {document_type}, company
+      {document_company}, in JD Edwards. This VOIDS the open payable. A
+      cancelled voucher cannot be un-cancelled — re-entering it would create a
+      new voucher with a new document number.
+  humanApprovalRequired: true # forced by reversal.class: irreversible (02 §3.1.4)
+  reversal:
+    class: irreversible # a voided JDE voucher has no un-void; see planTemplate
+  idempotency: { scopeHours: 24 }
+# No `guardrails:` block. An earlier draft declared a `requiresField` guardrail on
+# `document_company`. That kind is not one of 02 §3.1.3's five real kinds
+# (maxNumeric/minNumeric, allowedValues, rateLimit, sodConflict, timeWindow), so
+# `core/gateway/policy/guardrails/gate.ts` correctly refuses it as a malformed
+# declaration — which meant EVERY call to this tool breached at stage 6f and the
+# W0-F7(a) reversal leg could never execute. The constraint it was reaching for is
+# already enforced, completely, by `document_company`'s `required: true` in the
+# input schema above (compiled Ajv, stage 6e). It was redundant as well as broken,
+# so it is removed rather than given invented semantics (CLAUDE.md §8).
+
+# --- governance ---------------------------------------------------------------
+governance:
+  reviewPath: standard
+  owner: JDE Finance CoE
+  steward: <named person, filled at intake>
+
+# --- evaluation ---------------------------------------------------------------
+eval:
+  intentsFile: evals/jde-fin-ap/intents.yaml
+  minIntents: 10

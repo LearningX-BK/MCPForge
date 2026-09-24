@@ -1,0 +1,55 @@
+# Runtime state — SQLite store and build-lane state are never committed.
+.mcpforge/
+.forge-build/
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Package manager
+.pnpm-store/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Python worker
+adapters/oracle-worker/.venv/
+adapters/oracle-worker/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Portal (Next.js)
+core/portal/.next/
+core/portal/out/
+
+# W0-F7 — per-run intermediate evidence JSON; EVIDENCE.md (generated from it) is committed.
+tests/write-path/.evidence/
+
+# Local backups and archives — never history (W0-P8). The 6.99 GB MCPForge.zip is a pre-git backup.
+MCPForge.zip
+*.zip
+*.7z
+
+# Test and tooling output
+core/portal/test-results/
+**/playwright-report/
+**/test-results/
+coverage/
+.claude/settings.local.json
+.testres.json

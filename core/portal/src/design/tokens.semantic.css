@@ -1,0 +1,199 @@
+/* MCPForge — Tier 2 semantic tokens. THE theme file (03 §13.1).
+ *
+ * Source of truth for colour. tokens.ts is generated from this file by
+ * build-tokens.ts and never hand-edited (13.1). Components reference only
+ * Tier 2 / Tier 3 — never Tier 1, never a raw hex (§4.2).
+ *
+ * Three states (13.2): an explicit choice stamps `data-theme` on <html>;
+ * the default "system" stamps nothing and follows prefers-color-scheme.
+ *
+ * Rule 1 (13.2): no colour may have its only definition inside a media
+ * query or a [data-theme] block — every token exists on bare :root first.
+ * Rule 2: the dark list below is identical between the system-dark block
+ * and the explicit-dark block — build-tokens.ts reads both and asserts
+ * that identity so it cannot silently drift.
+ */
+
+/* 1. Light is the complete, unconditional baseline. Every token defined here. */
+:root {
+  /* --- Surfaces and text (§4.4) -------------------------------------- */
+  --bg-canvas: var(--ltm-grey-200);
+  --bg-surface: var(--ltm-grey-100);
+  --bg-surface-2: var(--ltm-grey-150);
+  --bg-surface-3: var(--ltm-grey-200);
+  --bg-sidebar: var(--ltm-grey-100);
+  --bg-inset: var(--ltm-bg-inset-light);
+
+  --text-1: var(--ltm-ink-900);
+  --text-2: var(--ltm-grey-700);
+  --text-3: var(--ltm-grey-text-3-light); /* #6E7379 — raised from #767B82, §4.6 */
+  --text-disabled: var(--ltm-grey-500);
+
+  --line: var(--ltm-grey-400);
+  --line-soft: var(--ltm-grey-300);
+  --line-strong: var(--ltm-line-strong-light);
+
+  /* --- Brand and interaction (§4.4) ----------------------------------- */
+  --accent: var(--ltm-coral-800); /* #B23A2C — 5.94:1 on white */
+  --accent-solid-bg: var(--ltm-coral-700);
+  --accent-solid-fg: var(--ltm-white); /* 4.96:1 */
+  --accent-tint: var(--ltm-coral-tint-light);
+  --accent-border: var(--ltm-coral-border-light);
+  --focus-ring: var(--ltm-coral-700);
+
+  /* --- Status semantics (§4.4) ---------------------------------------- */
+  --status-read: var(--ltm-blue-700);
+  --status-read-bg: rgba(42, 106, 133, 0.08);
+  --status-read-border: rgba(42, 106, 133, 0.4);
+  --status-read-strong: var(--ltm-blue-700);
+
+  --status-ok: var(--ltm-green-700);
+  --status-ok-bg: rgba(28, 110, 59, 0.08);
+  --status-ok-border: rgba(28, 110, 59, 0.4);
+  --status-ok-strong: var(--ltm-green-700);
+
+  --status-write: var(--ltm-amber-700);
+  --status-write-bg: rgba(154, 97, 16, 0.08);
+  --status-write-border: rgba(154, 97, 16, 0.4);
+  --status-write-strong: var(--ltm-amber-700);
+
+  --status-platform: var(--ltm-purple-700);
+  --status-platform-bg: rgba(75, 33, 120, 0.08);
+  --status-platform-border: rgba(75, 33, 120, 0.4);
+  --status-platform-strong: var(--ltm-purple-700);
+
+  /* This task: NOT `var(--text-3)`. Real rendered chips (`--status-neutral`
+     on `--status-neutral-bg`, i.e. `--text-3` #6E7379 on `--bg-surface-3`
+     #F4F5F7) measured 4.38:1 under axe's `color-contrast` — below WCAG AA's
+     4.5:1. `--text-3` on a card background other than `--bg-surface` was
+     never in the contrast gate's scope (`contrast.test.ts`'s own comment:
+     "text-3 on the canvas colour... is out of scope per §4.6"), so this is a
+     real, previously-uncaught gap specific to the status-neutral CHIP, not a
+     reason to move every `--text-3` user. `--ltm-grey-650` (#6B7076, already
+     the primitive for `--mute-d`) is one step darker and clears 4.5:1 against
+     `--bg-surface-3` (measured ~4.58:1) while staying visually the same
+     neutral grey.  Dark theme is untouched — it already passed. */
+  --status-neutral: var(--ltm-grey-650);
+  --status-neutral-bg: var(--bg-surface-3);
+  --status-neutral-border: var(--line);
+  --status-neutral-strong: var(--ltm-grey-650);
+
+  --status-danger: var(--ltm-coral-800); /* alias of the coral ramp, §4.4 */
+  --status-danger-bg: var(--ltm-coral-tint-light);
+  --status-danger-border: var(--ltm-coral-border-light);
+  --status-danger-strong: var(--ltm-coral-800);
+}
+
+/* 2. System dark, only when no explicit light choice is stamped. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-canvas: var(--ltm-ink-900);
+    --bg-surface: var(--ltm-ink-800);
+    --bg-surface-2: var(--ltm-ink-700);
+    --bg-surface-3: var(--ltm-ink-600);
+    --bg-sidebar: var(--ltm-ink-900);
+    --bg-inset: var(--ltm-bg-inset-dark);
+
+    --text-1: var(--ltm-grey-100);
+    --text-2: var(--ltm-grey-800);
+    --text-3: var(--ltm-grey-750);
+    --text-disabled: var(--ltm-grey-650);
+
+    --line: var(--ltm-ink-500);
+    --line-soft: var(--ltm-ink-550);
+    --line-strong: var(--ltm-line-strong-dark);
+
+    --accent: var(--ltm-coral-500);
+    --accent-solid-bg: var(--ltm-coral-500);
+    --accent-solid-fg: var(--ltm-ink-900); /* ink on coral — 5.50:1, never white */
+    --accent-tint: var(--ltm-coral-tint-dark);
+    --accent-border: var(--ltm-coral-border-dark);
+    --focus-ring: var(--ltm-coral-500);
+
+    --status-read: var(--ltm-blue-300);
+    --status-read-bg: rgba(95, 168, 198, 0.12);
+    --status-read-border: rgba(95, 168, 198, 0.4);
+    --status-read-strong: var(--ltm-blue-300);
+
+    --status-ok: var(--ltm-green-300);
+    --status-ok-bg: rgba(79, 191, 123, 0.12);
+    --status-ok-border: rgba(79, 191, 123, 0.4);
+    --status-ok-strong: var(--ltm-green-300);
+
+    --status-write: var(--ltm-amber-300);
+    --status-write-bg: rgba(224, 160, 64, 0.12);
+    --status-write-border: rgba(224, 160, 64, 0.4);
+    --status-write-strong: var(--ltm-amber-300);
+
+    --status-platform: var(--ltm-purple-300);
+    --status-platform-bg: rgba(167, 139, 250, 0.12);
+    --status-platform-border: rgba(167, 139, 250, 0.4);
+    --status-platform-strong: var(--ltm-purple-300);
+
+    --status-neutral: var(--text-3);
+    --status-neutral-bg: var(--bg-surface-3);
+    --status-neutral-border: var(--line);
+    --status-neutral-strong: var(--text-3);
+
+    --status-danger: var(--ltm-coral-500);
+    --status-danger-bg: var(--ltm-coral-tint-dark);
+    --status-danger-border: var(--ltm-coral-border-dark);
+    --status-danger-strong: var(--ltm-coral-300);
+  }
+}
+
+/* 3. Explicit dark wins in both directions. Identical to block 2. */
+:root[data-theme="dark"] {
+  --bg-canvas: var(--ltm-ink-900);
+  --bg-surface: var(--ltm-ink-800);
+  --bg-surface-2: var(--ltm-ink-700);
+  --bg-surface-3: var(--ltm-ink-600);
+  --bg-sidebar: var(--ltm-ink-900);
+  --bg-inset: var(--ltm-bg-inset-dark);
+
+  --text-1: var(--ltm-grey-100);
+  --text-2: var(--ltm-grey-800);
+  --text-3: var(--ltm-grey-750);
+  --text-disabled: var(--ltm-grey-650);
+
+  --line: var(--ltm-ink-500);
+  --line-soft: var(--ltm-ink-550);
+  --line-strong: var(--ltm-line-strong-dark);
+
+  --accent: var(--ltm-coral-500);
+  --accent-solid-bg: var(--ltm-coral-500);
+  --accent-solid-fg: var(--ltm-ink-900); /* ink on coral — 5.50:1, never white */
+  --accent-tint: var(--ltm-coral-tint-dark);
+  --accent-border: var(--ltm-coral-border-dark);
+  --focus-ring: var(--ltm-coral-500);
+
+  --status-read: var(--ltm-blue-300);
+  --status-read-bg: rgba(95, 168, 198, 0.12);
+  --status-read-border: rgba(95, 168, 198, 0.4);
+  --status-read-strong: var(--ltm-blue-300);
+
+  --status-ok: var(--ltm-green-300);
+  --status-ok-bg: rgba(79, 191, 123, 0.12);
+  --status-ok-border: rgba(79, 191, 123, 0.4);
+  --status-ok-strong: var(--ltm-green-300);
+
+  --status-write: var(--ltm-amber-300);
+  --status-write-bg: rgba(224, 160, 64, 0.12);
+  --status-write-border: rgba(224, 160, 64, 0.4);
+  --status-write-strong: var(--ltm-amber-300);
+
+  --status-platform: var(--ltm-purple-300);
+  --status-platform-bg: rgba(167, 139, 250, 0.12);
+  --status-platform-border: rgba(167, 139, 250, 0.4);
+  --status-platform-strong: var(--ltm-purple-300);
+
+  --status-neutral: var(--text-3);
+  --status-neutral-bg: var(--bg-surface-3);
+  --status-neutral-border: var(--line);
+  --status-neutral-strong: var(--text-3);
+
+  --status-danger: var(--ltm-coral-500);
+  --status-danger-bg: var(--ltm-coral-tint-dark);
+  --status-danger-border: var(--ltm-coral-border-dark);
+  --status-danger-strong: var(--ltm-coral-300);
+}

@@ -1,0 +1,9 @@
+# Governance evidence, committed (CLAUDE.md §4, 02 §2.5). The standing
+# authorization in roles/p2p.yaml resolves to this record.
+id: appr-2026-08-27-p2p-plsql
+subject: role/p2p
+decision: approved
+approver: A. Named Approver
+approvedAt: "2026-08-27"
+expiresAt: "2027-02-23"
+scope: Execute MCPFORGE_WRAP.AP_VOUCHER writes through the ordinary plan -> confirm path.

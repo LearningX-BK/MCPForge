@@ -1,0 +1,23 @@
+{
+  "name": "@mcpforge/ci",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The forge ci pipeline — 02 §7.2 stages 1-11, reproduced as a local, host-agnostic script (02 §10.1). Grows one stage at a time as each stage's underlying capability lands elsewhere in the repo.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --build --force"
+  },
+  "dependencies": {
+    "@mcpforge/codegen": "workspace:*",
+    "@mcpforge/gateway": "workspace:*",
+    "yaml": "^2.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  }
+}
