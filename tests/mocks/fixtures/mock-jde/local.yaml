@@ -1,0 +1,21 @@
+# MCPForge — the local mock JD Edwards' provisioning. W0-P14.
+#
+# `users`: the subjects this mock instance knows as JD Edwards users. The token
+# provider issues a per-user token for these and refuses everyone else (404),
+# which the gateway reports as IDENTITY_UNRESOLVED. There is no default user.
+# Add a subject here to let that human act in the mock JDE; it must match the
+# subject the gateway resolves for them (Principal.subject).
+#
+# `clients`: the token-provider client ids the gateway may present, one per
+# module server (02 §11.5 rule 4), matching overlays/local/ais-targets.yaml.
+# NO SECRET VALUES ARE HERE. On first start the mock generates a random secret
+# per client into .mcpforge/mock-jde/clients.json (git-ignored) and prints only
+# that path; the gateway's SecretStore is seeded from it.
+users:
+  - a.clerk@ltm.example
+  - a.approver@ltm.example
+  - bikash@ltm.example
+clients:
+  - mcpforge-local-jde-fin-ap
+  - mcpforge-local-jde-fin-gl
+  - mcpforge-local-jde-scm-po

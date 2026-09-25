@@ -1,0 +1,35 @@
+# MCPForge — where each module server's JD Edwards AIS target lives, for the
+# "local" deployment. W0-P14, 02 §3.5 option (a).
+#
+# Wave 0 has no JD Edwards instance, so every server points at the LOCAL MOCK
+# JDE (tests/mocks, started with `pnpm --filter @mcpforge/mocks mock-jde`).
+# Pointing the same core image at a real AIS server is changing the two URLs
+# below and nothing else.
+#
+# Each server has its OWN client credential at the token provider, scoped to
+# that server (02 §11.5 rule 4: one credential per binding × module ×
+# environment). Only the reference is here; the value lives in the SecretStore.
+# That credential can only ask for a per-user token; every orchestration runs
+# as the calling human.
+apiVersion: mcpforge/v1
+kind: AisTargets
+deployment: local
+
+targets:
+  jde-local-mock:
+    baseUrl: http://127.0.0.1:4545/jderest
+    tokenUrl: http://127.0.0.1:4545/jderest/mcpforge/token
+
+servers:
+  jde-fin-ap:
+    target: jde-local-mock
+    clientId: mcpforge-local-jde-fin-ap
+    clientCredentialRef: secretRef://binding/jde-fin-ap/token-provider-client
+  jde-fin-gl:
+    target: jde-local-mock
+    clientId: mcpforge-local-jde-fin-gl
+    clientCredentialRef: secretRef://binding/jde-fin-gl/token-provider-client
+  jde-scm-po:
+    target: jde-local-mock
+    clientId: mcpforge-local-jde-scm-po
+    clientCredentialRef: secretRef://binding/jde-scm-po/token-provider-client

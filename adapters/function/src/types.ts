@@ -41,6 +41,15 @@ export interface AisRequest {
   /** Abort signal carrying `execution.timeoutMs`. */
   readonly signal: AbortSignal;
   readonly correlationId: string;
+  /**
+   * W0-P14 — the caller's `Principal.subject`, the identity the orchestration
+   * must run AS (02 §3.5 option (a)). A client that authenticates per user
+   * (`createHttpAisClient`) exchanges it for a per-user AIS token and refuses
+   * the call when it is absent or the token provider does not know it. There is
+   * no fallback identity (CLAUDE.md #1). Copied by the executor from
+   * `FunctionCallInput.principalSubject`, never from an argument.
+   */
+  readonly principalSubject?: string;
 }
 
 export interface AisResponse {

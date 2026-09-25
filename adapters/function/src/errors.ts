@@ -286,3 +286,47 @@ export function executionNotGranted(
     },
   );
 }
+
+// --- W0-P14, the per-user AIS token exchange (02 §3.5 option (a)) -------------
+
+/**
+ * The target's token provider would not issue a per-user token for this
+ * caller, or no caller subject reached the client. The orchestration request
+ * was never sent. There is no fallback identity and no shared token to retry
+ * with (CLAUDE.md #1).
+ */
+export function identityUnresolvedAtTarget(
+  descriptor: FunctionBindingDescriptor,
+  correlationId: string,
+  reason: string,
+): ForgeError {
+  return forgeError(
+    'IDENTITY_UNRESOLVED',
+    `${descriptor.toolId}: no per-user AIS token could be obtained for the caller, so ${descriptor.ref} was not called — ${reason}`,
+    correlationId,
+    {
+      condition:
+        "The target's token provider does not recognise this caller as a JD Edwards user, or no caller identity was resolved. There is no service-account fallback.",
+      next: `Ask your MCPForge operator to confirm your identity is provisioned as a JD Edwards user on this instance's token provider, then call ${descriptor.toolId} again; nothing was sent to JD Edwards.`,
+    },
+  );
+}
+
+/**
+ * The token provider itself could not be used: unreachable, or it rejected the
+ * gateway's own client credential. Nothing was sent to the orchestration.
+ */
+export function tokenProviderUnavailable(
+  descriptor: FunctionBindingDescriptor,
+  correlationId: string,
+  reason: string,
+): ForgeError {
+  return forgeError(
+    'TARGET_UNAVAILABLE',
+    `${descriptor.toolId}: the AIS token provider for ${descriptor.ref} could not issue a token — ${reason}`,
+    correlationId,
+    {
+      next: `Nothing was sent to JD Edwards, so it is safe to call ${descriptor.toolId} again later. If this persists, ask your MCPForge operator to check the token-provider URL in the overlay and the client credential with "forge secrets status".`,
+    },
+  );
+}
