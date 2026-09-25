@@ -9,6 +9,7 @@
     "./store": "./store/index.ts",
     "./store/server": "./store/server.ts",
     "./identity": "./identity/index.ts",
+    "./identity/group-role-mapping": "./identity/group-role-mapping.ts",
     "./transport": "./transport/index.ts",
     "./scope": "./scope/index.ts",
     "./flags": "./flags/index.ts",
@@ -35,6 +36,7 @@
   "dependencies": {
     "@mcpforge/adapter-function": "workspace:*",
     "@mcpforge/codegen": "workspace:*",
+    "@mcpforge/probe": "workspace:*",
     "@mcpforge/registry": "workspace:*",
     "@mcpforge/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.30.0",

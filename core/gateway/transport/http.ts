@@ -48,6 +48,11 @@ import {
   type ConsumerAuthResult,
 } from './consumer-auth/index.js';
 import type { LoadedConsumer } from '../consumer/index.js';
+import {
+  identityRequestFrom,
+  type SessionEstablisher,
+  type SessionHandle,
+} from './session-binding.js';
 
 const MCP_PATH = '/mcp';
 const SESSION_ID_HEADER = 'mcp-session-id';
@@ -61,10 +66,20 @@ const SESSION_ID_HEADER = 'mcp-session-id';
 const CONSUMER_AUTH_STATUS: Record<string, number> = {
   CONSUMER_UNREGISTERED: 401,
   CONSUMER_SUSPENDED: 403,
+  // W0-P15 — the human half. 401: no credential, or it did not verify.
+  // 403: it verified but names nobody this deployment can resolve.
+  AUTH_REQUIRED: 401,
+  IDENTITY_UNRESOLVED: 403,
 };
+
+/** W0-P15 — the verified session, replaced after every successful re-verification. */
+interface SessionState {
+  session?: unknown;
+}
 
 interface ActiveConnection {
   readonly transport: StreamableHTTPServerTransport;
+  readonly state: SessionState;
 }
 
 export interface GatewayHttpTransportOptions {
@@ -79,7 +94,15 @@ export interface GatewayHttpTransportOptions {
    * `server.sendToolListChanged()` and have that notification travel the
    * real Streamable HTTP wire to a real client.
    */
-  readonly createServer?: () => McpServer;
+  readonly createServer?: (session?: SessionHandle<unknown>) => McpServer;
+  /**
+   * W0-P15 — steps `[2]` and `[3]`: the human, bound to the session. When
+   * present, `establish` runs at `initialize` after `[2a]` succeeded (a refusal
+   * means no session and no `tools/list`), and `reverify` runs on every later
+   * request before the MCP SDK sees it. The factory above receives a handle to
+   * the latest verified session.
+   */
+  readonly sessions?: SessionEstablisher<unknown>;
   /**
    * W0-E7. 02 §4.8's "Transport + protocol" budget row (3ms). Defaults to a
    * disabled instance — no exporter, no span ever queued — so telemetry is
@@ -211,12 +234,35 @@ export function createGatewayHttpTransport(
         // Reachable only from here, i.e. only after [2a] returned ok.
         await gate.resolveIdentity?.(outcome.consumer, req.headers);
 
-        const server = options.createServer?.() ?? createGatewayMcpServer(options.serverInfo);
+        // ---- W0-P15 — steps [2] + [3]: the human, bound to this session ----
+        // The session id is minted HERE, before the SDK sees the request, so
+        // the consumer's provenance can freeze it. A refusal leaves nothing
+        // behind: no McpServer, no transport, no session row.
+        const newSessionId = randomUUID();
+        const state: SessionState = {};
+        let handle: SessionHandle<unknown> | undefined;
+        if (options.sessions !== undefined) {
+          const established = await options.sessions.establish({
+            auth: outcome,
+            request: identityRequestFrom(req.headers),
+            sessionId: newSessionId,
+            correlationId,
+          });
+          if (!established.ok) {
+            const shape = established.error.toJSON();
+            respondConsumerRefusal(res, CONSUMER_AUTH_STATUS[shape.code] ?? 403, shape);
+            return;
+          }
+          state.session = established.session;
+          handle = { sessionId: newSessionId, current: () => state.session };
+        }
+
+        const server = options.createServer?.(handle) ?? createGatewayMcpServer(options.serverInfo);
         const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => randomUUID(),
-          onsessioninitialized: (newSessionId) => {
-            connections.set(newSessionId, { transport });
-            sessionStore.create(newSessionId, negotiatedProtocolVersion(body));
+          sessionIdGenerator: () => newSessionId,
+          onsessioninitialized: (initializedId) => {
+            connections.set(initializedId, { transport, state });
+            sessionStore.create(initializedId, negotiatedProtocolVersion(body));
           },
           onsessionclosed: (closedSessionId) => {
             connections.delete(closedSessionId);
@@ -244,6 +290,22 @@ export function createGatewayHttpTransport(
         }),
       );
       return;
+    }
+
+    // ---- W0-P15 — every later request re-authenticates the SAME human -----
+    if (options.sessions !== undefined) {
+      const correlationId = randomUUID();
+      const reverified = await options.sessions.reverify(
+        connection.state.session,
+        identityRequestFrom(req.headers),
+        correlationId,
+      );
+      if (!reverified.ok) {
+        const shape = reverified.error.toJSON();
+        respondConsumerRefusal(res, CONSUMER_AUTH_STATUS[shape.code] ?? 403, shape);
+        return;
+      }
+      connection.state.session = reverified.session;
     }
 
     await connection.transport.handleRequest(req, res);
@@ -309,6 +371,10 @@ export function createGatewayHttpTransport(
     close() {
       return new Promise((resolve, reject) => {
         httpServer.close((err) => (err ? reject(err) : resolve()));
+        // Stop accepting, then drop idle keep-alive sockets so an idle client
+        // cannot hold shutdown open until its keep-alive timeout expires.
+        // In-flight requests still complete.
+        httpServer.closeIdleConnections();
       });
     },
   };

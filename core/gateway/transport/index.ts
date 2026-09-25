@@ -16,3 +16,10 @@ export {
 // W0-N2 — step [2a], consumer authentication and the registration check.
 export * from './consumer-auth/index.js';
 export { inMemorySessionStore, type McpSessionRecord, type McpSessionStore } from './session.js';
+// W0-P15 — steps [2] and [3], bound to the MCP session.
+export {
+  identityRequestFrom,
+  type SessionBindingOutcome,
+  type SessionEstablisher,
+  type SessionHandle,
+} from './session-binding.js';
