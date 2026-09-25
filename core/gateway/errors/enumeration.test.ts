@@ -533,6 +533,30 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
     },
   },
   {
+    match: (s) => basename(s.file) === 'execute.ts' && s.raw === 'outcome.next',
+    description:
+      "W0-P17: assembly/execute.ts forwards a refused WriteDispatchOutcome's own `next` from writeDispatcher, every branch of which is a fixed template literal. Driven here through the REAL dispatcher's fail-closed branch (a write that reached it with no verified confirm token).",
+    dynamicCheck: async () => {
+      const { writeDispatcher } = await import('../policy/idempotency/dispatch.js');
+      const outcome = await writeDispatcher({
+        store: {} as never,
+        invoker: {} as never,
+      }).dispatch({
+        call: {
+          toolId: 'jde.fin.journal.create',
+          entryPoint: 'tools/call',
+          args: {},
+          correlationId: 'enum-p17',
+        },
+        entry: {} as never,
+        ctx: {} as never,
+        confirmed: null,
+      });
+      if (outcome.kind !== 'refused') throw new Error('expected a refusal');
+      return outcome.next;
+    },
+  },
+  {
     match: (s) => basename(s.file) === 'errors.ts' && s.file.includes('adapters') && s.line === 44,
     description:
       "adapters/function/src/errors.ts's targetTimeout() branches its next on descriptor.write — driven here through the REAL executor + a real timing-out in-process AIS fake, write branch (a write tool must never be told to retry blind).",

@@ -20,3 +20,22 @@ export type {
   WritePathStore,
   WriteTargetInvoker,
 } from './types.js';
+// W0-P17 — the read path, the shared audit row, and the non-executing rows.
+export {
+  auditRowBase,
+  confirmTokenHash,
+  redactArgsForAudit,
+  redactedValue,
+  REDACTED_SENSITIVITIES,
+  type AuditRowInput,
+} from './audit-row.js';
+export {
+  bindingOutcomeFor,
+  readDispatcher,
+  type ReadDispatcher,
+  type ReadDispatcherDeps,
+  type ReadDispatchOutcome,
+  type ReadShaper,
+  type ReadTargetInvoker,
+} from './read.js';
+export { decisionRecorder, type DecisionRecorder, type DecisionRecorderDeps } from './record.js';

@@ -38,6 +38,12 @@ export interface DryRunOutcome {
   readonly warnings?: readonly string[];
   /** Values the plan template may reference that were not call arguments. */
   readonly planValues?: Readonly<Record<string, unknown>>;
+  /**
+   * W0-P17, 02 §3.5 — `true` when the dry-run ladder degraded a validate-pair
+   * write whose sensitivity forces approval. The gate takes the UNION with the
+   * tool's own flag: this can raise the approval requirement, never lower it.
+   */
+  readonly humanApprovalRequired?: boolean;
 }
 
 /** The `confirm_required` body, minus the token fields the gate adds. */
