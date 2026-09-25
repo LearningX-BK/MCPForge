@@ -1,6 +1,6 @@
 # W0-P4 — Portal viewer identity and persona-bound action gating
 
-**Status: WRITTEN 25 Sep 2026 — AWAITING THE OWNER'S DECISION (§8). Decision 1 revised by the owner the same day: sign-in is multi-mode (§2.1).** This note is the whole of `W0-P4`; no code was written.
+**Status: DECIDED 26 Sep 2026 — all six decisions taken by the owner; see §9.** Decision 1 was revised to multi-mode sign-in (§2.1, §2.2), decision 3 to allow admin self-approval of definitional changes, and decision 6 to seamless sessions. This note is the whole of `W0-P4`; no code was written.
 Author: build lane (Opus), 25 Sep 2026. Reads: 03 §2, 05 §1.3, 02 §4.4, and `w0-p2-portal-gateway-seam.md` §7.
 
 ---
@@ -129,3 +129,25 @@ It **may not**: approve its own proposal; approve a runtime write the gateway's 
 4. **Kill from the portal**: show the `forge kill` command now, and give it a real write path in a later task. *Recommended.*
 5. **`portal-local` moves to `private-key-jwt`**, so the portal never reads a secret store. *Recommended.*
 6. **Refresh tokens**: none at Wave 0, so viewers re-sign-in every 15 minutes. *Recommended*, or name a longer TTL.
+
+---
+
+## 9. Decision record — 25–26 Sep 2026
+
+**Decided by:** the owner (Bikash Pattnaik), in session.
+
+1. **Sign-in: multi-mode, several providers at once.** See §2.1 and §2.2: local, Entra ID, OCI IAM, Agentis; subjects issuer-qualified `<providerId>:<sub>`; mappings keyed per provider.
+2. **Personas** from a `personas:` block in the git groups-to-roles mapping. *Accepted as recommended.*
+3. **Proposer ≠ approver for definitional changes, EXCEPT an admin may approve their own.** The owner's words: *"Admin can do though as both."* How it is built, so the exception is visible rather than silent:
+   - a viewer holding the `admin` persona may approve a definitional change they proposed; anyone else may not (the portal refuses, as in §3);
+   - the approval record then carries `selfApproved: true`, and `forge validate`'s `approval-not-self-approved` rule reports it as a **warning** naming the admin, never as a failure; a self-approval by a non-admin, or a record without the flag, **fails**;
+   - **runtime writes are unchanged**: the gateway's approval gate still refuses approver == requester for every runtime write, admin included, because that is the write path (non-negotiable 4) and the owner's words were about the portal's change approvals. *Flag:* if the owner meant runtime writes too, that is a separate, explicit change to `core/gateway/policy/approval/**`.
+4. **Kill from the portal:** show the `forge kill` command now; a real write path later. *Accepted.*
+5. **`portal-local` → `private-key-jwt`.** *Accepted.*
+6. **Sessions: seamless, not a 15-minute re-prompt.** The owner's words: *"better to reduce and have seamless."* The access token stays short-lived (15 min), so revocation still bites quickly. The portal server renews it silently:
+   - **local provider:** the gateway issues a rotating refresh token alongside the access token. It is stored hashed in the runtime store, rotated on every use, and **reuse of a spent refresh token revokes the whole session** (theft detection). Disabling the account stops renewal at the next refresh;
+   - **OIDC providers:** the provider's own refresh token (`offline_access`), held only in the portal-server session;
+   - **limits:** 8 hours idle, 12 hours absolute, as overlay values; after either, sign in again.
+   The refresh token is a credential: it is never logged, never rendered, never sent to the browser, and never written to audit, only a hash of it.
+
+`W0-P5` is unblocked. It implements §2–§6 with these decisions; `W0-P3` follows it.
