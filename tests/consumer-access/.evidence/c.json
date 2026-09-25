@@ -40,5 +40,5 @@
     ],
     "realMechanism": "core/gateway/policy/binding-auth/authorize.ts authorizeBinding (stage 6e′) via core/gateway/policy/entry-points.ts (identical chain) and core/gateway/meta/visibility.ts resolveDiscovery (same authorizeBinding call, for listing only) — the mechanisms tests/policy/escalation.elevated-posture.test.ts (W0-N3) and core/gateway/meta/*.test.ts (W0-G4) already prove."
   },
-  "capturedAt": "2026-09-24T03:34:07.918Z"
+  "capturedAt": "2026-09-25T15:35:49.869Z"
 }

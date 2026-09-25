@@ -40,7 +40,10 @@ import {
   createGatewayHttpTransport,
   type GatewayHttpTransport,
 } from '../../core/gateway/transport/http.js';
-import { STUB_TOOL_ID } from '../../core/gateway/transport/server.js';
+import {
+  createStubMcpServer,
+  STUB_TOOL_ID,
+} from '../../core/gateway/transport/stub.test-support.js';
 // W0-N2 — 02 §4.2 step [2a]. The door now also requires a REGISTERED consumer:
 // no session is established without one, and the transport has no default-open
 // mode. The "same call through the door succeeds" control below therefore
@@ -90,6 +93,7 @@ describe('W0-E8 case 1 — the gateway is the only door (Wave 0 exit criterion 5
       audience: CONSUMER_AUDIENCE,
     });
     gateway = createGatewayHttpTransport({
+      createServer: () => createStubMcpServer(),
       consumerAuth: {
         authenticate: (headers, correlationId) =>
           authenticator.authenticate(readConsumerPresentation(headers), correlationId),

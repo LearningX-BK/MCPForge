@@ -18,7 +18,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createGatewayHttpTransport, type ConsumerAuthGate, type GatewayHttpTransport } from '../../core/gateway/transport/http.js';
-import { STUB_TOOL_ID } from '../../core/gateway/transport/server.js';
+import { STUB_TOOL_ID } from '../../core/gateway/transport/stub.test-support.js';
 import {
   ConsumerAuthenticator,
   readConsumerPresentation,

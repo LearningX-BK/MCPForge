@@ -22,3 +22,16 @@ export {
   loadDeploymentConfig,
   type DeploymentConfig,
 } from './deployment.js';
+// W0-P16 — the served surface: meta-tools, scoped tools/list, tools/call -> the chain.
+export {
+  createServedSurface,
+  type ProceedHandler,
+  type ProceedInput,
+  type ServedSurface,
+  type ServedSurfaceOptions,
+} from './surface.js';
+export {
+  loadSurfaceArtefacts,
+  SurfaceArtefactsUnavailable,
+  type SurfaceArtefacts,
+} from './surface-artefacts.js';
