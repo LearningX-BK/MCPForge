@@ -47,7 +47,6 @@ import {
   DYNAMIC_CLIENT_REGISTRATION_STATUS,
   type ConsumerAuthResult,
 } from './consumer-auth/index.js';
-import type { LoadedConsumer } from '../consumer/index.js';
 import {
   identityRequestFrom,
   type SessionEstablisher,
@@ -138,24 +137,17 @@ export interface PublishedMetadata {
 }
 
 /**
- * The `[2a]` seam. `authenticate` runs first; `resolveIdentity` — step `[3]` —
- * is invoked ONLY after it succeeds, which is what makes 02 §4.2's ordering
- * ("`[2a]` ... between `[2]` and `[3]`") structural rather than a comment.
+ * The `[2a]` seam. Step `[3]`, identity resolution, is NOT here: it is the
+ * `sessions` establisher (W0-P15), which the transport calls only after
+ * `authenticate` succeeded. W0-P11 removed the consumer-only `resolveIdentity`
+ * hook this interface used to carry, so there is one step-[3] path, and it
+ * resolves a human.
  */
 export interface ConsumerAuthGate {
   authenticate(
     headers: IncomingMessage['headers'],
     correlationId: string,
   ): Promise<ConsumerAuthResult>;
-  /**
-   * Step `[3]`, identity resolution. Optional here because the gateway's own
-   * identity wiring is a later task's; what this task fixes is that it can
-   * never run for a consumer that failed `[2a]`.
-   */
-  resolveIdentity?(
-    consumer: LoadedConsumer,
-    headers: IncomingMessage['headers'],
-  ): Promise<void> | void;
 }
 
 export interface GatewayHttpTransport {
@@ -201,7 +193,7 @@ export function createGatewayHttpTransport(
         // FIRST, and before anything else in this branch. Nothing below runs
         // for a refused consumer: no `McpServer` is constructed, no transport
         // is created, no session id is minted, no session row is written, and
-        // `resolveIdentity` (step [3]) is never called. That is what "is
+        // the session establisher (step [3]) is never called. That is what "is
         // served no tools/list ... never enumerates the catalogue" means
         // structurally rather than as a promise (02 §11.2).
         const gate = options.consumerAuth;
@@ -228,10 +220,6 @@ export function createGatewayHttpTransport(
           respondConsumerRefusal(res, CONSUMER_AUTH_STATUS[shape.code] ?? 403, shape);
           return;
         }
-
-        // ---- 02 §4.2 step [3] — identity resolution ----------------------
-        // Reachable only from here, i.e. only after [2a] returned ok.
-        await gate.resolveIdentity?.(outcome.consumer, req.headers);
 
         // ---- W0-P15 — steps [2] + [3]: the human, bound to this session ----
         // The session id is minted HERE, before the SDK sees the request, so

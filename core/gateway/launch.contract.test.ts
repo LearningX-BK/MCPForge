@@ -3,13 +3,13 @@
 // name matches the `contract` filter `tools/ci/src/stages.ts` stage 7 uses)
 // under `MCPFORGE_MODE=headless` and again under `MCPFORGE_MODE=full`.
 
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { GATEWAY_MODES, launchGateway, parseGatewayMode } from './launch.js';
+import { GATEWAY_MODES, launchGateway, parseGatewayMode, type LaunchOptions } from './launch.js';
+import { launchRepo, removeLaunchRepo } from './launch.test-support.js';
+import { generateTestConsumerKeypair } from './transport/consumer-auth/testkit.js';
+import { EncryptedFileStore } from './secrets/server.js';
 
 function fakeChildProcess(): ChildProcess {
   const emitter = new EventEmitter() as ChildProcess;
@@ -17,12 +17,23 @@ function fakeChildProcess(): ChildProcess {
   return emitter;
 }
 
-function emptyRepoRoot(): string {
-  // No `consumers/` dir at all — `loadConsumerRegistry` treats that as a
-  // valid, empty registry (registry.ts: "if (!existsSync(dir)) return {
-  // consumers: [], failures: [] }"), so this is a real (if empty) registry,
-  // not a stub standing in for one.
-  return mkdtempSync(join(tmpdir(), 'mcpforge-launch-'));
+/**
+ * W0-P11: the launched gateway is now the REAL assembly, which refuses to start
+ * without a catalogue, a deployment overlay and its signing keys, so an empty
+ * directory is no longer a repository it can start from. Each launch gets a
+ * copy of this repository's committed sources (`launch.test-support.ts`) and
+ * an encrypted secret store keyed from the environment, never the OS keychain.
+ */
+async function launchOptions(
+  root: string,
+): Promise<Pick<LaunchOptions, 'repoRoot' | 'secretStore'>> {
+  return {
+    repoRoot: root,
+    secretStore: new EncryptedFileStore({
+      repoRoot: root,
+      env: { MCPFORGE_SECRETS_KEY: 'w0-k2-contract-test-only-passphrase' },
+    }),
+  };
 }
 
 describe('parseGatewayMode — the closed MCPFORGE_MODE vocabulary', () => {
@@ -49,22 +60,25 @@ describe('parseGatewayMode — the closed MCPFORGE_MODE vocabulary', () => {
 
 describe('launchGateway — same assembly, one process-start decision', () => {
   const roots: string[] = [];
-  function root(): string {
-    const r = emptyRepoRoot();
+  async function root(): Promise<string> {
+    const r = launchRepo({
+      keypair: await generateTestConsumerKeypair(),
+      aisBaseUrl: 'http://127.0.0.1:9/jderest',
+      aisTokenUrl: 'http://127.0.0.1:9/jderest/mcpforge/token',
+      grantRefs: [],
+    });
     roots.push(r);
     return r;
   }
 
   afterEach(() => {
-    for (const r of roots.splice(0)) {
-      rmSync(r, { recursive: true, force: true });
-    }
+    for (const r of roots.splice(0)) removeLaunchRepo(r);
   });
 
   it('headless mode starts the gateway and spawns no portal process', async () => {
     let spawnCalls = 0;
     const launched = await launchGateway({
-      repoRoot: root(),
+      ...(await launchOptions(await root())),
       mode: 'headless',
       spawnPortal: () => {
         spawnCalls += 1;
@@ -79,12 +93,12 @@ describe('launchGateway — same assembly, one process-start decision', () => {
     } finally {
       await launched.close();
     }
-  });
+  }, 120_000);
 
   it('full mode starts the SAME gateway assembly and additionally spawns the portal', async () => {
     let spawnCalls = 0;
     const launched = await launchGateway({
-      repoRoot: root(),
+      ...(await launchOptions(await root())),
       mode: 'full',
       spawnPortal: () => {
         spawnCalls += 1;
@@ -99,24 +113,31 @@ describe('launchGateway — same assembly, one process-start decision', () => {
     } finally {
       await launched.close();
     }
-  });
+  }, 120_000);
 
   it('an unregistered/unpresented consumer is refused identically in both modes — headless changes nothing about session establishment (02 §6.5 is a process-start decision, not a security posture change)', async () => {
     for (const mode of GATEWAY_MODES) {
       const launched = await launchGateway({
-        repoRoot: root(),
+        ...(await launchOptions(await root())),
         mode,
         spawnPortal: () => fakeChildProcess(),
       });
       try {
         const response = await fetch(`http://127.0.0.1:${launched.gatewayPort}/mcp`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
           body: JSON.stringify({
             jsonrpc: '2.0',
             id: 1,
             method: 'initialize',
-            params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'x', version: '1' } },
+            params: {
+              protocolVersion: '2025-11-25',
+              capabilities: {},
+              clientInfo: { name: 'x', version: '1' },
+            },
           }),
         });
         expect(response.status).toBe(401);
@@ -128,5 +149,5 @@ describe('launchGateway — same assembly, one process-start decision', () => {
         await launched.close();
       }
     }
-  });
+  }, 180_000);
 });

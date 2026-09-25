@@ -247,7 +247,7 @@ describe('W0-E8 case 1 — the gateway is the only door (Wave 0 exit criterion 5
     //
     // W0-P11 (assemble the live /mcp path) adds the gateway assembly to
     // EXECUTOR_CONSTRUCTORS, and only that.
-    const EXECUTOR_CONSTRUCTORS: readonly string[] = [];
+    const EXECUTOR_CONSTRUCTORS: readonly string[] = ['core/gateway/launch.ts'];
     const sources: string[] = [];
     const walk = (dir: string): void => {
       for (const name of readdirSync(dir)) {

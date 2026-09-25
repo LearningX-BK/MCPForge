@@ -15,6 +15,7 @@ import {
   type GatewayHttpTransport,
 } from '../http.js';
 import { createStubMcpServer, STUB_TOOL_ID } from '../stub.test-support.js';
+import type { SessionEstablisher } from '../session-binding.js';
 import {
   ConsumerAuthenticator,
   assertNoRegistrationEndpoint,
@@ -53,13 +54,20 @@ async function startGateway(
   const gate: ConsumerAuthGate = {
     authenticate: (headers, correlationId) =>
       authenticator.authenticate(readConsumerPresentation(headers), correlationId),
-    resolveIdentity: (consumer) => {
-      // Step [3]. Recording that it ran is the ordering proof.
-      identityResolutions.push(consumer.record.id);
+  };
+  // Step [3] is the session establisher (W0-P15). It records that it ran —
+  // the ordering proof — and admits, so the door's own behaviour is what is
+  // under test.
+  const sessions: SessionEstablisher<unknown> = {
+    establish: (input) => {
+      identityResolutions.push(input.auth.consumer.record.id);
+      return Promise.resolve({ ok: true, session: {} });
     },
+    reverify: (session) => Promise.resolve({ ok: true, session }),
   };
   const gateway = createGatewayHttpTransport({
     consumerAuth: gate,
+    sessions,
     createServer: () => createStubMcpServer(),
   });
   const { port } = await gateway.listen(0);
