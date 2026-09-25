@@ -58,6 +58,8 @@ export interface WriteTargetInvoker {
     readonly confirmed: ConfirmedCall;
     /** The derived key, so the executor can echo it into an audit row (W0-C2). */
     readonly idempotencyKey: string;
+    /** W0-P17 — the chain's execution grant for this call; null fails closed at the executor. */
+    readonly executionGrant: string | null;
   }): Promise<unknown>;
 }
 

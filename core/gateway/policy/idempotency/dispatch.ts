@@ -47,12 +47,12 @@
 //
 // `core/gateway/policy/**` is an OPUS_GUARDED_PATH (CLAUDE.md §6).
 
-import { createHash } from 'node:crypto';
 import { extractResultKeys } from '../../reversal/result-keys.js';
 import type { AppendAuditCallInput, AuditResultKey } from '../../store/audit/types.js';
 import { ConfirmNonceAlreadyConsumedError } from '../../store/runtime/types.js';
 import type { ConfirmedCall, PolicyCall, PolicyCatalogueEntry, PolicyContext } from '../types.js';
 import { businessArgs } from '../confirm/hash.js';
+import { auditRowBase, confirmTokenHash } from './audit-row.js';
 import { idempotencyKeyForCall } from './key.js';
 import { replayedResponse } from './replay.js';
 import type {
@@ -69,17 +69,11 @@ export interface WriteDispatcherDeps {
   /** Injected so tests pin the window. Defaults to `ctx.scope.now`. */
   now?(): Date;
   /**
-   * Per-field argument redaction, for the `args_redacted` column. SEAM.
+   * Per-field argument redaction, for the `args_redacted` column. OVERRIDE.
    *
-   * 02 §4.6 defines the rule — redaction is driven by `sensitivity_class` plus
-   * per-input `redact: true`, and a redacted value is replaced by
-   * `sha256(value)[:12]` rather than removed — but the per-input `redact` flag
-   * has no engine anywhere in this repo yet, so there is nothing here to call.
-   * **This is flagged, not silently skipped** (see W0-F5's report): the default
-   * below writes the BUSINESS arguments verbatim, which is correct for every
-   * Wave 0 write tool because none of them declares `redact: true`, and would
-   * be wrong the moment one does. Whichever task builds that engine wires it in
-   * here, in one place.
+   * The default is `./audit-row.ts`'s `redactArgsForAudit` (W0-P17, the
+   * owner's Wave 0 rule: a `personal` tool's values become `sha256(value)[:12]`,
+   * everything else verbatim). A caller that supplies this replaces it.
    *
    * The confirm token is never part of what reaches this function: it is
    * stripped before the call and recorded as `confirm_token_hash` instead.
@@ -104,6 +98,12 @@ export interface DispatchWriteInput {
    * does not: everything else about a reversal is an ordinary write, deliberately.
    */
   readonly reversesCallId?: string;
+  /**
+   * W0-P17 — the policy chain's `PolicyDecision.executionGrant` for THIS call,
+   * handed to the binding executor, which refuses without it (W0-P9). Absent
+   * or null fails closed at the executor, never here.
+   */
+  readonly executionGrant?: string | null;
 }
 
 export interface WriteDispatcher {
@@ -168,66 +168,41 @@ export function writeDispatcher(deps: WriteDispatcherDeps): WriteDispatcher {
   }): AppendAuditCallInput {
     const { input, confirmed, idempotencyKey, result, nowIso } = args;
     const { call, entry, ctx } = input;
-    const principal = ctx.scope.session.principal;
-    const session = ctx.scope.session;
     const reversal = entry.reversal;
-
     const business = businessArgs(call.args);
-    const redact = deps.redactArgs ?? ((a: Readonly<Record<string, unknown>>) => a);
 
-    const resultKeys: readonly AuditResultKey[] = extractResultKeys(
-      result,
-      entry.resultKeys ?? [],
-    );
+    const resultKeys: readonly AuditResultKey[] = extractResultKeys(result, entry.resultKeys ?? []);
+
+    // W0-P17: the common columns (who, consumer provenance, tool, deployment,
+    // redaction by sensitivity) come from the one builder every audit writer
+    // shares. `redactArgs`, when a caller supplies one, still has the last word.
+    const base = auditRowBase({
+      call,
+      entry,
+      ctx,
+      phase: input.reversesCallId === undefined ? 'execute' : 'reverse',
+      outcome: 'ok',
+      businessArgs: business,
+      ts: nowIso,
+      resultKeys,
+      ...(deps.gatewayVersion === undefined ? {} : { gatewayVersion: deps.gatewayVersion }),
+    });
 
     return {
-      ts: nowIso,
-      correlationId: call.correlationId,
-      callerSubject: principal.subject,
-      ...(principal.displayName === undefined ? {} : { callerDisplay: principal.displayName }),
-      ...(principal.idp === undefined ? {} : { callerIdp: principal.idp }),
-      ...(principal.amr === undefined ? {} : { callerAmr: principal.amr.join(' ') }),
-      callerRoles: [...session.heldRoleIds],
-
-      consumerId: session.consumer.consumerId,
-      // W0-N10, 02 §11.3 — the three provenance columns, taken from what
-      // `[2a]` froze when this session was authenticated
-      // (`../../transport/consumer-auth/provenance.ts`) and NOT re-derived
-      // here. `consumerRecordSha` is therefore the version of the consumer's
-      // authorizations that was in force at THIS call, not the version the
-      // record happens to hold when someone reads the row back.
-      consumerRecordSha: session.consumerSession.recordSha,
-      consumerAuthMethod: session.consumerSession.authMethod,
-      consumerSessionId: session.consumerSession.consumerSessionId,
-      // The consumer record decides whether a human is in the loop; the gateway
-      // does not assume one (non-negotiable 6).
-      humanInTheLoop: session.consumer.attestation.humanInTheLoop,
-
-      toolId: entry.toolId,
-      toolVersion: entry.toolVersion,
-      serverId: entry.serverId,
-      bindingType: entry.bindingType,
-      sensitivityClass: entry.sensitivity,
+      ...base,
       isWrite: true,
-
-      targetObject: entry.bindingRef,
-      deploymentId: ctx.scope.deployment.deploymentId,
-      ...(deps.gatewayVersion === undefined ? {} : { gatewayVersion: deps.gatewayVersion }),
-
-      phase: input.reversesCallId === undefined ? 'execute' : 'reverse',
       // The TOKEN never lands in the trail — only a hash of it, so two rows can
       // be shown to share a token without the token being readable from either
       // (non-negotiable 8's spirit, applied to a bearer value).
-      confirmTokenHash: createHash('sha256').update(confirmed.confirmToken).digest('hex'),
+      confirmTokenHash: confirmTokenHash(confirmed.confirmToken),
       argsHash: confirmed.argsCanonicalHash,
       idempotencyKey,
       replayed: false,
+      ...(deps.redactArgs === undefined ? {} : { argsRedacted: deps.redactArgs(business, entry) }),
 
-      argsRedacted: redact(business, entry),
-      resultKeys,
-
-      outcome: 'ok',
-
+      // Frozen from the manifest's `writeSafety.reversal` AS IT WAS at execute
+      // time, so `forge audit reverse` constructs the call the tool declared
+      // when the write happened, not the one a later edit declares.
       ...(reversal === undefined ? {} : { reversalClass: reversal.class }),
       ...(reversal?.tool === undefined ? {} : { reversalToolId: reversal.tool }),
       ...(input.reversesCallId === undefined ? {} : { reversesCallId: input.reversesCallId }),
@@ -293,6 +268,7 @@ export function writeDispatcher(deps: WriteDispatcherDeps): WriteDispatcher {
           ctx,
           confirmed,
           idempotencyKey,
+          executionGrant: input.executionGrant ?? null,
         });
 
         await deps.store.idempotency.complete({

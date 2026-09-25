@@ -106,12 +106,23 @@ export interface ProceedInput {
  */
 export type ProceedHandler = (input: ProceedInput) => Promise<CallToolResult>;
 
+/**
+ * W0-P17 — appends the audit row for a call the chain ended: a refusal, a plan
+ * or approval hand-off, a 6h replay. Required: every call leaves a row.
+ */
+export type DecisionRecordHandler = (input: {
+  readonly call: EntryPointCall & { readonly entryPoint: PolicyEntryPoint };
+  readonly ctx: PolicyContext;
+  readonly decision: Exclude<PolicyDecision, { readonly outcome: 'proceed' }>;
+}) => Promise<unknown>;
+
 export interface ServedSurfaceOptions {
   readonly repoRoot: string;
   readonly catalogue: RuntimeCatalogue;
   /** The stage 6c–6h seams and the execution-grant keyring. */
   readonly runtime: PolicyRuntime;
   readonly execute: ProceedHandler;
+  readonly record: DecisionRecordHandler;
   /** The probe report's per-tool `agentMessage` (02 §4.5). Absent: the refusing predicate's `next`. */
   readonly probeMessages?: AgentMessageSource;
   readonly approvers?: ElevatedApproverSource;
@@ -203,6 +214,28 @@ function metaInputError(tool: string, issues: z.ZodError, correlationId: string)
 }
 
 // --- the surface -------------------------------------------------------------------
+
+/**
+ * Stage 6c ADMITS a call by taking a concurrency slot (`CapsRuntime.check`),
+ * and nothing released it until a dispatcher existed (caps/index.ts's own
+ * header). The call is finished when its decision has been answered — a
+ * refusal after 6c, a plan, a replay or an execution — so the slot is released
+ * here, exactly once, for every call 6c admitted.
+ */
+function releaseConcurrency(
+  call: EntryPointCall,
+  policy: PolicyContext,
+  decision: PolicyDecision,
+): void {
+  const limiter = policy.runtime.rateLimiter as {
+    release?: (call: { readonly toolId: string }, ctx: PolicyContext) => void;
+  };
+  if (typeof limiter.release !== 'function') return;
+  const admittedBy6c =
+    decision.stagesRun.includes('6c') &&
+    !(decision.outcome === 'refused' && decision.stage === '6c');
+  if (admittedBy6c) limiter.release({ toolId: call.toolId }, policy);
+}
 
 function isEstablishedSession(value: unknown): value is EstablishedSession {
   return (
@@ -301,13 +334,19 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
       call: EntryPointCall & { readonly entryPoint: PolicyEntryPoint },
       decision: PolicyDecision,
     ): Promise<CallToolResult> {
-      switch (decision.outcome) {
-        case 'refused':
-          return toolError(decision.error);
-        case 'responded':
-          return toolResult(decision.response);
-        case 'proceed':
-          return options.execute({ call, decision, policy, session: s });
+      try {
+        switch (decision.outcome) {
+          case 'refused':
+            await options.record({ call, ctx: policy, decision });
+            return toolError(decision.error);
+          case 'responded':
+            await options.record({ call, ctx: policy, decision });
+            return toolResult(decision.response);
+          case 'proceed':
+            return await options.execute({ call, decision, policy, session: s });
+        }
+      } finally {
+        releaseConcurrency(call, policy, decision);
       }
     }
 

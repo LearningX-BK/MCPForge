@@ -10,7 +10,7 @@
 // a recording `execute` handler, which is W0-P17's seam.
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -39,11 +39,11 @@ import {
   NO_ROLE_USER,
   REPO_ROOT,
   removeRepo,
-  sessionRepo,
   startSessionWorld,
   type SessionWorld,
 } from './session.test-support.js';
 import { createServedSurface, type ProceedInput, type ServedSurface } from './surface.js';
+import { p2pFunctionRefs, surfaceRepo } from './surface.test-support.js';
 
 const CREATE = 'jde.ap.voucher.create';
 const GET = 'jde.ap.voucher.get';
@@ -62,31 +62,6 @@ const GET_ARGS = { document_number: '9001', document_type: 'PV', document_compan
 interface Parsed {
   readonly isError: boolean;
   readonly body: Record<string, unknown>;
-}
-
-/**
- * The session repo, plus the discovery artefacts the surface reads. With
- * `grantRealRefs`, the p2p role's `function` grant names the binding refs the
- * p2p tools actually declare. TEST WORLD ONLY: the committed grant names
- * AP_VOUCHER, GL_JOURNAL and PO_ORCHESTRATION, which match no manifest's
- * `binding.ref` (grants match by exact ref), so against the committed
- * artefacts no p2p tool is callable. That is an owner decision, flagged in
- * this task's report and exercised as-is by the second suite below.
- */
-function surfaceRepo(grantRealRefs: boolean, refs: readonly string[]): string {
-  const root = sessionRepo([{ consumerId: 'test-agent', writeAllowed: true }]);
-  for (const rel of ['generated/index', 'generated/cards']) {
-    cpSync(join(REPO_ROOT, rel), join(root, rel), { recursive: true });
-  }
-  if (grantRealRefs) {
-    const file = join(root, 'generated', 'roles', 'p2p.scope.json');
-    const role = JSON.parse(readFileSync(file, 'utf8')) as {
-      bindingGrants: Array<{ names: string[] }>;
-    };
-    role.bindingGrants[0]!.names = [...refs];
-    writeFileSync(file, JSON.stringify(role));
-  }
-  return root;
 }
 
 function parse(result: unknown): Parsed {
@@ -138,6 +113,7 @@ describe('W0-P16 — the served surface over /mcp', () => {
       repoRoot: repo,
       catalogue: world.catalogue,
       runtime,
+      record: () => Promise.resolve(),
       execute: (input) => {
         executed.push(input);
         return Promise.resolve({
@@ -365,19 +341,6 @@ describe('W0-P16 — the served surface over /mcp', () => {
   });
 });
 
-/** The `binding.ref` of every `function` tool the committed p2p role grants. */
-async function p2pFunctionRefs(): Promise<readonly string[]> {
-  const { loadRuntimeCatalogue } = await import('./catalogue.js');
-  const catalogue = await loadRuntimeCatalogue({ repoRoot: REPO_ROOT });
-  const p2p = JSON.parse(
-    readFileSync(join(REPO_ROOT, 'generated', 'roles', 'p2p.scope.json'), 'utf8'),
-  ) as { toolIds: string[] };
-  return p2p.toolIds
-    .map((id) => catalogue.entryFor(id))
-    .filter((e) => e !== undefined && e.bindingType === 'function')
-    .map((e) => e!.bindingRef);
-}
-
 describe('W0-P16 — the COMMITTED p2p grant, served as-is', () => {
   let repo: string;
   let world: SessionWorld;
@@ -400,6 +363,7 @@ describe('W0-P16 — the COMMITTED p2p grant, served as-is', () => {
         writeGate: { evaluate: () => ({ kind: 'not-a-write' }) },
         idempotency: { lookup: () => ({ kind: 'proceed' }) },
       },
+      record: () => Promise.resolve(),
       execute: () => Promise.reject(new Error('nothing may execute in this world')),
     });
   });

@@ -57,9 +57,11 @@ import {
 import { buildSchemaJson, readTool, type ToolView } from '@mcpforge/codegen/templates';
 import { codegenVersion, manifestSha256, sortKeysDeep } from '@mcpforge/codegen/emit';
 import {
+  buildDryRunDescriptor,
   buildFunctionBindingDescriptor,
   compileGeneratedSchema,
   type CompiledSchemaValidator,
+  type DryRunDescriptor,
   type FunctionBindingDescriptor,
 } from '@mcpforge/adapter-function';
 import type { ArgumentValidator, PolicyCatalogueEntry } from '../policy/types.js';
@@ -113,6 +115,8 @@ export interface ResolvedTool {
   readonly reversal: ReversalContract | undefined;
   /** Present exactly when `binding.type` is `function`. */
   readonly functionDescriptor: FunctionBindingDescriptor | undefined;
+  /** W0-P17. Present exactly when the tool is a `function` write: the adapter's own dry-run descriptor. */
+  readonly dryRunDescriptor: DryRunDescriptor | undefined;
   /** The committed `generated/tools/<id>/schema.json`, as parsed. */
   readonly schema: Readonly<Record<string, unknown>>;
   /** Compiled Ajv over `schema`. */
@@ -130,6 +134,8 @@ export interface RuntimeCatalogue {
   writeSafetyFor(toolId: string): WriteSafetyView | undefined;
   readonly reversals: ReversalRegistry;
   functionDescriptorFor(toolId: string): FunctionBindingDescriptor | undefined;
+  /** W0-P17 — the validate-pair ladder's input, built by the adapter from the manifest. */
+  dryRunDescriptorFor(toolId: string): DryRunDescriptor | undefined;
   /** The executor's `FunctionCallInput.validate` — the same compiled function 6d uses. */
   schemaValidatorFor(toolId: string): CompiledSchemaValidator | undefined;
   /** Stage 6d. Fails closed for a tool this catalogue does not hold. */
@@ -347,6 +353,8 @@ async function resolveTool(
     const entry = catalogueEntryFor(view, reversal);
     const functionDescriptor =
       view.bindingType === 'function' ? buildFunctionBindingDescriptor(manifest) : undefined;
+    const dryRunDescriptor =
+      view.bindingType === 'function' && view.write ? buildDryRunDescriptor(manifest) : undefined;
     const validate = compileGeneratedSchema(schema);
     return Object.freeze({
       toolId: id,
@@ -356,6 +364,7 @@ async function resolveTool(
       writeSafety,
       reversal,
       functionDescriptor,
+      dryRunDescriptor,
       schema: Object.freeze(schema),
       validate,
     });
@@ -532,6 +541,7 @@ function buildCatalogue(
     writeSafetyFor: (id: string) => tools.get(id)?.writeSafety,
     reversals: reversalRegistry(reversalContracts),
     functionDescriptorFor: (id: string) => tools.get(id)?.functionDescriptor,
+    dryRunDescriptorFor: (id: string) => tools.get(id)?.dryRunDescriptor,
     schemaValidatorFor: (id: string) => tools.get(id)?.validate,
     argumentValidator,
     warnings,

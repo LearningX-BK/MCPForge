@@ -117,6 +117,12 @@ export interface DryRunner {
     readonly entry: PolicyCatalogueEntry;
     readonly writeSafety: WriteSafetyView;
     readonly businessArgs: Readonly<Record<string, unknown>>;
+    /**
+     * W0-P17. The call's context, so a dispatching dry run can bind its
+     * `purpose: 'dry-run'` execution grant to the resolved caller and consumer
+     * (`../execution-grant/dry-run.ts`). Read-only; a dry run decides nothing.
+     */
+    readonly ctx: PolicyContext;
   }): Promise<DryRunOutcome> | DryRunOutcome;
 }
 
@@ -189,8 +195,14 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
     call: PolicyCall,
     entry: PolicyCatalogueEntry,
     view: WriteSafetyView,
+    ctx: PolicyContext,
   ): Promise<
-    | { readonly ok: true; readonly body: ReturnType<typeof buildPlanBody> }
+    | {
+        readonly ok: true;
+        readonly body: ReturnType<typeof buildPlanBody>;
+        /** W0-P17 — the dry run's own approval floor (02 §3.5 degradation). Raise-only. */
+        readonly dryRunRequiresApproval: boolean;
+      }
     | { readonly ok: false; readonly verdict: WriteGateVerdict }
   > {
     if (view.dryRunStrategy === 'none' || view.dryRunStrategy.trim().length === 0) {
@@ -211,10 +223,12 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
       entry,
       writeSafety: view,
       businessArgs: business,
+      ctx,
     });
 
     return {
       ok: true,
+      dryRunRequiresApproval: outcome.humanApprovalRequired === true,
       body: buildPlanBody({
         template: view.planTemplate,
         args: business,
@@ -222,6 +236,16 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
         defaultEffect: defaultEffectOf(entry, view),
         reversal: reversalOf(view),
       }),
+    };
+  }
+
+  /** The fail-closed refusal W0-F1 wrote: no queue, so no approval can be recorded. */
+  function noApprovalQueue(view: WriteSafetyView): WriteGateVerdict {
+    return {
+      kind: 'refuse',
+      code: 'APPROVAL_REQUIRED',
+      message: `${view.toolId} requires a named human approver before a confirm token may be minted, and this gateway has no approval queue configured to record one.`,
+      next: `Do not retry ${view.toolId}. Ask the MCPForge operator to configure the approval queue; until then this tool cannot be executed by anyone, which is the intended failure.`,
     };
   }
 
@@ -236,22 +260,12 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
    */
   async function awaitingApproval(
     call: PolicyCall,
-    entry: PolicyCatalogueEntry,
     view: WriteSafetyView,
+    body: ReturnType<typeof buildPlanBody>,
     callerSubject: string,
     ctx: PolicyContext,
   ): Promise<WriteGateVerdict> {
-    if (deps.approval === undefined) {
-      return {
-        kind: 'refuse',
-        code: 'APPROVAL_REQUIRED',
-        message: `${view.toolId} requires a named human approver before a confirm token may be minted, and this gateway has no approval queue configured to record one.`,
-        next: `Do not retry ${view.toolId}. Ask the MCPForge operator to configure the approval queue; until then this tool cannot be executed by anyone, which is the intended failure.`,
-      };
-    }
-
-    const built = await planBodyFor(call, entry, view);
-    if (!built.ok) return built.verdict;
+    if (deps.approval === undefined) return noApprovalQueue(view);
 
     const raised = await deps.approval.raise({
       toolId: view.toolId,
@@ -262,15 +276,15 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
       // captures the exact plan hash approved, and it is this family of hash
       // and no second scheme.
       argsCanonicalHash: argsCanonicalHash(call.args),
-      planHash: planCanonicalHash(built.body),
-      planSummary: built.body.plan,
+      planHash: planCanonicalHash(body),
+      planSummary: body.plan,
       tokenTtlSeconds: ttlSeconds(view),
     });
 
     return {
       kind: 'respond',
       response: {
-        ...built.body,
+        ...body,
         // Overrides the body's `confirm_required`: this plan is NOT confirmable
         // yet, and an agent that read only `status` must not think it is.
         status: 'awaiting_human_approval',
@@ -282,17 +296,13 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
     };
   }
 
-  async function planVerdict(
+  function planVerdict(
     call: PolicyCall,
-    entry: PolicyCatalogueEntry,
     view: WriteSafetyView,
+    body: ReturnType<typeof buildPlanBody>,
     now: Date,
     callerSubject: string,
-  ): Promise<WriteGateVerdict> {
-    const built = await planBodyFor(call, entry, view);
-    if (!built.ok) return built.verdict;
-    const body = built.body;
-
+  ): WriteGateVerdict {
     const expiresAtMs = now.getTime() + ttlSeconds(view) * 1000;
     const token = mintConfirmToken(
       {
@@ -357,19 +367,36 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
       const isPlan = presented === undefined || presented === null;
 
       if (isPlan) {
-        // Read from BOTH sources and take the union: the catalogue entry and
+        const declaredApproval =
+          view.humanApprovalRequired || entry.humanApprovalRequired === true;
+        if (declaredApproval && deps.approval === undefined) {
+          // Unchanged from W0-F1: no queue to record an approval in, so refuse
+          // BEFORE any outward call, the dry run included.
+          return noApprovalQueue(view);
+        }
+
+        // The dry run runs ONCE, before the approval decision, and both the
+        // approval path and the token path render the same body from it.
+        const built = await planBodyFor(call, entry, view, ctx);
+        if (!built.ok) return built.verdict;
+
+        // Read from EVERY source and take the union: the catalogue entry and
         // the write-safety view are compiled from the same manifest, and if
         // they ever disagree the fail-closed reading is "approval is required".
-        if (view.humanApprovalRequired || entry.humanApprovalRequired === true) {
+        // W0-P17 adds the dry run's own floor: a validate-pair write whose
+        // sibling the probe has not confirmed degrades, and a degraded
+        // `financial` write forces approval (02 §3.5). Raise-only — no source
+        // can lower another.
+        if (declaredApproval || built.dryRunRequiresApproval) {
           // 02 §3.1.1: "No `confirmToken` is minted until a human approves."
           // W0-F6 fills this branch. The plan is still produced — the approver
           // must read the same plan the requester saw (03 §7.4) — but the ONLY
           // outward call it makes is the dry run, and `awaitingApproval` below
           // has no access to `mintConfirmToken`. See ./confirm.test.ts and
           // ../approval/approval.test.ts: no token is minted on this path.
-          return awaitingApproval(call, entry, view, callerSubject, ctx);
+          return awaitingApproval(call, view, built.body, callerSubject, ctx);
         }
-        return planVerdict(call, entry, view, now, callerSubject);
+        return planVerdict(call, view, built.body, now, callerSubject);
       }
 
       if (typeof presented !== 'string' || presented.length === 0) {

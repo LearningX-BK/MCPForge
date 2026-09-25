@@ -35,3 +35,12 @@ export {
   SurfaceArtefactsUnavailable,
   type SurfaceArtefacts,
 } from './surface-artefacts.js';
+// W0-P17 — execute, shape and audit behind the surface's seams.
+export {
+  createCallExecution,
+  rowCountOf,
+  type CallExecution,
+  type CallExecutionOptions,
+  type DecisionRecord,
+} from './execute.js';
+export type { DecisionRecordHandler } from './surface.js';
