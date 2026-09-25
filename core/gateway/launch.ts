@@ -26,9 +26,53 @@
 // side-effect-free helpers that already exist there).
 
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+  createFunctionExecutor,
+  createHttpAisClient,
+  createHttpAisTokenProvider,
+  loadAisTargetsOverlay,
+  validatePairRegistry,
+  type AisClient,
+  type ValidatePairRegistry,
+} from '@mcpforge/adapter-function';
+import { loadProbeReport, probeReportPath } from '@mcpforge/probe';
 import { createGatewayHttpTransport, type GatewayHttpTransport } from './transport/index.js';
 import { ConsumerAuthenticator, readConsumerPresentation } from './transport/index.js';
 import { loadConsumerRegistry } from './consumer/index.js';
+import { openRuntimeStore } from './store/store.js';
+import type { StoreConfig } from './store/config.js';
+import type { RuntimeStore } from './store/repository.js';
+import { EncryptedFileStore, type SecretStore } from './secrets/server.js';
+import { parseSecretRef } from './secrets/index.js';
+import {
+  DEFAULT_LOCAL_AUDIENCE,
+  DEFAULT_LOCAL_ISSUER,
+  localIdentityProvider,
+  localTokenIssuer,
+  localUserStore,
+  type LocalIdentityProvider,
+} from './identity/index.js';
+import { resolveGatewayKeys } from './identity/keys.js';
+import { approvalGate } from './policy/approval/index.js';
+import {
+  confirmWriteGate,
+  executionGrantCheck,
+  functionDryRunner,
+  guardrailEvaluator,
+  idempotencyGate,
+  type PolicyRuntime,
+} from './policy/index.js';
+import { CapsRuntime, loadEffectiveCaps } from './caps/index.js';
+import { createPolledRuntimeFlagSource } from './flags/index.js';
+import {
+  createCallExecution,
+  createServedSurface,
+  createSessionAssembly,
+  loadRuntimeCatalogue,
+  type RuntimeCatalogue,
+} from './assembly/index.js';
 
 /** The closed, two-value vocabulary 02 §6.5 names. Nothing else is a mode. */
 export const GATEWAY_MODES = ['headless', 'full'] as const;
@@ -51,13 +95,11 @@ export function parseGatewayMode(
   const raw = env.MCPFORGE_MODE;
   if (raw === undefined || raw === '') return DEFAULT_MODE;
   if ((GATEWAY_MODES as readonly string[]).includes(raw)) return raw as GatewayMode;
-  throw new Error(
-    `Unknown MCPFORGE_MODE "${raw}" — expected one of: ${GATEWAY_MODES.join(', ')}.`,
-  );
+  throw new Error(`Unknown MCPFORGE_MODE "${raw}" — expected one of: ${GATEWAY_MODES.join(', ')}.`);
 }
 
 export interface LaunchOptions {
-  /** Repo root, for `consumers/**` resolution and the portal's `pnpm -C` cwd. */
+  /** Repo root: manifests, generated/, consumers/, overlays/ and `.mcpforge/`. */
   readonly repoRoot: string;
   /** Defaults to `parseGatewayMode()`. */
   readonly mode?: GatewayMode;
@@ -66,6 +108,14 @@ export interface LaunchOptions {
   readonly gatewayHost?: string;
   /** The assertion audience `[2a]` checks incoming consumer assertions against. */
   readonly audience?: string;
+  /** The overlay directory under `overlays/`. Defaults to `MCPFORGE_DEPLOYMENT`, else `local`. */
+  readonly deployment?: string;
+  /** Defaults to SQLite at `<repoRoot>/.mcpforge/runtime.db` (02 §10.2). */
+  readonly storeConfig?: StoreConfig;
+  /** Defaults to `EncryptedFileStore` under `<repoRoot>` (02 §11.5). Injected by tests. */
+  readonly secretStore?: SecretStore;
+  /** Kill-switch poll interval (02 §4.7, default 5 s). */
+  readonly flagPollMs?: number;
   /**
    * Injectable in tests so `launch.contract.test.ts` can assert *whether* a
    * portal process would be spawned, in which mode, without actually
@@ -81,6 +131,18 @@ export interface LaunchedGateway {
   readonly gatewayPort: number;
   /** Non-null only in `full` mode. */
   readonly portal: ChildProcess | null;
+  /** The runtime store the gateway writes audit and state to. */
+  readonly store: RuntimeStore;
+  /**
+   * The identity provider sessions authenticate humans against. Exposed so the
+   * local issuer's `issueToken` is reachable by a login flow (W0-P19) and by
+   * tests; nothing in the gateway itself issues tokens.
+   */
+  readonly identity: LocalIdentityProvider;
+  /** Refs of gateway keys minted on this start because they did not exist. Refs only. */
+  readonly mintedKeys: readonly string[];
+  /** Startup findings that are not fatal (e.g. a mapping naming a role with no scope). */
+  readonly warnings: readonly string[];
   close(): Promise<void>;
 }
 
@@ -95,40 +157,215 @@ function defaultSpawnPortal(repoRoot: string): ChildProcess {
 }
 
 /**
+ * Probe evidence for `_VALIDATE` siblings (02 §3.5), from the probe report's
+ * own `validatePair` blocks. Only a PASSED probe check counts as present; no
+ * report means no evidence, and every validate-pair write degrades.
+ */
+function validatePairEvidence(repoRoot: string): ValidatePairRegistry {
+  const presence = new Map<string, boolean>();
+  if (existsSync(probeReportPath(repoRoot))) {
+    for (const tool of loadProbeReport(repoRoot).tools) {
+      const pair = tool.validatePair;
+      if (pair !== undefined && pair.expectedRef !== null) {
+        presence.set(pair.expectedRef, pair.present && pair.evidence === 'probe_check');
+      }
+    }
+  }
+  return validatePairRegistry(presence);
+}
+
+/**
+ * One AIS client per module server, from `overlays/<d>/ais-targets.yaml`
+ * (W0-P14), routed by orchestration name. The executor holds ONE client, and
+ * an `AisRequest` names its orchestration, never its server, so the route is
+ * built from the catalogue: every execute ref and every `_VALIDATE` ref maps to
+ * the server its manifest declares. An unrouted orchestration is refused.
+ */
+function routedAisClient(
+  repoRoot: string,
+  deployment: string,
+  catalogue: RuntimeCatalogue,
+  secretStore: SecretStore,
+): AisClient {
+  const overlay = loadAisTargetsOverlay(join(repoRoot, 'overlays', deployment, 'ais-targets.yaml'));
+  const byServer = new Map<string, AisClient>();
+  for (const [serverId, target] of overlay.servers) {
+    byServer.set(
+      serverId,
+      createHttpAisClient({
+        baseUrl: target.baseUrl,
+        tokens: createHttpAisTokenProvider({
+          tokenUrl: target.tokenUrl,
+          clientId: target.clientId,
+          clientCredential: { ref: parseSecretRef(target.clientCredentialRef), secretStore },
+        }),
+      }),
+    );
+  }
+  const serverFor = new Map<string, string>();
+  for (const tool of catalogue.tools.values()) {
+    if (tool.functionDescriptor === undefined) continue;
+    serverFor.set(tool.functionDescriptor.ref, tool.entry.serverId);
+    const validateRef = tool.dryRunDescriptor?.validateRef;
+    if (validateRef !== undefined && validateRef !== null) {
+      serverFor.set(validateRef, tool.entry.serverId);
+    }
+  }
+  return {
+    call(request) {
+      const serverId = serverFor.get(request.orchestration);
+      const client = serverId === undefined ? undefined : byServer.get(serverId);
+      if (client === undefined) {
+        return Promise.reject(
+          new Error(
+            `orchestration ${request.orchestration} has no AIS target: add its server to overlays/${deployment}/ais-targets.yaml`,
+          ),
+        );
+      }
+      return client.call(request);
+    },
+  };
+}
+
+/**
  * Builds and starts the ONE gateway assembly, then — only in `full` mode —
  * spawns the portal as a sibling process. `headless` returns with `portal:
  * null` and never touches `spawnPortal` at all.
+ *
+ * W0-P11: this is the composition root of 02 §4.2's whole request path, and it
+ * composes only. Every stage is the tested library: [2a] the consumer
+ * registry, [2]/[3] the local identity provider over the runtime store, [4]
+ * the session assembly, [5] the served surface, [6] the ten-stage chain with
+ * the real 6c–6h seams and the execution-grant keyring, [7]–[9] the call
+ * execution over the `function` executor and the routed HTTP AIS client. The
+ * executor is constructed HERE and nowhere else in production code
+ * (tests/policy/escalation.trust-boundary.test.ts). Anything that cannot be
+ * built refuses startup; there is no partial gateway.
  */
 export async function launchGateway(options: LaunchOptions): Promise<LaunchedGateway> {
   const mode = options.mode ?? parseGatewayMode();
   const audience = options.audience ?? DEFAULT_AUDIENCE;
+  const repoRoot = options.repoRoot;
+  const deployment = options.deployment ?? process.env['MCPFORGE_DEPLOYMENT'] ?? 'local';
 
-  const registry = loadConsumerRegistry(options.repoRoot);
-  const authenticator = new ConsumerAuthenticator({ registry, audience });
+  const catalogue = await loadRuntimeCatalogue({ repoRoot });
+  const store = await openRuntimeStore(
+    options.storeConfig ?? { kind: 'sqlite', file: join(repoRoot, '.mcpforge', 'runtime.db') },
+  );
+  const cleanups: (() => Promise<void> | void)[] = [() => store.close()];
 
-  const gateway = createGatewayHttpTransport({
-    consumerAuth: {
-      authenticate: (headers, correlationId) =>
-        authenticator.authenticate(readConsumerPresentation(headers), correlationId),
-    },
-  });
-  const { port } = await gateway.listen(options.gatewayPort ?? 0, options.gatewayHost);
+  try {
+    const secretStore = options.secretStore ?? new EncryptedFileStore({ repoRoot });
+    const keys = await resolveGatewayKeys(secretStore);
 
-  const portal =
-    mode === 'full' ? (options.spawnPortal ?? defaultSpawnPortal)(options.repoRoot) : null;
+    // [2]/[3] — the Wave 0 local provider, verifying tokens signed with the
+    // gateway's own key against accounts in the runtime store (W0-D1/D2).
+    const identity = localIdentityProvider({
+      issuer: localTokenIssuer({
+        signingKey: keys.jwtSigning,
+        issuer: DEFAULT_LOCAL_ISSUER,
+        audience: DEFAULT_LOCAL_AUDIENCE,
+      }),
+      source: localUserStore({ store }).principalSource(),
+    });
 
-  return {
-    mode,
-    gateway,
-    gatewayPort: port,
-    portal,
-    async close() {
-      await gateway.close();
-      if (portal) {
-        portal.kill();
-      }
-    },
-  };
+    // ¬KillSwitched — polled from the store (02 §4.7).
+    const flags = createPolledRuntimeFlagSource(store.runtimeFlags);
+    await flags.refreshNow();
+
+    const sessions = createSessionAssembly({ repoRoot, deployment, identity, flags });
+
+    const capsLoaded = loadEffectiveCaps(join(repoRoot, 'overlays', deployment, 'caps.yaml'));
+    if (!capsLoaded.ok) {
+      throw new Error(
+        `overlays/${deployment}/caps.yaml is invalid: ${JSON.stringify(capsLoaded.error)}`,
+      );
+    }
+    const caps = capsLoaded.caps;
+
+    const executor = createFunctionExecutor({
+      client: routedAisClient(repoRoot, deployment, catalogue, secretStore),
+      grants: executionGrantCheck(keys.executionGrant),
+    });
+
+    const scopeHoursFor = (toolId: string): number | undefined =>
+      catalogue.tools.get(toolId)?.view.writeSafety?.idempotencyScopeHours ?? undefined;
+    const runtime: PolicyRuntime = {
+      rateLimiter: new CapsRuntime(caps),
+      argumentValidator: catalogue.argumentValidator,
+      guardrails: guardrailEvaluator({}),
+      writeGate: confirmWriteGate({
+        writeSafetyFor: (id) => catalogue.writeSafetyFor(id),
+        dryRun: functionDryRunner({
+          executor,
+          keyring: keys.executionGrant,
+          descriptorFor: (id) => catalogue.dryRunDescriptorFor(id),
+          validatorFor: (id) => catalogue.schemaValidatorFor(id),
+          registry: validatePairEvidence(repoRoot),
+        }),
+        keyring: keys.confirm,
+        approval: approvalGate({ queue: store.approvals, keyring: keys.confirm }),
+      }),
+      idempotency: idempotencyGate({ store, scopeHoursFor }),
+      executionGrantKeyring: keys.executionGrant,
+    };
+
+    const calls = createCallExecution({ store, catalogue, executor, caps });
+    const surface = createServedSurface({
+      repoRoot,
+      catalogue,
+      runtime,
+      execute: calls.execute,
+      record: calls.record,
+    });
+
+    // Kill switch -> `list_changed` to every live session, on every poll where
+    // the active flag set changed (02 §4.7, §5.8).
+    const flagWatch = surface.watchFlags(flags);
+    const timer = setInterval(() => {
+      void flags
+        .refreshNow()
+        .then(() => flagWatch.checkAndNotify())
+        .catch(() => undefined);
+    }, options.flagPollMs ?? 5000);
+    timer.unref();
+    cleanups.push(() => clearInterval(timer));
+
+    const registry = loadConsumerRegistry(repoRoot);
+    const authenticator = new ConsumerAuthenticator({ registry, audience });
+    const gateway = createGatewayHttpTransport({
+      consumerAuth: {
+        authenticate: (headers, correlationId) =>
+          authenticator.authenticate(readConsumerPresentation(headers), correlationId),
+      },
+      sessions,
+      createServer: (handle) => surface.createServer(handle),
+    });
+    const { port } = await gateway.listen(options.gatewayPort ?? 0, options.gatewayHost);
+    cleanups.unshift(() => gateway.close());
+
+    const portal = mode === 'full' ? (options.spawnPortal ?? defaultSpawnPortal)(repoRoot) : null;
+
+    return {
+      mode,
+      gateway,
+      gatewayPort: port,
+      portal,
+      store,
+      identity,
+      mintedKeys: keys.minted,
+      warnings: [...sessions.warnings, ...catalogue.warnings.map((w) => w.message)],
+      async close() {
+        for (const cleanup of cleanups) await cleanup();
+        if (portal) {
+          portal.kill();
+        }
+      },
+    };
+  } catch (error) {
+    for (const cleanup of cleanups) await cleanup();
+    throw error;
+  }
 }
 
 /**

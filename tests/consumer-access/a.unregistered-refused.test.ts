@@ -17,8 +17,13 @@
 // and the gateway mints no session a caller could then present to ask again.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createGatewayHttpTransport, type ConsumerAuthGate, type GatewayHttpTransport } from '../../core/gateway/transport/http.js';
+import {
+  createGatewayHttpTransport,
+  type ConsumerAuthGate,
+  type GatewayHttpTransport,
+} from '../../core/gateway/transport/http.js';
 import { STUB_TOOL_ID } from '../../core/gateway/transport/stub.test-support.js';
+import type { SessionEstablisher } from '../../core/gateway/transport/session-binding.js';
 import {
   ConsumerAuthenticator,
   readConsumerPresentation,
@@ -46,15 +51,24 @@ describe('W0-N14(a) — an unregistered consumer is refused at session establish
     // caller is about to claim. The credential itself is otherwise flawless —
     // correctly signed, correctly audienced, correctly shaped — so the only
     // reason this is refused is the missing registration.
-    const authenticator = new ConsumerAuthenticator({ registry: testRegistry([]), audience: AUDIENCE });
+    const authenticator = new ConsumerAuthenticator({
+      registry: testRegistry([]),
+      audience: AUDIENCE,
+    });
     const gate: ConsumerAuthGate = {
       authenticate: (headers, correlationId) =>
         authenticator.authenticate(readConsumerPresentation(headers), correlationId),
-      resolveIdentity: (consumer) => {
-        identityResolutions.push(consumer.record.id);
-      },
     };
-    gateway = createGatewayHttpTransport({ consumerAuth: gate });
+    // Step [3] is the session establisher (W0-P15); recording that it ran is
+    // the ordering proof.
+    const sessions: SessionEstablisher<unknown> = {
+      establish: (input) => {
+        identityResolutions.push(input.auth.consumer.record.id);
+        return Promise.resolve({ ok: true, session: {} });
+      },
+      reverify: (session) => Promise.resolve({ ok: true, session }),
+    };
+    gateway = createGatewayHttpTransport({ consumerAuth: gate, sessions });
     const { port } = await gateway.listen(0);
     boundPort = port;
   });

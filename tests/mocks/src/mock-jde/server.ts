@@ -65,6 +65,13 @@ export interface MockJdeConfig {
    * service account). The runtime echo must catch it.
    */
   readonly forceExecutingUser?: string;
+  /**
+   * W0-P11 — what `MCPFORGE_PROBE_ORCHESTRATION_INFO` reports as each
+   * orchestration's deployed version (the probe's `orchestration_version`
+   * check). An orchestration not listed reports NO version, which the probe
+   * fails rather than assumes.
+   */
+  readonly versions?: Readonly<Record<string, string>>;
   readonly now?: () => number;
 }
 
@@ -114,6 +121,19 @@ export const DEFAULT_ORCHESTRATIONS: Readonly<Record<string, OrchestrationHandle
       status: 'CREATED',
     },
   }),
+  // W0-P11 — the GL journal the launched-gateway test writes. The keys are the
+  // ones jde.fin.journal.create declares as result keys.
+  GL_JE_CREATE: ({ inputs }) => ({
+    body: {
+      journal: {
+        batchNumber: String((docSeq += 1)),
+        docNumber: String((docSeq += 1)),
+        docType: String(inputs['document_type'] ?? 'JE'),
+        docCo: String(inputs['company'] ?? ''),
+      },
+      status: 'CREATED',
+    },
+  }),
   AP_VOUCHER_CANCEL: ({ inputs }) => ({
     body: {
       voucher: {
@@ -126,8 +146,28 @@ export const DEFAULT_ORCHESTRATIONS: Readonly<Record<string, OrchestrationHandle
   }),
 };
 
-function genericAnswer({ orchestration, inputs }: OrchestrationContext): OrchestrationAnswer {
-  if (orchestration.endsWith('_VALIDATE')) return { body: { valid: true, warnings: [] } };
+/**
+ * W0-P11 — the probe's three conventions (core/probe/src/run/function-executor.ts,
+ * core/probe/src/identity/whoami.ts), so the REAL probe can run against this
+ * mock: the who-am-I step names the executing `identity`; a `_VALIDATE` sibling
+ * answers with the `validated` structure (02 §3.5, W0-HG2); the orchestration
+ * info step reports the configured `version`, or none.
+ */
+export const PROBE_ORCHESTRATION_INFO = 'MCPFORGE_PROBE_ORCHESTRATION_INFO';
+
+function genericAnswer(
+  { orchestration, inputs, user }: OrchestrationContext,
+  versions: Readonly<Record<string, string>>,
+): OrchestrationAnswer {
+  if (orchestration === PROBE_STEP) return { body: { identity: user } };
+  if (orchestration === PROBE_ORCHESTRATION_INFO) {
+    const name = typeof inputs['orchestration'] === 'string' ? inputs['orchestration'] : '';
+    const version = versions[name];
+    return {
+      body: version === undefined ? { orchestration: name } : { orchestration: name, version },
+    };
+  }
+  if (orchestration.endsWith('_VALIDATE')) return { body: { validated: true, warnings: [] } };
   return { body: { orchestration, echo: inputs } };
 }
 
@@ -236,8 +276,12 @@ export async function startMockJde(
         return;
       }
       const executedAs = config.forceExecutingUser ?? session.user;
-      const handler = handlers[orchestration] ?? genericAnswer;
-      const answer = await handler({ orchestration, inputs, user: executedAs });
+      const context = { orchestration, inputs, user: executedAs };
+      const handler = handlers[orchestration];
+      const answer =
+        handler === undefined
+          ? genericAnswer(context, config.versions ?? {})
+          : await handler(context);
       const status = answer.status ?? 200;
       const version = req.headers['x-mcpforge-orchestration-version'];
       const correlation = req.headers['x-mcpforge-correlation-id'];

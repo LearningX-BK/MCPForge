@@ -81,6 +81,12 @@ function parseBody(body: string): Record<string, unknown> | null {
 
 async function dispatch(
   client: AisClient,
+  /**
+   * W0-P11. The designated probe test identity, carried on the request exactly
+   * as the gateway carries the caller (W0-P14): the HTTP AIS client refuses a
+   * request with no subject, so without it no probe check ever reached a target.
+   */
+  principalSubject: string,
   orchestration: string,
   ctx: ProbeCheckContext,
   inputs: Readonly<Record<string, unknown>> = {},
@@ -94,6 +100,7 @@ async function dispatch(
       inputs,
       signal: controller.signal,
       correlationId: ctx.correlationId,
+      principalSubject,
     });
     if (res.targetError) return { error: res.targetError.message };
     return { status: res.status, body: res.body };
@@ -130,7 +137,12 @@ export function createFunctionProbeExecutor(options: FunctionProbeOptions): Prob
       // is `core/probe/identity`'s and is not re-derived at this layer. That
       // split is deliberate: `verified` is producible from exactly one function
       // in the repository, and it is not this one.
-      const res = await dispatch(options.client, PROBE_WHOAMI_ORCHESTRATION, ctx);
+      const res = await dispatch(
+        options.client,
+        options.testIdentity,
+        PROBE_WHOAMI_ORCHESTRATION,
+        ctx,
+      );
       let outcome: WhoamiOutcome;
       if ('error' in res) {
         outcome = { kind: 'error', reason: res.error };
@@ -160,7 +172,7 @@ export function createFunctionProbeExecutor(options: FunctionProbeOptions): Prob
 
     if (name === 'validate_sibling') {
       const sibling = `${ctx.ref}${VALIDATE_SUFFIX}`;
-      const res = await dispatch(options.client, sibling, ctx);
+      const res = await dispatch(options.client, options.testIdentity, sibling, ctx);
       if ('error' in res) {
         return {
           name,
@@ -190,9 +202,15 @@ export function createFunctionProbeExecutor(options: FunctionProbeOptions): Prob
           detail: 'the manifest declares no binding.refVersion, so there is no version to compare',
         };
       }
-      const res = await dispatch(options.client, PROBE_ORCHESTRATION_INFO, ctx, {
-        orchestration: ctx.ref,
-      });
+      const res = await dispatch(
+        options.client,
+        options.testIdentity,
+        PROBE_ORCHESTRATION_INFO,
+        ctx,
+        {
+          orchestration: ctx.ref,
+        },
+      );
       if ('error' in res) {
         return { name, result: 'fail', detail: `version could not be read: ${res.error}` };
       }

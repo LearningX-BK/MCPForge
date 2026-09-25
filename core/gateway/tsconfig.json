@@ -23,6 +23,8 @@
     "caps/**/*.ts",
     "telemetry/**/*.ts",
     "meta/**/*.ts",
-    "assembly/**/*.ts"
-  ]
+    "assembly/**/*.ts",
+    "secrets/**/*.ts"
+  ],
+  "exclude": ["secrets/**/*.test.ts"]
 }

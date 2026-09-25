@@ -11,9 +11,9 @@
 // none: it imports nothing from `../../identity/**` except the two optional
 // CLAIMS a caller may pass for corroboration, and it cannot resolve, infer or
 // default a human identity even if it wanted to. `../http.ts` calls this
-// before it calls anything else, and its `resolveIdentity` hook — step `[3]` —
-// is unreachable unless this returns `ok: true`. That is the ordering proof;
-// `consumer-auth.test.ts` asserts the hook is never invoked on a refusal.
+// before it calls anything else, and the session establisher — step `[3]`,
+// W0-P15 — is unreachable unless this returns `ok: true`. That is the ordering
+// proof; `consumer-auth.http.test.ts` asserts step [3] never runs on a refusal.
 //
 // **What a refusal here costs the caller: everything.** An unregistered,
 // suspended, expired or retired consumer is refused AT `initialize`. No MCP
