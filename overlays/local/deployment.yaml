@@ -1,0 +1,10 @@
+# MCPForge — what the "local" deployment selects. W0-P15, 02 §6.2.
+#
+# The packages selected into this deployment: the `Deployed` predicate
+# (02 §5.1, axis 1) shows a tool only if it is in one of these packages'
+# compiled selections (generated/packages/<id>.selection.json). Values only.
+apiVersion: mcpforge/v1
+kind: Deployment
+deployment: local
+packages:
+  - jde-fin

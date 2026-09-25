@@ -146,6 +146,9 @@ importers:
       '@mcpforge/codegen':
         specifier: workspace:*
         version: link:../codegen
+      '@mcpforge/probe':
+        specifier: workspace:*
+        version: link:../probe
       '@mcpforge/registry':
         specifier: workspace:*
         version: link:../registry
