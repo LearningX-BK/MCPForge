@@ -25,6 +25,7 @@ import {
   decideEchoCheck,
   skippedEcho,
 } from './identity.js';
+import { AisIdentityRefused, AisTokenProviderUnavailable } from './http/token-provider.js';
 import { applyInputMapping } from './mapping.js';
 import type {
   AisClient,
@@ -150,6 +151,11 @@ export function createFunctionExecutor(options: FunctionExecutorOptions): Functi
           inputs,
           signal: controller.signal,
           correlationId,
+          // W0-P14: the identity the orchestration runs as. From the resolved
+          // session only; `inputs` above cannot carry it.
+          ...(input.principalSubject === undefined
+            ? {}
+            : { principalSubject: input.principalSubject }),
         });
 
         if (controller.signal.aborted) {
@@ -223,6 +229,14 @@ function translateDispatchFailure(
   err: unknown,
 ): unknown {
   if (isForgeError(err)) return err;
+  // W0-P14 — the per-user token exchange refused. Both are raised BEFORE the
+  // orchestration request is sent, so no business record can exist.
+  if (err instanceof AisIdentityRefused) {
+    return adapterErrors.identityUnresolvedAtTarget(descriptor, correlationId, err.message);
+  }
+  if (err instanceof AisTokenProviderUnavailable) {
+    return adapterErrors.tokenProviderUnavailable(descriptor, correlationId, err.message);
+  }
   if (aborted) return adapterErrors.targetTimeout(descriptor, correlationId);
   const message = err instanceof Error ? err.message : String(err);
   if (/abort/i.test(message)) return adapterErrors.targetTimeout(descriptor, correlationId);

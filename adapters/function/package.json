@@ -15,7 +15,8 @@
   "dependencies": {
     "@mcpforge/shared": "workspace:*",
     "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1"
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

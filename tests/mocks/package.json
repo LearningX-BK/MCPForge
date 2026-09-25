@@ -11,10 +11,13 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --build --force",
-    "refresh:fixtures": "tsx scripts/refresh-fixtures.ts"
+    "refresh:fixtures": "tsx scripts/refresh-fixtures.ts",
+    "mock-jde": "tsx scripts/mock-jde.ts"
   },
   "dependencies": {
-    "@mcpforge/adapter-function": "workspace:*"
+    "@mcpforge/adapter-function": "workspace:*",
+    "@mcpforge/shared": "workspace:*",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
