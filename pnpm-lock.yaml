@@ -137,6 +137,12 @@ importers:
 
   core/gateway:
     dependencies:
+      '@mcpforge/adapter-function':
+        specifier: workspace:*
+        version: link:../../adapters/function
+      '@mcpforge/codegen':
+        specifier: workspace:*
+        version: link:../codegen
       '@mcpforge/registry':
         specifier: workspace:*
         version: link:../registry
@@ -189,9 +195,6 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
-      '@mcpforge/adapter-function':
-        specifier: workspace:*
-        version: link:../../adapters/function
       '@testcontainers/postgresql':
         specifier: ^12.1.0
         version: 12.1.0
