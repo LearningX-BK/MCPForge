@@ -86,13 +86,12 @@ export interface GatewayHttpTransportOptions {
   readonly serverInfo?: GatewayServerInfo;
   readonly sessionStore?: McpSessionStore;
   /**
-   * Factory for the `McpServer` behind each new session. Defaults to
-   * `() => createGatewayMcpServer(serverInfo)` — a fresh skeleton per
-   * session, exactly W0-E1's behaviour. Overriding it lets a caller (a real
-   * gateway process, or a W0-E5 kill-switch pipeline test) hold the SAME
-   * server instance the HTTP layer connects, so it can call
-   * `server.sendToolListChanged()` and have that notification travel the
-   * real Streamable HTTP wire to a real client.
+   * Factory for the `McpServer` behind each new session. The gateway assembly
+   * supplies it (`../assembly/surface.ts`, W0-P16): it serves the four
+   * meta-tools, the role-scoped `tools/list` and `tools/call` through the
+   * policy chain over the session handle below. Absent, each session gets
+   * `createGatewayMcpServer(serverInfo)` with no surface — nothing listed,
+   * every call refused. There is no default tool.
    */
   readonly createServer?: (session?: SessionHandle<unknown>) => McpServer;
   /**

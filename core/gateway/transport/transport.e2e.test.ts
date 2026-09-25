@@ -13,7 +13,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { createGatewayHttpTransport, type GatewayHttpTransport } from './http.js';
-import { STUB_TOOL_ID } from './server.js';
+import { createStubMcpServer, STUB_TOOL_ID } from './stub.test-support.js';
 import { ConsumerAuthenticator, readConsumerPresentation } from './consumer-auth/index.js';
 import {
   generateTestConsumerKeypair,
@@ -56,6 +56,7 @@ describe('W0-E1 MCP transport skeleton (e2e over real Streamable HTTP)', () => {
       audience: AUDIENCE,
     });
     gateway = createGatewayHttpTransport({
+      createServer: () => createStubMcpServer(),
       consumerAuth: {
         authenticate: (headers, correlationId) =>
           authenticator.authenticate(readConsumerPresentation(headers), correlationId),

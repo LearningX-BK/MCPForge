@@ -14,7 +14,7 @@ import {
   type ConsumerAuthGate,
   type GatewayHttpTransport,
 } from '../http.js';
-import { STUB_TOOL_ID } from '../server.js';
+import { createStubMcpServer, STUB_TOOL_ID } from '../stub.test-support.js';
 import {
   ConsumerAuthenticator,
   assertNoRegistrationEndpoint,
@@ -58,7 +58,10 @@ async function startGateway(
       identityResolutions.push(consumer.record.id);
     },
   };
-  const gateway = createGatewayHttpTransport({ consumerAuth: gate });
+  const gateway = createGatewayHttpTransport({
+    consumerAuth: gate,
+    createServer: () => createStubMcpServer(),
+  });
   const { port } = await gateway.listen(0);
   return {
     gateway,

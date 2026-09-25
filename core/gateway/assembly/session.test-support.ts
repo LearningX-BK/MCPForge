@@ -37,6 +37,7 @@ import {
   type GatewayHttpTransport,
   type SessionHandle,
 } from '../transport/index.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createGatewayMcpServer } from '../transport/server.js';
 import {
   generateTestConsumerKeypair,
@@ -153,6 +154,10 @@ export async function startSessionWorld(input: {
   /** Omitted: every tool resolved. `'repo-default'`: the assembly's own default (the repo's probe report). */
   readonly probe?: ProbeStatusSource | 'repo-default';
   readonly consumerRecord?: (id: string, keypair: TestKeypair) => ConsumerRecord;
+  /** W0-P16: the server factory. Omitted: a server with no surface. */
+  readonly createServer?: (handle: SessionHandle<unknown>) => McpServer;
+  /** W0-P16: the runtime-flags source, when the caller must share it. */
+  readonly flags?: ReturnType<typeof inMemoryRuntimeFlags>;
 }): Promise<SessionWorld> {
   const catalogue = await sharedCatalogue();
   const keypair = await generateTestConsumerKeypair();
@@ -161,7 +166,7 @@ export async function startSessionWorld(input: {
     issuer: DEFAULT_LOCAL_ISSUER,
     audience: DEFAULT_LOCAL_AUDIENCE,
   });
-  const flags = inMemoryRuntimeFlags();
+  const flags = input.flags ?? inMemoryRuntimeFlags();
   const users = [...(input.users ?? [CLERK, NO_ROLE_USER])];
   const identity = localIdentityProvider({
     issuer,
@@ -205,8 +210,9 @@ export async function startSessionWorld(input: {
     sessions: assembly,
     createServer: (handle) => {
       if (handle !== undefined) handles.push(handle);
-      // The W0-E1 skeleton server: this task binds the session; serving the
-      // real surface over it is W0-P16.
+      if (handle !== undefined && input.createServer !== undefined) {
+        return input.createServer(handle);
+      }
       return createGatewayMcpServer();
     },
   });

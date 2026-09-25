@@ -10,12 +10,14 @@
 // through W0-E5's `ToolListChangedNotifier`, the same seam the kill switch
 // already drives. Nothing here re-derives a decision one of those tasks made.
 //
-// THE SEAMS BELOW EXIST BECAUSE THE GATEWAY MAY NOT IMPORT CODEGEN. The card
+// THE SEAMS BELOW KEEP THE META LAYER FREE OF LOADING. The card
 // (`generated/cards/<id>.json`) and the full description (02 §5.3(c)) are
-// codegen artefacts; `@mcpforge/codegen` depends on `@mcpforge/registry`, and
-// a gateway→codegen import would drag the whole authoring pipeline into the
-// runtime. So the meta layer takes the *loaded artefacts* as sources, exactly
-// as the ranker takes the resolved visible SET rather than the resolver.
+// codegen artefacts. The owner's 25 Sep 2026 decision (W0-P13) lets the
+// gateway ASSEMBLY import `@mcpforge/codegen`, and it is the assembly
+// (`../assembly/surface.ts`, W0-P16) that loads the cards and builds the
+// descriptions with codegen's own builders. This layer still takes them as
+// sources, exactly as the ranker takes the resolved visible SET rather than
+// the resolver, so the meta suites run over fixtures with no repo on disk.
 
 import type { CatalogueIndex } from '@mcpforge/registry/index';
 import type { ConsumptionCounts, FloorConfig } from '@mcpforge/registry/rank';
