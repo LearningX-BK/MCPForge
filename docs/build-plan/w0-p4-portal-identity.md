@@ -1,6 +1,6 @@
 # W0-P4 — Portal viewer identity and persona-bound action gating
 
-**Status: WRITTEN 25 Sep 2026 — AWAITING THE OWNER'S DECISION (§8).** This note is the whole of `W0-P4`; no code was written.
+**Status: WRITTEN 25 Sep 2026 — AWAITING THE OWNER'S DECISION (§8). Decision 1 revised by the owner the same day: sign-in is multi-mode (§2.1).** This note is the whole of `W0-P4`; no code was written.
 Author: build lane (Opus), 25 Sep 2026. Reads: 03 §2, 05 §1.3, 02 §4.4, and `w0-p2-portal-gateway-seam.md` §7.
 
 ---
@@ -37,6 +37,28 @@ The portal has no idea who is looking at it. There is no login, no session and n
 - **Where the token lives.** In the portal **server**, in an httpOnly, `SameSite=Strict`, `Secure`-when-not-localhost cookie session. It is never readable by browser script and never rendered. The portal server attaches it as `Authorization: Bearer` to every `/api/v1/**` read and every `/mcp` session it opens, next to `portal-local`'s consumer credential. Both are required on every request (non-negotiable 6). On expiry the viewer is asked to sign in again. I am not proposing refresh tokens at Wave 0; a 15-minute re-prompt is the cost, and it is stated.
 - **R8 consequence.** None new. The portal imports nothing from `@mcpforge/gateway` to do this; `portal-http-boundary.ts`'s allowlist does not grow.
 - **Overlap with `W0-P19`.** The same endpoint is the natural answer to "how does a human get a token for an external agent" (option 2 of P19). I recommend deciding them together but keeping P19's note separate, because P19 also has to settle printing a token once, the CLI and `CI=true` refusal.
+
+### 2.1 Owner revision, 25 Sep 2026 — sign-in is multi-mode
+
+The owner's words: *"1 can be multiple mode, like Agentis, the one you are building, or can be Azure, Intra, OCI IAM, Local etc."* So the portal does not sign in against "local now, AD later". It signs in against **whichever identity provider a deployment configures**, and the design must not privilege any of them. How each named mode maps onto the existing seam:
+
+| Mode | Protocol | What it is in code |
+|---|---|---|
+| **Local** | the gateway is the authority: `POST /auth/local/token` | the existing `local` provider (`LocalUserStore` + `localTokenIssuer`) |
+| **Azure / Entra ID** | OIDC, authorization code + PKCE | a **configuration** of the existing `oidc` provider (issuer, client id, groups claim); no new code |
+| **OCI IAM** (Identity Domains) | OIDC, authorization code + PKCE | the same: a configuration of `oidc` |
+| **"the one you are building"** (read as: MCPForge's own local issuer) | as Local | as Local |
+| **Agentis** | **unknown to me; needs the owner** | if it speaks OIDC, a configuration of `oidc`; if not, a new `IdentityProvider` implementation that must pass the one identity contract suite (02 §4.4 item 2) before it is used |
+
+**What changes in the design.**
+
+1. **The overlay block becomes a list.** `identity.providers: [{ id, kind: local | oidc, ... }]`, replacing the single `identity.provider`. Each entry is values only (issuer, client id, groups claim, discovery URL, a `secretRef://` for any client secret). The overlay-purity rule is unchanged. The portal's sign-in page lists the configured providers; one configured provider means no chooser.
+2. **Subjects are issuer-qualified whenever more than one provider is configured.** Two providers can mint the same `sub` for different people. `Principal.subject`, the only identity value written to audit, role mappings and idempotency keys (02 §4.4 item 3), must be unambiguous, so it becomes `<providerId>:<sub>`. The local provider already does this (`local:<uuid>`). **This touches audit and mappings, so it must be decided before the first multi-provider deployment writes a row.** `forge identity remap` (02 §4.4 item 3) is the migration tool it already names.
+3. **Group-to-role mapping keys are per provider.** An Entra group object id and an OCI IAM group name are different namespaces, so the mapping file is keyed `groups: { <providerId>: { <group>: { roles: [...] } } }`. The alternative is one mapping file per provider.
+4. **Tokens.** OIDC tokens are verified against each provider's JWKS; the gateway is only a Resource Server for them. `POST /auth/local/token` exists only when a `local` provider is configured.
+5. **Nothing downstream changes.** Every consumer of identity still sees one `Principal`. The consumer ∩ human intersection (non-negotiable 6) is per call, whichever provider resolved the human.
+
+**Still open for the owner:** (i) what Agentis is and whether it speaks OIDC; (ii) whether several providers are active **at once** in one deployment (which requires item 2), or exactly one per deployment chosen by overlay (item 2 then becomes a safety net rather than a necessity).
 
 **Personas (03 §2): a lens bound to held roles.** Personas are derived, never chosen freely. Recommendation: a `personas:` block in the **same git mapping file** that already maps groups to roles (`overlays/<d>/mappings/groups-to-roles.yaml`). It maps groups to any of `developer`, `business`, `admin`, so persona eligibility is reviewed in the same diff as the role grant it rides on. A viewer eligible for no persona still signs in, sees every page, and holds no gated action (§3).
 
@@ -92,7 +114,7 @@ It **may not**: approve its own proposal; approve a runtime write the gateway's 
 
 ## 8. Decisions the owner needs to make
 
-1. **Sign-in through the gateway** (`POST /auth/local/token` at Wave 0, PKCE against AD at Wave 1), with the token held in a portal-server httpOnly cookie. *Recommended.*
+1. **Sign-in is multi-mode (owner, 25 Sep 2026; §2.1).** Local through the gateway (`POST /auth/local/token`), and Entra ID, OCI IAM and other OIDC IdPs through authorization code + PKCE, chosen by an `identity.providers` list in the overlay. The token is held in a portal-server httpOnly cookie. **Open:** what Agentis is, and one provider per deployment vs several at once.
 2. **Personas from a `personas:` block in the git groups-to-roles mapping.** *Recommended*, or name another source.
 3. **Proposer ≠ approver for definitional changes**, enforced in the portal and by a new `forge validate` rule, with pre-rule records grandfathered as warnings. *Recommended.*
 4. **Kill from the portal**: show the `forge kill` command now, and give it a real write path in a later task. *Recommended.*
