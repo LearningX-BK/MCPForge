@@ -48,7 +48,7 @@ The owner's words: *"1 can be multiple mode, like Agentis, the one you are build
 | **Azure / Entra ID** | OIDC, authorization code + PKCE | a **configuration** of the existing `oidc` provider (issuer, client id, groups claim); no new code |
 | **OCI IAM** (Identity Domains) | OIDC, authorization code + PKCE | the same: a configuration of `oidc` |
 | **"the one you are building"** (read as: MCPForge's own local issuer) | as Local | as Local |
-| **Agentis** | **unknown to me; needs the owner** | if it speaks OIDC, a configuration of `oidc`; if not, a new `IdentityProvider` implementation that must pass the one identity contract suite (02 §4.4 item 2) before it is used |
+| **Agentis** | a peer agent gateway (owner, 25 Sep 2026), with its own local store or federating to Entra/OCI; see §2.2 | a configuration of `oidc` when Agentis publishes OIDC discovery + JWKS; otherwise its own `IdentityProvider`, passing the shared contract suite first |
 
 **What changes in the design.**
 
@@ -58,7 +58,16 @@ The owner's words: *"1 can be multiple mode, like Agentis, the one you are build
 4. **Tokens.** OIDC tokens are verified against each provider's JWKS; the gateway is only a Resource Server for them. `POST /auth/local/token` exists only when a `local` provider is configured.
 5. **Nothing downstream changes.** Every consumer of identity still sees one `Principal`. The consumer ∩ human intersection (non-negotiable 6) is per call, whichever provider resolved the human.
 
-**Still open for the owner:** (i) what Agentis is and whether it speaks OIDC; (ii) whether several providers are active **at once** in one deployment (which requires item 2), or exactly one per deployment chosen by overlay (item 2 then becomes a safety net rather than a necessity).
+**Decided by the owner, 25 Sep 2026: several providers may be active at once in one deployment.** Items 1–3 above are therefore requirements, not options. Subjects are issuer-qualified (`<providerId>:<sub>`) from the first row written, and the sign-in page offers a chooser whenever more than one provider is configured.
+
+### 2.2 Agentis — two relationships, kept apart
+
+The owner: *"It's another Agent Gateway you are helping me build, it can have local store or can connect to others like entra or OCI."* A peer gateway can stand in two different relationships to MCPForge, and they must not be merged, because merging them is exactly how a service-account fallback gets in.
+
+1. **Agentis as an identity provider.** A human signs in to MCPForge (portal or agent session) with an identity Agentis issued. This is supported as an `oidc` configuration when Agentis publishes OIDC discovery and a JWKS, and puts the **human** in `sub`. Recommendation, since both gateways are being built together: Agentis's local issuer emits the same OIDC-shaped claim set MCPForge's does (`sub`, `groups`, `iat`, `exp`, `amr`, 02 §4.4). Then no new code is needed on either side. When Agentis itself federates to Entra or OCI IAM, MCPForge should trust **that** IdP directly rather than through Agentis: one hop fewer, and the subject is the IdP's own.
+2. **Agentis as a consumer.** Agentis's agents call MCPForge's `/mcp` for their users. Then Agentis is a **registered consumer** (a reviewed git record in `consumers/`, 05 §1.3.2), and every call must still carry the human: either the user's own token, or one exchanged for it (RFC 8693 token exchange, `act` claim naming Agentis). **An Agentis service token standing in for its users is never sufficient.** It is the consumer-only path non-negotiable 6 forbids, and a substitute identity non-negotiable 1 forbids. Audit then records `consumer_id = agentis-<deployment>` and `caller_subject = <the human>`, exactly as for any other consumer.
+
+**Not decided here:** the token-exchange wire details between the two gateways. That belongs in a joint MCPForge↔Agentis note once Agentis's issuer exists.
 
 **Personas (03 §2): a lens bound to held roles.** Personas are derived, never chosen freely. Recommendation: a `personas:` block in the **same git mapping file** that already maps groups to roles (`overlays/<d>/mappings/groups-to-roles.yaml`). It maps groups to any of `developer`, `business`, `admin`, so persona eligibility is reviewed in the same diff as the role grant it rides on. A viewer eligible for no persona still signs in, sees every page, and holds no gated action (§3).
 
@@ -114,7 +123,7 @@ It **may not**: approve its own proposal; approve a runtime write the gateway's 
 
 ## 8. Decisions the owner needs to make
 
-1. **Sign-in is multi-mode (owner, 25 Sep 2026; §2.1).** Local through the gateway (`POST /auth/local/token`), and Entra ID, OCI IAM and other OIDC IdPs through authorization code + PKCE, chosen by an `identity.providers` list in the overlay. The token is held in a portal-server httpOnly cookie. **Open:** what Agentis is, and one provider per deployment vs several at once.
+1. **Sign-in is multi-mode (owner, 25 Sep 2026; §2.1).** Local through the gateway (`POST /auth/local/token`), and Entra ID, OCI IAM and other OIDC IdPs through authorization code + PKCE, chosen by an `identity.providers` list in the overlay. The token is held in a portal-server httpOnly cookie. **Decided:** several providers at once, with issuer-qualified subjects. Agentis is supported as an OIDC-shaped issuer and, separately, as a registered consumer relaying its humans (§2.2).
 2. **Personas from a `personas:` block in the git groups-to-roles mapping.** *Recommended*, or name another source.
 3. **Proposer ≠ approver for definitional changes**, enforced in the portal and by a new `forge validate` rule, with pre-rule records grandfathered as warnings. *Recommended.*
 4. **Kill from the portal**: show the `forge kill` command now, and give it a real write path in a later task. *Recommended.*
