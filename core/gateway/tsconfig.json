@@ -22,6 +22,7 @@
     "flags/**/*.ts",
     "caps/**/*.ts",
     "telemetry/**/*.ts",
-    "meta/**/*.ts"
+    "meta/**/*.ts",
+    "assembly/**/*.ts"
   ]
 }

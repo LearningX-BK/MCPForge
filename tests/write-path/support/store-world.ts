@@ -27,19 +27,20 @@
 // green tick. Nothing here restates a manifest value; the checks below are
 // assertions ABOUT agreement, not a second copy of the data.
 //
-// DISCLOSED WORKAROUND, scoped to this file. There is no committed
-// generated-test harness or gateway composition root yet that turns
-// `generated/tools/**` into a `PolicyCatalogueEntry` — that is `W0-B10`, which is
-// not dispatched, and W0-F8 is explicitly forbidden from doing its work. So the
-// two builders below (`catalogueEntryFor`, `writeSafetyViewFor`) do that mapping
-// here, for these two tools, using codegen's OWN `readTool` rather than a second
-// hand-rolled parser. When W0-B10 lands its resolver this file should call it and
-// delete both builders. Flagged in W0-F8's report, not buried here.
+// [W0-P13] THE WORKAROUND THIS FILE USED TO DISCLOSE IS GONE. Until W0-P13
+// this file carried two hand builders (`catalogueEntryFor`,
+// `writeSafetyViewFor`) and a module-load agreement check against
+// `generated/tools/<id>/tool.ts`, because no composition root turned the
+// committed artefacts into runtime objects. That root now exists:
+// `core/gateway/assembly/` loads `manifests/` through `forge validate`'s own
+// rules, cross-checks every tool against its committed registration and
+// `schema.json` (drift refuses to load), and resolves the catalogue entry, the
+// write-safety view, the reversal registry and the compiled-Ajv 6d validator
+// for all 11 tools. This world takes all four from it and builds none of them.
 //
-// STILL NOT REAL, and named honestly: stage 6e's argument validator is still the
-// fixture's always-valid stub (the compiled-Ajv wiring is W0-B10's), and the
-// target system is a mock. Everything else on the path — 6a…6h — is the shipped
-// code.
+// STILL NOT REAL, and named honestly: the target system is a mock. Everything
+// on the path, 6a through 6h, INCLUDING stage 6d's argument validation (now the
+// compiled Ajv over each tool's committed `schema.json`), is the shipped code.
 //
 // SEAM FOR A LIVE TARGET: everything downstream of `mockTarget()` — the
 // context, the dispatcher, `planConfirmExecute` — takes a `WriteTargetInvoker`
@@ -54,13 +55,6 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  BINDING_TYPES,
-  SENSITIVITIES,
-  type BindingType,
-  type Guardrail,
-  type Sensitivity,
-} from '@mcpforge/shared';
 import { openRuntimeStore } from '../../../core/gateway/store/store.js';
 import type { RuntimeStore } from '../../../core/gateway/store/repository.js';
 import { runPolicyChain } from '../../../core/gateway/policy/chain.js';
@@ -94,12 +88,8 @@ import {
   type WriteDispatcher,
 } from '../../../core/gateway/policy/idempotency/dispatch.js';
 import type { WriteTargetInvoker } from '../../../core/gateway/policy/idempotency/types.js';
-import { reversalRegistry } from '../../../core/gateway/reversal/registry.js';
 import type { ReversalContract, ReversalExecutor } from '../../../core/gateway/reversal/types.js';
-import { loadManifestFile } from '../../../core/codegen/src/validate/loader.js';
-import { readTool, type ToolView } from '../../../core/codegen/src/templates/manifest-view.js';
-import { toolRegistration as CREATE_REGISTRATION } from '../../../generated/tools/jde.ap.voucher.create/tool.js';
-import { toolRegistration as CANCEL_REGISTRATION } from '../../../generated/tools/jde.ap.voucher.cancel/tool.js';
+import { loadRuntimeCatalogue } from '../../../core/gateway/assembly/index.js';
 
 export { TOOLS };
 
@@ -119,68 +109,23 @@ export const CREATE_ARGS = {
   company: '00100',
 } as const;
 
-// --- the real manifests, read with codegen's own reader ----------------------
+// --- the runtime catalogue: the gateway's own resolver (W0-P13) ---------------
+//
+// Loading it IS the drift check: a manifest that fails `forge validate`, or a
+// generated artefact that has drifted from its manifest, throws here, at module
+// load, and no suite in this directory can produce a green tick over it.
 
-function manifestView(relPath: string): ToolView {
-  const file = loadManifestFile(REPO_ROOT, join(REPO_ROOT, relPath));
-  if (file.doc === undefined) {
-    throw new Error(`W0-F8: ${relPath} could not be parsed: ${file.parseError ?? 'unknown error'}`);
-  }
-  return readTool(file.doc);
+export const CATALOGUE = await loadRuntimeCatalogue({ repoRoot: REPO_ROOT });
+
+function resolved(toolId: string) {
+  const tool = CATALOGUE.tools.get(toolId);
+  if (tool === undefined) throw new Error(`W0-P13: ${toolId} is not in the runtime catalogue`);
+  return tool;
 }
 
-export const CREATE_VIEW = manifestView('manifests/jde/fin/ap/voucher.create.tool.yaml');
-export const CANCEL_VIEW = manifestView('manifests/jde/fin/ap/voucher.cancel.tool.yaml');
-
-/**
- * The generated registration is what the gateway is actually served. If it has
- * drifted from the manifest this world reads, every fact below is suspect, so
- * this throws at module load rather than letting a suite report a green tick
- * over a stale artefact.
- */
-function assertGeneratedAgrees(
-  view: ToolView,
-  registration: typeof CREATE_REGISTRATION | typeof CANCEL_REGISTRATION,
-): void {
-  const ws = view.writeSafety;
-  if (ws === null) throw new Error(`W0-F8: ${view.id} declares no writeSafety block`);
-  const mismatches: string[] = [];
-  const check = (field: string, fromManifest: unknown, fromGenerated: unknown): void => {
-    if (JSON.stringify(fromManifest) !== JSON.stringify(fromGenerated)) {
-      mismatches.push(
-        `${field}: manifest=${JSON.stringify(fromManifest)} generated=${JSON.stringify(fromGenerated)}`,
-      );
-    }
-  };
-  check('id', view.id, registration.id);
-  check('version', view.version, registration.version);
-  check('write', view.write, registration.write);
-  check('sensitivity', view.sensitivity, registration.sensitivity);
-  check('binding.type', view.bindingType, registration.binding.type);
-  check('binding.ref', view.bindingRef, registration.binding.ref);
-  check(
-    'writeSafety.humanApprovalRequired',
-    ws.humanApprovalRequired,
-    registration.writeSafety.humanApprovalRequired,
-  );
-  check('writeSafety.reversal.class', ws.reversalClass, registration.writeSafety.reversalClass);
-  check('writeSafety.reversal.tool', ws.reversalTool, registration.writeSafety.reversalTool);
-  check('writeSafety.dryRun.strategy', ws.dryRunStrategy, registration.writeSafety.dryRunStrategy);
-  check(
-    'writeSafety.idempotency.scopeHours',
-    ws.idempotencyScopeHours,
-    registration.writeSafety.idempotencyScopeHours,
-  );
-  check('writeSafety.guardrails', ws.guardrails, registration.writeSafety.guardrails);
-  if (mismatches.length > 0) {
-    throw new Error(
-      `W0-F8: generated/tools/${view.id}/tool.ts has drifted from its manifest — ${mismatches.join('; ')}. Run forge codegen.`,
-    );
-  }
-}
-
-assertGeneratedAgrees(CREATE_VIEW, CREATE_REGISTRATION);
-assertGeneratedAgrees(CANCEL_VIEW, CANCEL_REGISTRATION);
+/** Codegen's own view of each manifest, as the resolver read it. */
+export const CREATE_VIEW = resolved(TOOLS.voucherCreate).view;
+export const CANCEL_VIEW = resolved(TOOLS.voucherCancel).view;
 
 /**
  * The write-safety posture this world REQUIRES of these two tools, asserted (not
@@ -212,105 +157,26 @@ function assertPosture(): void {
 
 assertPosture();
 
-// --- manifest -> the two runtime views ---------------------------------------
-//
-// The mapping W0-B10's resolver will own. Nothing invents a value: every field
-// is read off the manifest view above.
+export const VOUCHER_CREATE: WriteSafetyView = CATALOGUE.writeSafetyFor(TOOLS.voucherCreate)!;
+export const VOUCHER_CANCEL: WriteSafetyView = CATALOGUE.writeSafetyFor(TOOLS.voucherCancel)!;
 
-function reversalContractFor(view: ToolView): ReversalContract {
-  const ws = view.writeSafety!;
-  const argMap = ws.reversalArgMap;
-  return {
-    class: ws.reversalClass as ReversalContract['class'],
-    ...(ws.reversalTool === null ? {} : { tool: ws.reversalTool }),
-    ...(Object.keys(argMap).length === 0 ? {} : { argMap }),
-  };
-}
-
-function writeSafetyViewFor(view: ToolView): WriteSafetyView {
-  const ws = view.writeSafety!;
-  return {
-    toolId: view.id,
-    toolVersion: view.version,
-    planTemplate: ws.planTemplate ?? '',
-    tokenTtlSeconds: ws.confirmTokenTtlSeconds ?? 300,
-    humanApprovalRequired: ws.humanApprovalRequired,
-    reversal: reversalContractFor(view),
-    dryRunStrategy: ws.dryRunStrategy ?? 'none',
-    entity: view.entity,
-    verb: view.verb,
-  };
-}
-
-/**
- * `readTool` answers with plain strings (it reads an untyped YAML document);
- * the catalogue's own types are the closed lists. These narrow by CHECKING, so a
- * manifest carrying a binding type or sensitivity the gateway does not know
- * fails loudly here rather than being cast into the catalogue.
- */
-function asBindingType(value: string, toolId: string): BindingType {
-  if (!(BINDING_TYPES as readonly string[]).includes(value)) {
-    throw new Error(`W0-F8: ${toolId} declares an unknown binding type ${value}`);
-  }
-  return value as BindingType;
-}
-
-function asSensitivity(value: string, toolId: string): Sensitivity {
-  if (!(SENSITIVITIES as readonly string[]).includes(value)) {
-    throw new Error(`W0-F8: ${toolId} declares an unknown sensitivity ${value}`);
-  }
-  return value as Sensitivity;
-}
-
-function catalogueEntryFor(view: ToolView): PolicyCatalogueEntry {
-  const ws = view.writeSafety!;
-  return {
-    toolId: view.id,
-    serverId: view.server,
-    bindingType: asBindingType(view.bindingType, view.id),
-    sensitivity: asSensitivity(view.sensitivity, view.id),
-    write: view.write,
-    toolVersion: view.version,
-    bindingRef: view.bindingRef,
-    policyException: view.policyException,
-    humanApprovalRequired: ws.humanApprovalRequired,
-    guardrails: ws.guardrails as readonly Guardrail[],
-    reversal: reversalContractFor(view),
-    resultKeys: view.resultKeys,
-  };
-}
-
-export const VOUCHER_CREATE: WriteSafetyView = writeSafetyViewFor(CREATE_VIEW);
-export const VOUCHER_CANCEL: WriteSafetyView = writeSafetyViewFor(CANCEL_VIEW);
-
-export const CREATE_REVERSAL: ReversalContract = reversalContractFor(CREATE_VIEW);
-export const CANCEL_REVERSAL: ReversalContract = reversalContractFor(CANCEL_VIEW);
-
-const ENTRIES: Readonly<Record<string, PolicyCatalogueEntry>> = {
-  [TOOLS.voucherCreate]: catalogueEntryFor(CREATE_VIEW),
-  [TOOLS.voucherCancel]: catalogueEntryFor(CANCEL_VIEW),
-};
+export const CREATE_REVERSAL: ReversalContract = CATALOGUE.reversals.contractFor(
+  TOOLS.voucherCreate,
+)!;
+export const CANCEL_REVERSAL: ReversalContract = CATALOGUE.reversals.contractFor(
+  TOOLS.voucherCancel,
+)!;
 
 /** The catalogue entry the chain resolves — the real one, not a fixture. */
 export function entryFor(toolId: string): PolicyCatalogueEntry {
-  const found = ENTRIES[toolId];
+  const found = CATALOGUE.entryFor(toolId);
   if (found === undefined) throw new Error(`no real catalogue entry for ${toolId}`);
   return found;
 }
 
-const CATALOGUE: readonly PolicyCatalogueEntry[] = Object.values(ENTRIES);
-
-const WRITE_SAFETY: Readonly<Record<string, WriteSafetyView>> = {
-  [TOOLS.voucherCreate]: VOUCHER_CREATE,
-  [TOOLS.voucherCancel]: VOUCHER_CANCEL,
-};
-
 export const DRY_RUN: DryRunner = { plan: () => ({ warnings: [], planValues: {} }) };
 
-export const REGISTRY = reversalRegistry({
-  [TOOLS.voucherCreate]: CREATE_REVERSAL,
-  [TOOLS.voucherCancel]: CANCEL_REVERSAL,
-});
+export const REGISTRY = CATALOGUE.reversals;
 
 // --- store lifecycle ---------------------------------------------------------
 
@@ -399,14 +265,16 @@ export function ctxFor(store: RuntimeStore, scopeHours?: number): PolicyContext 
     heldRoleIds: ['p2p'],
     roles,
     now: NOW,
-    catalogue: CATALOGUE,
+    catalogue: CATALOGUE.entries,
     runtime: {
+      // THE REAL 6d (W0-P13): compiled Ajv over each tool's committed schema.json.
+      argumentValidator: CATALOGUE.argumentValidator,
       // THE REAL EVALUATOR (W0-F8). Previously a stub that answered
       // `{breached:false}` for everything, which is what let a tool that
       // refused every call at 6f look reachable.
       guardrails: guardrailEvaluator({ now: () => NOW }),
       writeGate: confirmWriteGate({
-        writeSafetyFor: (toolId) => WRITE_SAFETY[toolId],
+        writeSafetyFor: (toolId) => CATALOGUE.writeSafetyFor(toolId),
         dryRun: DRY_RUN,
         keyring: KEYRING,
         approval: approvals,
