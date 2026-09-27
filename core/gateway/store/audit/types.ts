@@ -235,6 +235,29 @@ export interface AuditReversalLinks {
  * exception and reaches the store through its own gated path, not through
  * here.
  */
+/**
+ * W0-P3a — one page of the calls list behind `GET /api/v1/calls`, newest
+ * first. The READ AUTHORITY is part of the query rather than a filter applied
+ * afterwards, so a page is never short because rows the viewer may not see
+ * were dropped from it, and no invisible row is ever read into the process.
+ */
+export interface ListRecentCallsFilter {
+  /**
+   * The row is visible when its `tool_id` is one of these OR its
+   * `caller_subject` is `ownSubject`. Both empty/absent returns nothing: there
+   * is no "no filter" value (non-negotiable 6 — a read always has a viewer).
+   */
+  readonly visibleToolIds: readonly string[];
+  readonly ownSubject?: string;
+  /** Narrowing facets, applied inside the authority, never instead of it. */
+  readonly toolId?: string;
+  readonly consumerId?: string;
+  readonly outcome?: AuditOutcome;
+  /** Exclusive cursor: the `id` of the last row of the previous page (UUIDv7, time-ordered). */
+  readonly beforeId?: string;
+  readonly limit: number;
+}
+
 export interface AuditRepository {
   /**
    * Write one audit row and all of its satellites **inside one transaction**,
@@ -243,6 +266,8 @@ export interface AuditRepository {
    */
   append(input: AppendAuditCallInput): Promise<AuditCallRecord>;
   get(id: string): Promise<AuditCallRecord | undefined>;
+  /** W0-P3a — newest first, authority-filtered in SQL; see `ListRecentCallsFilter`. */
+  listRecent(filter: ListRecentCallsFilter): Promise<AuditCallRecord[]>;
   /** The current chain head for a deployment, or undefined before genesis. */
   chainHead(deploymentId: string): Promise<AuditCallRecord | undefined>;
   /** Chain order — oldest first — for `forge audit verify` (W0-C4). */

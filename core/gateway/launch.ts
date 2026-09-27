@@ -56,6 +56,8 @@ import {
   type LocalIdentityProvider,
   type SessionLimits,
 } from './identity/index.js';
+import type { IncomingHttpHeaders } from 'node:http';
+import { createReadApi } from './api/v1/read-api.js';
 import { resolveGatewayKeys } from './identity/keys.js';
 import { approvalGate } from './policy/approval/index.js';
 import {
@@ -352,11 +354,24 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
 
     const registry = loadConsumerRegistry(repoRoot);
     const authenticator = new ConsumerAuthenticator({ registry, audience });
+    const consumerAuth = {
+      authenticate: (headers: IncomingHttpHeaders, correlationId: string) =>
+        authenticator.authenticate(readConsumerPresentation(headers), correlationId),
+    };
+    // W0-P3a — the read-only governance API, behind the SAME [2a] gate and the
+    // SAME session assembly as /mcp (W0-P2 §7, non-negotiable 6).
+    const readApi = createReadApi({
+      repoRoot,
+      store,
+      catalogue,
+      consumerAuth,
+      sessions,
+      consumers: registry,
+      identityProviderKind: 'local',
+    });
     const gateway = createGatewayHttpTransport({
-      consumerAuth: {
-        authenticate: (headers, correlationId) =>
-          authenticator.authenticate(readConsumerPresentation(headers), correlationId),
-      },
+      consumerAuth,
+      readApi,
       sessions,
       localSignIn,
       createServer: (handle) => surface.createServer(handle),

@@ -11,7 +11,7 @@
 // `.mcpforge/` loses in-flight approvals and loses no governance evidence
 // (`W0-C6`).
 
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { DialectConnection } from '../dialect.js';
 import { uuidv7 } from '../id.js';
 import { APPROVAL_REQUEST } from '../schema/spec.js';
@@ -128,6 +128,27 @@ export function approvalRepository(connection: DialectConnection): ApprovalRepos
       const bounded = limit === undefined ? sql`` : sql` limit ${Math.max(0, Math.trunc(limit))}`;
       const rows = await connection.all<Row>(
         sql`${select} where ${C.status} = ${'pending'} order by ${C.createdAt} asc, ${C.id} asc${bounded}`,
+      );
+      return rows.map(toRequest);
+    },
+
+    async listDecided(filter) {
+      const limit = Math.max(0, Math.min(500, Math.trunc(filter.limit)));
+      const authority: SQL[] = [];
+      if (filter.visibleToolIds.length > 0) {
+        authority.push(
+          sql`${C.toolId} in (${sql.join(
+            filter.visibleToolIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+        );
+      }
+      if (filter.ownSubject !== undefined && filter.ownSubject.length > 0) {
+        authority.push(sql`${C.callerSubject} = ${filter.ownSubject}`);
+      }
+      if (authority.length === 0 || limit === 0) return [];
+      const rows = await connection.all<Row>(
+        sql`${select} where ${C.status} <> ${'pending'} and (${sql.join(authority, sql` or `)}) order by coalesce(${C.decidedAt}, ${C.expiresAt}) desc, ${C.id} desc limit ${limit}`,
       );
       return rows.map(toRequest);
     },

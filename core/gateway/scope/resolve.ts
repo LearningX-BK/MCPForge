@@ -22,6 +22,9 @@
 import { forgeError, type ForgeError } from '@mcpforge/shared';
 import {
   SCOPE_PREDICATES,
+  consumerAuthorizedPredicate,
+  deployedPredicate,
+  grantedPredicate,
   type PredicateRefusal,
   type ScopePredicate,
   type ScopePredicateName,
@@ -46,6 +49,14 @@ export interface ScopeResolution {
  * removed and prove the set widens. Production calls `resolveScope`.
  */
 export function applyPredicates(
+  catalogue: readonly ScopeCatalogueEntry[],
+  ctx: ScopeContext,
+  predicates: readonly ScopePredicate[],
+): ScopeResolution {
+  return evaluatePredicates(catalogue, ctx, predicates);
+}
+
+function evaluatePredicates(
   catalogue: readonly ScopeCatalogueEntry[],
   ctx: ScopeContext,
   predicates: readonly ScopePredicate[],
@@ -89,7 +100,37 @@ export function resolveScope(
   catalogue: readonly ScopeCatalogueEntry[],
   ctx: ScopeContext,
 ): ScopeResolution {
-  return applyPredicates(catalogue, ctx, SCOPE_PREDICATES);
+  return evaluatePredicates(catalogue, ctx, SCOPE_PREDICATES);
+}
+
+/**
+ * W0-P3a — the READ authority behind `/api/v1/**` (owner decision, 27 Sep
+ * 2026: a governance read shows a row only when its tool is "in the viewer's
+ * resolved scope: portal-local's authorizations intersected with the human's
+ * roles", plus the viewer's own rows, which the API layer adds).
+ *
+ * It is the three predicates that state WHO MAY — Deployed ∩ Granted ∩
+ * ConsumerAuthorized — and deliberately not the three that state what WORKS
+ * NOW. Activated is a per-MCP-session lens, and a stateless read has none.
+ * ProbeEnabled and ¬KillSwitched describe whether a tool can be called today.
+ * They do not decide whether someone granted it may see what it already did:
+ * killing a tool must not erase its history from the people who answer for
+ * it, and with no probe report (every fresh Wave 0 checkout) the full six
+ * would hide every row. Like `SCOPE_PREDICATES` it is frozen, it only removes,
+ * and a throwing predicate denies.
+ */
+export const READ_AUTHORITY_PREDICATES: readonly ScopePredicate[] = Object.freeze([
+  deployedPredicate,
+  grantedPredicate,
+  consumerAuthorizedPredicate,
+]);
+
+/** The tools whose runtime records this session's human, through this consumer, may read. */
+export function resolveReadAuthority(
+  catalogue: readonly ScopeCatalogueEntry[],
+  ctx: ScopeContext,
+): ScopeResolution {
+  return evaluatePredicates(catalogue, ctx, READ_AUTHORITY_PREDICATES);
 }
 
 /**

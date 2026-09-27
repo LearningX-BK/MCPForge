@@ -333,6 +333,16 @@ export interface ApprovalRepository {
   /** The queue: pending requests, oldest first. */
   listPending(limit?: number): Promise<ApprovalRequest[]>;
   /**
+   * W0-P3a — decided (approved, rejected or expired) requests, most recently
+   * decided first. `toolIds` / `ownSubject` are the read authority, as in
+   * `AuditRepository.listRecent`: both empty returns nothing.
+   */
+  listDecided(filter: {
+    readonly visibleToolIds: readonly string[];
+    readonly ownSubject?: string;
+    readonly limit: number;
+  }): Promise<ApprovalRequest[]>;
+  /**
    * Decide a pending request. Throws `ApprovalNotPendingError` if it has
    * already been decided or has expired.
    */

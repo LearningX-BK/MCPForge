@@ -175,6 +175,81 @@ function contractSuite(label: string, makeConfig: () => StoreConfig, cleanup?: (
       expect(readNull?.identityMatch).toBeNull();
     });
 
+    // W0-P3a — the two read queries behind `/api/v1`, on both dialects: the
+    // authority is inside the SQL, and an empty authority reads nothing.
+    it('lists recent calls newest first, inside the read authority, with a cursor', async () => {
+      const deploymentId = `p3a-${label}`;
+      const append = (toolId: string, callerSubject: string) =>
+        store.audit.append({
+          callerSubject,
+          consumerId: 'p3a-consumer',
+          humanInTheLoop: true,
+          toolId,
+          isWrite: false,
+          deploymentId,
+          phase: 'execute',
+          outcome: 'ok',
+        });
+      const a = await append('p3a.visible.get', 'p3a-other');
+      const b = await append('p3a.hidden.get', 'p3a-other');
+      const c = await append('p3a.hidden.get', 'p3a-me');
+      const d = await append('p3a.visible.get', 'p3a-other');
+
+      const page = await store.audit.listRecent({
+        visibleToolIds: ['p3a.visible.get'],
+        ownSubject: 'p3a-me',
+        limit: 10,
+      });
+      const mine = page.filter((r) => r.deploymentId === deploymentId).map((r) => r.id);
+      expect(mine).toEqual([d.id, c.id, a.id]);
+      expect(mine).not.toContain(b.id);
+
+      const older = await store.audit.listRecent({
+        visibleToolIds: ['p3a.visible.get'],
+        ownSubject: 'p3a-me',
+        beforeId: c.id,
+        limit: 10,
+      });
+      expect(older.map((r) => r.id)).toContain(a.id);
+      expect(older.map((r) => r.id)).not.toContain(d.id);
+
+      expect(await store.audit.listRecent({ visibleToolIds: [], limit: 10 })).toEqual([]);
+    });
+
+    it('lists decided approvals inside the read authority, and never a pending one', async () => {
+      const create = (toolId: string, planHash: string) =>
+        store.approvals.create({
+          planHash,
+          argsCanonicalHash: `a-${planHash}`,
+          callerSubject: 'p3a-requester',
+          toolId,
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        });
+      const visible = await create('p3a.approve.visible', `p3a-v-${label}`);
+      const hidden = await create('p3a.approve.hidden', `p3a-h-${label}`);
+      const pending = await create('p3a.approve.visible', `p3a-p-${label}`);
+      await store.approvals.decide({
+        id: visible.id,
+        status: 'approved',
+        approverSubject: 'p3a-approver',
+      });
+      await store.approvals.decide({
+        id: hidden.id,
+        status: 'approved',
+        approverSubject: 'p3a-approver',
+      });
+
+      const decided = await store.approvals.listDecided({
+        visibleToolIds: ['p3a.approve.visible'],
+        limit: 50,
+      });
+      const ids = decided.map((a) => a.id);
+      expect(ids).toContain(visible.id);
+      expect(ids).not.toContain(hidden.id);
+      expect(ids).not.toContain(pending.id);
+      expect(await store.approvals.listDecided({ visibleToolIds: [], limit: 50 })).toEqual([]);
+    });
+
     it('rolls a failed transaction back', async () => {
       const before = (await store.heartbeats.listRecent(100)).length;
       await expect(
