@@ -28,6 +28,7 @@ import {
   consumerRecordSchema,
   isoToday,
   type ConsumerClass,
+  type ConsumerPublicKey,
   type ConsumerRecord,
 } from './types.js';
 
@@ -187,6 +188,36 @@ export function proposeRetirement(record: ConsumerRecord, actor: ProposalActor):
     `Retire consumer ${record.id}. The id is never reused — audit rows and consumption edges reference it.`,
     actor,
   );
+}
+
+/**
+ * 05 §A.4 steps 2–3: the public half of a freshly minted `private-key-jwt`
+ * keypair, proposed into the record. A `client-secret` record moves to
+ * `private-key-jwt` with this as its only key; a `private-key-jwt` record
+ * keeps its existing keys beside the new one, so both verify during the
+ * rotation overlap. Either way it is a credential change, so it is reviewed.
+ */
+export function proposePrivateKeyJwtKey(
+  record: ConsumerRecord,
+  publicKey: ConsumerPublicKey,
+  actor: ProposalActor,
+): ChangeProposal {
+  const today = actor.today ?? isoToday();
+  const switching = record.credential.method !== 'private-key-jwt';
+  const kept = switching ? [] : (record.credential.publicKeys ?? []);
+  const next: ConsumerRecord = {
+    ...record,
+    credential: {
+      ...record.credential,
+      method: 'private-key-jwt',
+      publicKeys: [...kept, publicKey],
+      rotation: { ...record.credential.rotation, lastRotatedAt: today },
+    },
+  };
+  const summary = switching
+    ? `Move consumer ${record.id} from ${record.credential.method} to private-key-jwt with public key ${publicKey.kid}. The private key stays on the consumer's machine; the record carries only the public key, and ${record.credential.method} stops authenticating this consumer on merge.`
+    : `Add public key ${publicKey.kid} to consumer ${record.id} beside ${kept.map((k) => k.kid).join(', ') || 'no existing key'}; both verify until the old key is removed in a later proposal.`;
+  return build('rotate-credential-schedule', next, summary, { ...actor, today });
 }
 
 export function proposeCredentialRotation(

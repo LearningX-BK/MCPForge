@@ -8,6 +8,7 @@
 //   forge consumer rotate  <id> --by <subject>
 //   forge consumer retire  <id> --reason "..." --by <subject>
 //   forge consumer issue-credential <id> --by <subject> [--env <class>]
+//                           [--method client-secret|private-key-jwt] [--key-file <path>]
 //
 // Two things this command will not do, both structural rather than
 // conventional:
@@ -35,6 +36,10 @@ import {
   isoToday,
   issueConsumerCredential,
   loadConsumerRegistry,
+  mintConsumerKeypair,
+  PrivateKeyFileRefusedError,
+  proposePrivateKeyJwtKey,
+  writeConsumerPrivateKeyFile,
   proposeCredentialRotation,
   proposeRegistration,
   proposeRetirement,
@@ -45,6 +50,7 @@ import {
   CONSUMER_CLASSES,
   type ChangeProposal,
   type ConsumerClass,
+  type ConsumerRecord,
   type EnvironmentClass,
   type LoadedConsumer,
 } from '@mcpforge/gateway/consumer';
@@ -80,6 +86,10 @@ export interface ConsumerCommandOptions {
   readonly by?: string;
   readonly env?: string;
   readonly root?: string;
+  /** `issue-credential` only: `client-secret` (default) or `private-key-jwt`. */
+  readonly method?: string;
+  /** `issue-credential --method private-key-jwt` only: where the private key is written. */
+  readonly keyFile?: string;
 }
 
 export interface ConsumerCommandDeps {
@@ -457,6 +467,31 @@ function runIssueCredential(opts: ConsumerCommandOptions, deps: ConsumerCommandD
     );
   }
 
+  const method = opts.method?.trim() || 'client-secret';
+  if (method === 'private-key-jwt') {
+    return runIssueKeypair(found.record, by, repoRoot, today, opts, deps);
+  }
+  if (method !== 'client-secret') {
+    return emitError(
+      usage(
+        `--method "${method}" cannot be issued by this command.`,
+        'Use --method private-key-jwt (the Wave 0 default, 05 §A.2) or --method client-secret (read-only, non-sensitive consumers only). mtls is deferred to Wave 1+: it needs a certificate authority Wave 0 may not depend on.',
+      ),
+      opts.json,
+      deps,
+    );
+  }
+  if (opts.keyFile !== undefined) {
+    return emitError(
+      usage(
+        '--key-file applies to --method private-key-jwt only.',
+        'A client secret is printed once and never stored in the clear. Drop --key-file, or add --method private-key-jwt.',
+      ),
+      opts.json,
+      deps,
+    );
+  }
+
   const issued = issueConsumerCredential({
     consumerId: id,
     environmentClass: envRaw,
@@ -496,6 +531,97 @@ function runIssueCredential(opts: ConsumerCommandOptions, deps: ConsumerCommandD
       ].join('\n'),
     );
   }
+  return 0;
+}
+
+/**
+ * 05 §A.4 step 2, `--method private-key-jwt`. The keypair is minted here, on
+ * the consumer's machine. The PRIVATE half goes to `--key-file` (under the
+ * git-ignored `.mcpforge/`) or is printed once. The PUBLIC half goes into a
+ * staged change proposal and nowhere else: this command never writes
+ * `consumers/**`, so the key reaches the registry only through review.
+ */
+function runIssueKeypair(
+  record: ConsumerRecord,
+  by: string,
+  repoRoot: string,
+  today: string,
+  opts: ConsumerCommandOptions,
+  deps: ConsumerCommandDeps,
+): number {
+  const out = deps.stdout ?? ((t: string) => process.stdout.write(t));
+  const minted = mintConsumerKeypair({ consumerId: record.id, today });
+
+  // The key is persisted BEFORE the proposal is staged: a refused key file
+  // must leave no proposal naming a public key whose private half is gone.
+  const keyFile = opts.keyFile?.trim();
+  if (keyFile) {
+    try {
+      writeConsumerPrivateKeyFile(repoRoot, keyFile, minted.privateKey);
+    } catch (err) {
+      if (err instanceof PrivateKeyFileRefusedError) {
+        return emitError(
+          { ok: false, code: 'ISSUE_CREDENTIAL_REFUSED', message: err.message, next: err.next },
+          opts.json,
+          deps,
+        );
+      }
+      throw err;
+    }
+  }
+
+  const proposal = proposePrivateKeyJwtKey(record, minted.publicKey, {
+    requestedBy: by,
+    today,
+    ...(deps.now ? { now: deps.now } : {}),
+    ...(opts.reason?.trim() ? { reason: opts.reason.trim() } : {}),
+  });
+  const written = writeChangeProposal(repoRoot, proposal);
+  const approvalPath =
+    written.files.find((f) => f.targetPath.startsWith('approvals/'))?.targetPath ??
+    'the approval record';
+  const next = `Review the staged proposal and have the named approver complete ${approvalPath}; the gateway verifies against ${minted.publicKey.kid} only once the record is merged. Nothing under consumers/ or approvals/ has been written.`;
+
+  if (opts.json) {
+    out(
+      `${JSON.stringify({
+        ok: true,
+        consumerId: record.id,
+        method: 'private-key-jwt',
+        publicKey: minted.publicKey,
+        ...(keyFile ? { keyFile } : { privateKey: minted.privateKey, printedOnce: true }),
+        proposalId: written.proposalId,
+        summary: proposal.summary,
+        requestedBy: by,
+        state: 'draft',
+        directory: written.directory,
+        files: written.files.map((f) => ({ target: f.targetPath, staged: f.stagedPath })),
+        next,
+      })}\n`,
+    );
+    return 0;
+  }
+  out(
+    [
+      `forge consumer issue-credential: ${record.id} (private-key-jwt)`,
+      `  public key: ${minted.publicKey.kid}  x=${minted.publicKey.x}`,
+      keyFile
+        ? `  private key written to ${keyFile} (git-ignored; never printed)`
+        : [
+            '  private key (printed once, not recoverable, store it in the consumer now):',
+            '',
+            `  ${JSON.stringify(minted.privateKey)}`,
+            '',
+          ].join('\n'),
+      `  proposal: ${written.proposalId}`,
+      `  summary:  ${proposal.summary}`,
+      ...written.files.map(
+        (f) => `  proposes: ${f.targetPath}\n            staged at ${f.stagedPath}`,
+      ),
+      `  next: ${next}`,
+      '',
+    ].join('\n'),
+  );
   return 0;
 }
 

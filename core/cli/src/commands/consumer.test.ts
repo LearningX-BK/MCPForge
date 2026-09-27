@@ -472,3 +472,156 @@ describe('forge consumer issue-credential', () => {
     expect(JSON.parse(third.out.join(''))['next']).toMatch(/re-approval/);
   });
 });
+
+// W0-P24 / 05 §A.4 step 2: `--method private-key-jwt`.
+describe('forge consumer issue-credential --method private-key-jwt', () => {
+  const CLIENT_SECRET_YAML = WORKED_EXAMPLE_YAML.replace(
+    'method: private-key-jwt',
+    'method: client-secret',
+  ).replace(/  publicKeys:\n(?: {4}.*\n)+/, '');
+  const args = { target: 'claude-desktop-coe', by: 'u:builder', method: 'private-key-jwt' };
+  const run = (root: string, extra: Partial<ConsumerCommandOptions> = {}) => {
+    const c = capture();
+    const code = runConsumerCommand('issue-credential', opts({ ...args, ...extra }), {
+      repoRoot: root,
+      env: {},
+      today: '2026-09-27',
+      now: '2026-09-27T10:00:00.000Z',
+      ...c.deps,
+    });
+    return { code, out: c.out.join(''), err: c.err.join('') };
+  };
+  const stagedFiles = (payload: { files: { target: string; staged: string }[] }) =>
+    Object.fromEntries(payload.files.map((f) => [f.target, readFileSync(f.staged, 'utf8')]));
+
+  it('writes the private key under .mcpforge/ and stages a proposal carrying only the public key', () => {
+    const root = tempRepo(CLIENT_SECRET_YAML);
+    const keyFile = '.mcpforge/portal/test.private.jwk.json';
+    const { code, out } = run(root, { keyFile });
+    expect(code).toBe(0);
+    const payload = JSON.parse(out) as {
+      publicKey: { kid: string; x: string };
+      keyFile: string;
+      privateKey?: unknown;
+      files: { target: string; staged: string }[];
+    };
+    expect(payload.keyFile).toBe(keyFile);
+    expect(payload.privateKey).toBeUndefined();
+
+    const key = JSON.parse(readFileSync(join(root, keyFile), 'utf8')) as {
+      kid: string;
+      privateJwk: { d: string; x: string };
+    };
+    expect(key.kid).toBe(payload.publicKey.kid);
+    expect(key.privateJwk.x).toBe(payload.publicKey.x);
+
+    // The private component appears in no output and no staged file.
+    const files = stagedFiles(payload);
+    expect(out).not.toContain(key.privateJwk.d);
+    for (const content of Object.values(files)) expect(content).not.toContain(key.privateJwk.d);
+
+    // Nothing under consumers/ changed; the record is only staged.
+    expect(readFileSync(join(root, 'consumers', 'claude-desktop-coe.consumer.yaml'), 'utf8')).toBe(
+      CLIENT_SECRET_YAML,
+    );
+    const record = parseYaml(files['consumers/claude-desktop-coe.consumer.yaml']!) as {
+      credential: {
+        method: string;
+        publicKeys: { kid: string }[];
+        rotation: { lastRotatedAt: string };
+      };
+    };
+    expect(record.credential.method).toBe('private-key-jwt');
+    expect(record.credential.publicKeys.map((k) => k.kid)).toEqual([payload.publicKey.kid]);
+    expect(record.credential.rotation.lastRotatedAt).toBe('2026-09-27');
+
+    // The approval is pending: nobody filled the approver on the owner's behalf.
+    const approvalPath = Object.keys(files).find((p) => p.startsWith('approvals/'))!;
+    const approval = parseYaml(files[approvalPath]!) as Record<string, unknown>;
+    expect(approval['status']).toBe('pending');
+    expect(approval['approver'] ?? null).toBeNull();
+
+    // Applied, the record validates: the method switch and the key arrive together.
+    writeFileSync(
+      join(root, 'consumers', 'claude-desktop-coe.consumer.yaml'),
+      files['consumers/claude-desktop-coe.consumer.yaml']!,
+      'utf8',
+    );
+    expect(consumerFailures(root)).toEqual([]);
+  });
+
+  it('prints the private key once when no --key-file is given', () => {
+    const root = tempRepo(CLIENT_SECRET_YAML);
+    const { code, out } = run(root);
+    expect(code).toBe(0);
+    const payload = JSON.parse(out) as {
+      privateKey: { privateJwk: { d: string } };
+      printedOnce: boolean;
+    };
+    expect(payload.printedOnce).toBe(true);
+    expect(out.split(payload.privateKey.privateJwk.d).length - 1).toBe(1);
+    expect(existsSync(join(root, '.mcpforge', 'portal'))).toBe(false);
+  });
+
+  it('on a private-key-jwt record, adds the new key beside the old one for the overlap', () => {
+    const root = tempRepo(WORKED_EXAMPLE_YAML);
+    const payload = JSON.parse(run(root).out) as {
+      publicKey: { kid: string };
+      files: { target: string; staged: string }[];
+    };
+    const record = parseYaml(
+      stagedFiles(payload)['consumers/claude-desktop-coe.consumer.yaml']!,
+    ) as {
+      credential: { publicKeys: { kid: string }[] };
+    };
+    expect(record.credential.publicKeys.map((k) => k.kid)).toEqual([
+      '2026-08-a',
+      payload.publicKey.kid,
+    ]);
+  });
+
+  it('refuses a key file outside .mcpforge/, and stages nothing', () => {
+    const root = tempRepo(CLIENT_SECRET_YAML);
+    const { code, out } = run(root, { keyFile: 'consumers/leak.jwk.json' });
+    expect(code).toBe(64);
+    const payload = JSON.parse(out) as { code: string; next: string };
+    expect(payload.code).toBe('ISSUE_CREDENTIAL_REFUSED');
+    expect(payload.next).toMatch(/\.mcpforge\//);
+    expect(existsSync(join(root, 'consumers', 'leak.jwk.json'))).toBe(false);
+    expect(existsSync(join(root, '.mcpforge', 'proposals'))).toBe(false);
+  });
+
+  it('refuses to overwrite an existing key file', () => {
+    const root = tempRepo(CLIENT_SECRET_YAML);
+    const keyFile = '.mcpforge/portal/test.private.jwk.json';
+    expect(run(root, { keyFile }).code).toBe(0);
+    const before = readFileSync(join(root, keyFile), 'utf8');
+    const second = run(root, { keyFile });
+    expect(second.code).toBe(64);
+    expect(readFileSync(join(root, keyFile), 'utf8')).toBe(before);
+  });
+
+  it('refuses --key-file with client-secret, and refuses mtls', () => {
+    const root = tempRepo(CLIENT_SECRET_YAML);
+    expect(
+      JSON.parse(run(root, { method: 'client-secret', keyFile: '.mcpforge/x.json' }).out).code,
+    ).toBe('INPUT_INVALID');
+    expect(JSON.parse(run(root, { method: 'mtls' }).out).next).toMatch(/Wave 1/);
+  });
+
+  it('is refused under CI=true before any key is minted', () => {
+    const root = tempRepo(CLIENT_SECRET_YAML);
+    const c = capture();
+    const code = runConsumerCommand(
+      'issue-credential',
+      opts({ ...args, keyFile: '.mcpforge/k.json' }),
+      {
+        repoRoot: root,
+        env: { CI: 'true' },
+        ...c.deps,
+      },
+    );
+    expect(code).toBe(64);
+    expect(existsSync(join(root, '.mcpforge', 'k.json'))).toBe(false);
+  });
+});

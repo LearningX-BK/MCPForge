@@ -319,6 +319,16 @@ const EXTRA_OPTIONS: Readonly<
       flags: '--by <subject>',
       description: 'Principal.subject of whoever is minting it (required).',
     },
+    {
+      flags: '--method <method>',
+      description:
+        'client-secret | private-key-jwt. Default: client-secret. private-key-jwt mints an Ed25519 keypair and stages a proposal carrying only the public key (05 §A.4).',
+    },
+    {
+      flags: '--key-file <path>',
+      description:
+        'private-key-jwt only: write the private key here, under .mcpforge/ (git-ignored), instead of printing it once. The portal reads .mcpforge/portal/portal-local.private.jwk.json.',
+    },
     { flags: '--root <dir>', description: 'Repository root. Default: the enclosing repository.' },
   ],
   // W0-N6.
