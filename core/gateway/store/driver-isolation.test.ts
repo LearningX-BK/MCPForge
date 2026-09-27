@@ -115,6 +115,9 @@ describe('driver isolation (02 §10.2)', () => {
       'anomalies',
       'approvals',
       'audit',
+      // W0-P5a. Sign-in sessions and hashed refresh tokens — a repository
+      // like the others: no connection, no driver handle, no SQL.
+      'authSessions',
       'close',
       // W0-N10. The `consumption_edge` feed (02 §4.6) — a repository like the
       // others, hands out no connection, no driver handle and no SQL.

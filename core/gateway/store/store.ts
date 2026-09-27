@@ -12,6 +12,7 @@ import { idempotencyRepository } from './runtime/idempotency.js';
 import { confirmNonceRepository } from './runtime/nonce.js';
 import { approvalRepository } from './runtime/approvals.js';
 import { localUserRepository } from './identity/local-user.js';
+import { authSessionRepository } from './identity/auth-session.js';
 import { runtimeFlagsRepository } from './flags/repository.js';
 import { usageRepository } from './usage/repository.js';
 import { consumptionRepository } from './consumption/repository.js';
@@ -68,6 +69,8 @@ export async function openRuntimeStore(
     approvals: approvalRepository(connection),
     // W0-D2 — the local user store's persistence.
     localUsers: localUserRepository(connection),
+    // W0-P5a — sign-in sessions and their hashed, rotating refresh tokens.
+    authSessions: authSessionRepository(connection),
     // W0-E5 — the kill switch's persistence.
     runtimeFlags: runtimeFlagsRepository(connection),
     // W0-N8 — the anomaly event trail (02 §11.6).

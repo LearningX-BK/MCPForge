@@ -55,6 +55,7 @@ export {
   staticLocalPrincipalSource,
   type LocalIdentityProvider,
   type LocalIdentityProviderOptions,
+  type IssueTokenOptions,
   type LocalPrincipalRecord,
   type LocalPrincipalSource,
 } from './local.js';
@@ -77,6 +78,17 @@ export {
   type LocalUserStore,
   type LocalUserStoreOptions,
   type TotpEnrolment,
+  // W0-P5a — the gateway as the local provider's token endpoint.
+  DEFAULT_SESSION_ABSOLUTE_SECONDS,
+  DEFAULT_SESSION_IDLE_SECONDS,
+  LOCAL_PROVIDER_ID,
+  REFRESH_TOKEN_PREFIX,
+  localSignInService,
+  type LocalSignInService,
+  type LocalSignInServiceOptions,
+  type SessionLimits,
+  type SignInGrant,
+  type SignedInPrincipal,
 } from './local/index.js';
 // W0-D3 — the OIDC leg of the seam, and the RFC 9728 protected-resource
 // document the MCP spec requires. Note the asymmetry that is correct rather

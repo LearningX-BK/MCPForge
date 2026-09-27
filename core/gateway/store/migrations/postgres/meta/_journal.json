@@ -78,6 +78,13 @@
       "when": 1788780767908,
       "tag": "0010_redundant_betty_brant",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790478005872,
+      "tag": "0011_bumpy_power_pack",
+      "breakpoints": true
     }
   ]
 }

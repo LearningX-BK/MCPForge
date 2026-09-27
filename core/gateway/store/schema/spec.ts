@@ -748,6 +748,79 @@ export const LOCAL_USER_GROUP: TableSpec = {
  * the audit value of "who kill-switched this and why, and when it was
  * lifted" would be destroyed by an in-place update.
  */
+/**
+ * `auth_session` — one signed-in human session behind the gateway's local
+ * sign-in endpoint. W0-P5a, W0-P4 §9 decision 6 ("seamless, not a 15-minute
+ * re-prompt").
+ *
+ * The access token stays a 15-minute JWT that the store never sees. What this
+ * row holds is the session that renews it: who, how they authenticated, when
+ * it can no longer be renewed (the absolute limit), and whether it has been
+ * ended. Runtime state, not git: deleting `.mcpforge/` signs everyone out and
+ * loses no governance evidence (`W0-C6`).
+ *
+ * `subject` is `Principal.subject`, the only identity value written (CLAUDE.md
+ * §3). `revoked_reason` is a closed vocabulary: `signed_out`, `refresh_reuse`,
+ * `idle_expired`, `absolute_expired`, `account_unavailable`.
+ */
+export const AUTH_SESSION: TableSpec = {
+  name: 'auth_session',
+  columns: {
+    // `ses_` + UUIDv7, generated in the application (02 §10.4 item 4).
+    id: { kind: 'text', primaryKey: true, notNull: true },
+    subject: { kind: 'text', notNull: true },
+    // Which configured identity provider signed this human in. `local` at Wave
+    // 0; carried now so a multi-provider deployment (W0-P4 §2.1) adds rows,
+    // not a column.
+    provider_id: { kind: 'text', notNull: true },
+    // The `amr` of the check that actually ran at sign-in, replayed unchanged
+    // into every renewed access token. JSON array of strings.
+    amr: { kind: 'json', notNull: true },
+    created_at: { kind: 'timestamp', notNull: true },
+    absolute_expires_at: { kind: 'timestamp', notNull: true },
+    revoked_at: { kind: 'timestamp' },
+    revoked_reason: { kind: 'text' },
+  },
+  indexes: [
+    { name: 'auth_session_subject_created_idx', columns: ['subject', 'created_at'] },
+    { name: 'auth_session_absolute_expires_idx', columns: ['absolute_expires_at'] },
+  ],
+};
+
+/**
+ * `auth_refresh_token` — every refresh token an `auth_session` has been issued,
+ * **by hash only**. W0-P5a, W0-P4 §9 decision 6.
+ *
+ * The token value is a credential. It is never stored, logged, rendered or
+ * written to audit; `token_hash` is its SHA-256. A token is spent by its one
+ * renewal (`spent_at`, `replaced_by` = the successor's id). Presenting a spent
+ * token again is how theft shows up, and it revokes the whole session:
+ * whichever of the thief and the owner renews second loses both tokens.
+ *
+ * `idle_expires_at` is written at issue, so the idle limit is a fact on the row
+ * rather than a calculation that could drift with configuration.
+ */
+export const AUTH_REFRESH_TOKEN: TableSpec = {
+  name: 'auth_refresh_token',
+  columns: {
+    id: { kind: 'text', primaryKey: true, notNull: true },
+    session_id: {
+      kind: 'text',
+      notNull: true,
+      references: { table: 'auth_session', column: 'id' },
+    },
+    token_hash: { kind: 'text', notNull: true },
+    issued_at: { kind: 'timestamp', notNull: true },
+    idle_expires_at: { kind: 'timestamp', notNull: true },
+    spent_at: { kind: 'timestamp' },
+    replaced_by: { kind: 'text' },
+  },
+  indexes: [
+    { name: 'auth_refresh_token_hash_uq', columns: ['token_hash'], unique: true },
+    { name: 'auth_refresh_token_session_idx', columns: ['session_id', 'issued_at'] },
+  ],
+};
+
 export const RUNTIME_FLAG: TableSpec = {
   name: 'runtime_flags',
   columns: {
@@ -989,9 +1062,7 @@ export const CONSUMER_USAGE_IDENTITY_MISMATCH: TableSpec = {
     },
     count: { kind: 'integer', notNull: true },
   },
-  indexes: [
-    { name: 'consumer_usage_identity_mismatch_uq', columns: ['bucket_id'], unique: true },
-  ],
+  indexes: [{ name: 'consumer_usage_identity_mismatch_uq', columns: ['bucket_id'], unique: true }],
 };
 
 /**
@@ -1116,7 +1187,11 @@ export const CONSUMPTION_EDGE: TableSpec = {
     // Last-observed descriptive facts — see the header note above.
     binding_type: { kind: 'text' },
     /** The most recent `audit_call.id` on this edge, so a row is traceable back to its evidence. */
-    last_call_id: { kind: 'text', notNull: true, references: { table: 'audit_call', column: 'id' } },
+    last_call_id: {
+      kind: 'text',
+      notNull: true,
+      references: { table: 'audit_call', column: 'id' },
+    },
 
     first_seen_at: { kind: 'timestamp', notNull: true },
     last_seen_at: { kind: 'timestamp', notNull: true },
@@ -1159,6 +1234,10 @@ export const RUNTIME_TABLES = {
   // that references it.
   localUser: LOCAL_USER,
   localUserGroup: LOCAL_USER_GROUP,
+  // W0-P5a — sign-in sessions. `auth_session` before the token table that
+  // references it.
+  authSession: AUTH_SESSION,
+  authRefreshToken: AUTH_REFRESH_TOKEN,
   // W0-E5 — the kill switch's persistence.
   runtimeFlags: RUNTIME_FLAG,
   // W0-N7 — consumer usage rollups. `consumer_usage_bucket` before the four
