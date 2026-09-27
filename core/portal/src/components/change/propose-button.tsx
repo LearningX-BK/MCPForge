@@ -84,7 +84,6 @@ export function ProposeButton({ proposal, host, onProposed, className }: Propose
     try {
       const updated = await activeHost.propose({
         id: proposal.id,
-        author: proposal.author,
         ...(description.trim().length > 0 ? { description: description.trim() } : {}),
       });
       setOpen(false);

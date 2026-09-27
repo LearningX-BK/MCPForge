@@ -3,6 +3,13 @@
 // `ApproverDecisionPanel` labels its region
 // `aria-label="Approval decision for <toolId>"` and its outcome on
 // `role="status"` (approver-decision-panel.tsx).
+//
+// W0-P5b: this run has no gateway and so nobody signed in, and a decision
+// carries the signed-in viewer's name (W0-P4 §3), never an invented one. So the
+// outcome a keyboard user is told about is the refusal, on `role="alert"`, and
+// the approval stays pending. The keyboard path being proved is unchanged. The
+// signed-in outcome ("Approved by <you>") is covered by
+// src/app/approvals/[approvalId]/approval-decision.test.tsx.
 import { expect, test } from '@playwright/test';
 
 test('an approval is decidable — approve, decline, and the reason field — without a mouse', async ({
@@ -30,7 +37,8 @@ test('an approval is decidable — approve, decline, and the reason field — wi
   await page.getByRole('button', { name: /decline/i }).focus();
   await expect(page.locator(':focus')).toHaveAttribute('data-testid', 'approver-decline');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('status')).toContainText(/declined/i);
+  await expect(page.getByRole('alert')).toContainText(/not signed in/i);
+  await expect(panel).toHaveAttribute('data-approval-state', 'pending');
 
   // Approve path on a second, still-pending item.
   await page.goto('/approvals');
@@ -39,5 +47,5 @@ test('an approval is decidable — approve, decline, and the reason field — wi
   await page.keyboard.press('Enter');
   await page.getByRole('button', { name: /^approve$/i }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('status')).toContainText(/approved/i);
+  await expect(page.getByRole('alert')).toContainText(/sign in, then decide this approval/i);
 });

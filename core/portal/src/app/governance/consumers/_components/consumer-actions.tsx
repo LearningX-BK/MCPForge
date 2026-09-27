@@ -39,6 +39,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ConfirmAction, type ConsequenceView } from '@/components/write-path';
+import { gateKill, issueCredentialNext, type GateViewer } from '@/lib/viewer/gates';
+
+import { forgeKillCommand } from '../../_lib/kill-command';
+import { KillCommand } from '../../_components/kill-command';
 
 /** What a consumer kill request carries. Mirrors `../../_components/kill-switch-panel`'s. */
 export interface ConsumerKillRequest {
@@ -58,6 +62,8 @@ export interface ConsumerActionsProps {
   onKill?: ((request: ConsumerKillRequest) => void | Promise<void>) | undefined;
   /** Stages a change proposal for the definitional acts. */
   onProposeLifecycle?: ((kind: ConsumerProposalKind) => void | Promise<void>) | undefined;
+  /** W0-P5b — the signed-in viewer (HELD personas), or null. Suspending is a kill: admin only. */
+  viewer?: GateViewer | null | undefined;
 }
 
 export function ConsumerActions({
@@ -66,11 +72,25 @@ export function ConsumerActions({
   envClass,
   onKill,
   onProposeLifecycle,
+  viewer = null,
 }: ConsumerActionsProps) {
   const [reason, setReason] = React.useState('');
   const [deploymentWide, setDeploymentWide] = React.useState(false);
   const trimmedReason = reason.trim();
   const reasonGiven = trimmedReason !== '';
+  const gate = gateKill(viewer);
+  // W0-P5b — with no write path wired (W0-P4 §9 decision 4), the button is
+  // disabled rather than a live-looking no-op; the command below is the way.
+  const command =
+    gate.allowed && reasonGiven && viewer !== null
+      ? forgeKillCommand({
+          scope: deploymentWide ? 'deployment' : 'consumer',
+          target: deploymentWide ? deploymentId : consumerId,
+          reason: trimmedReason,
+          by: viewer.subject,
+          deployment: deploymentId,
+        })
+      : null;
 
   const suspendConsequence: ConsequenceView = {
     // A kill is undone by removing the flag, not by a reversing call, so
@@ -91,7 +111,7 @@ export function ConsumerActions({
   };
 
   function fireKill() {
-    if (!reasonGiven) return;
+    if (!reasonGiven || !gate.allowed) return;
     void onKill?.({
       scope: deploymentWide ? 'deployment' : 'consumer',
       target: deploymentWide ? deploymentId : consumerId,
@@ -143,9 +163,13 @@ export function ConsumerActions({
               consequence={suspendConsequence}
               label="Suspend this deployment"
               onConfirm={fireKill}
-              disabled={!reasonGiven}
+              disabled={!reasonGiven || !gate.allowed || onKill === undefined}
               disabledReason={
-                reasonGiven ? undefined : 'Name a reason before suspending the whole deployment.'
+                !gate.allowed
+                  ? gate.message
+                  : reasonGiven
+                    ? undefined
+                    : 'Name a reason before suspending the whole deployment.'
               }
             />
           </div>
@@ -155,7 +179,7 @@ export function ConsumerActions({
               type="button"
               variant="destructive"
               data-testid="consumer-kill-confirm"
-              disabled={!reasonGiven}
+              disabled={!reasonGiven || !gate.allowed || onKill === undefined}
               onClick={fireKill}
             >
               Suspend {consumerId}
@@ -169,6 +193,8 @@ export function ConsumerActions({
         )}
       </section>
 
+      <KillCommand gate={gate} command={command} testId="consumer-kill-command" />
+
       <section aria-labelledby="consumer-lifecycle-heading" className="flex flex-col gap-3">
         <h2 id="consumer-lifecycle-heading" className="font-display text-base text-text-1">
           Rotate credential · Retire — change proposals
@@ -179,6 +205,12 @@ export function ConsumerActions({
             Recording a rotation changes the record&rsquo;s schedule, never a value — the credential
             itself is minted by <code>forge consumer issue-credential</code>, printed once, and
             never appears in the record, the artefact, this screen or an audit row.
+          </p>
+          <p
+            data-testid="consumer-issue-credential"
+            className="max-w-[80ch] text-[12px] text-text-1"
+          >
+            {issueCredentialNext(consumerId)}
           </p>
           <div>
             <Button

@@ -52,3 +52,22 @@ groups:
 # needs no rewrite, but a named per-subject exception written against the OLD
 # subject would silently stop applying unless something rewrites it.
 subjectOverrides: {}
+
+# W0-P5b, W0-P4 §2 and §9 decision 2 — which portal personas each group's
+# members may use. Keyed by group, like `groups` above, so a persona is reviewed
+# in the same diff as the role grant it rides on.
+#
+# A persona is a LENS, never a grant: it changes where a person lands in the
+# portal and which portal actions are offered. The gateway never reads this
+# block; what anyone can actually do is decided from `groups` and
+# `subjectOverrides`. A person whose groups appear nowhere here still signs in
+# and sees every page, and holds no gated portal action.
+personas:
+  mcpforge-admins:
+    personas: [admin, developer]
+  mcpforge-developers:
+    personas: [developer]
+  finance-ap-clerks:
+    personas: [business]
+  finance-ap-approvers:
+    personas: [business]

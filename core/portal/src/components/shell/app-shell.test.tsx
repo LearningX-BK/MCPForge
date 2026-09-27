@@ -9,6 +9,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/',
+  useRouter: () => ({ push: () => undefined, refresh: () => undefined }),
+}));
+// W0-P5b — the viewer controls import server actions; a component test only
+// needs their shape, never a request.
+vi.mock('@/lib/viewer/actions', () => ({
+  selectPersonaAction: () => Promise.resolve({ ok: true }),
+  signOutAction: () => Promise.resolve(),
 }));
 
 import { AppShell } from './app-shell';
@@ -78,16 +85,58 @@ describe('AppShell — top-of-viewport environment rule (03 §11.1)', () => {
 describe('AppShell — topbar chrome', () => {
   it('carries env chip, branch chip, persona pill, density toggle, theme toggle and account', () => {
     render(
-      <AppShell title="Home" subtitle="Your worklist" envClass="local" personaName="Priya">
+      <AppShell
+        title="Home"
+        subtitle="Your worklist"
+        envClass="local"
+        viewer={{
+          subject: 'local:priya',
+          displayName: 'Priya Raman',
+          personas: ['developer', 'admin'],
+          persona: 'admin',
+        }}
+      >
         <div />
       </AppShell>,
     );
     expect(screen.getByText('Local dev')).toBeTruthy(); // env chip
     expect(screen.getByText('main')).toBeTruthy(); // branch chip
-    expect(screen.getByText('Priya')).toBeTruthy(); // persona pill
+    // W0-P5b — the pill offers exactly the held personas, and says it is a lens.
+    const pill = screen.getByRole('combobox', { name: /Persona is a view, not a permission/ });
+    expect(Array.from((pill as HTMLSelectElement).options).map((o) => o.value)).toEqual([
+      'developer',
+      'admin',
+    ]);
+    expect((pill as HTMLSelectElement).value).toBe('admin');
     expect(screen.getByRole('switch', { name: /Density/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Theme:/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Account:/ })).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Signed in as Priya Raman\. Sign out\./ }),
+    ).toBeTruthy();
+  });
+
+  it('signed out, the pill is a Sign in link and no persona is invented', () => {
+    render(
+      <AppShell title="Home">
+        <div />
+      </AppShell>,
+    );
+    const link = screen.getByRole('link', { name: /Sign in/ });
+    expect(link.getAttribute('href')).toBe('/sign-in?returnTo=%2F');
+    expect(screen.queryByRole('combobox')).toBeNull();
+  });
+
+  it('a viewer holding no persona sees "No persona", not a default one', () => {
+    render(
+      <AppShell
+        title="Home"
+        viewer={{ subject: 'local:x', displayName: 'X', personas: [], persona: null }}
+      >
+        <div />
+      </AppShell>,
+    );
+    expect(screen.getByText('No persona')).toBeTruthy();
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 
   it('renders the page content passed as children inside <main>', () => {

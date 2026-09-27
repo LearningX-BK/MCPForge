@@ -25,4 +25,6 @@ export const ROUTES: readonly string[] = [
   '/governance/posture',
   '/governance/kill-switch',
   '/insights',
+  // W0-P5b.
+  '/sign-in',
 ];

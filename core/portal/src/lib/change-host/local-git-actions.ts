@@ -51,6 +51,8 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 import { resolveRepoRoot } from '../../app/build/_lib/repo-root';
+import { gateDiscard, gateSaveOrPropose, type GateResult } from '../viewer/gates';
+import { getViewer } from '../viewer/session';
 import { LocalGit } from './local-git';
 import {
   ChangeHostError,
@@ -176,16 +178,62 @@ export async function changeHostDescribeRemote(): Promise<RemoteInfo> {
   return (await ensureHost()).describeRemote();
 }
 
+// W0-P5b, W0-P4 §3 — the three identity-bearing acts. The author is the
+// signed-in viewer's `Principal.subject`, read from the session HERE and never
+// from the input. Each git input is rebuilt field by field, so an `author`
+// smuggled into the JSON a client sends is never read.
+
+function refused(gate: GateResult & { allowed: false }, code: ChangeHostErrorCode): never {
+  throw new ChangeHostError(code, gate.message, gate.next);
+}
+
+async function requireSignedIn() {
+  const viewer = await getViewer();
+  const gate = gateSaveOrPropose(viewer);
+  if (!gate.allowed || viewer === null) {
+    refused(gate as GateResult & { allowed: false }, 'CHANGE_SIGN_IN_REQUIRED');
+  }
+  return viewer;
+}
+
 export async function changeHostSaveDraft(input: SaveDraftInput): Promise<ActionResult<ChangeProposal>> {
-  return runAction(async () => (await ensureHost()).saveDraft(input));
+  return runAction(async () => {
+    const viewer = await requireSignedIn();
+    return (await ensureHost()).saveDraft({
+      title: input.title,
+      branch: input.branch,
+      files: input.files,
+      author: viewer.subject,
+    });
+  });
 }
 
 export async function changeHostPropose(input: ProposeInput): Promise<ActionResult<ChangeProposal>> {
-  return runAction(async () => (await ensureHost()).propose(input));
+  return runAction(async () => {
+    const viewer = await requireSignedIn();
+    return (await ensureHost()).propose({
+      id: input.id,
+      ...(input.description === undefined ? {} : { description: input.description }),
+      author: viewer.subject,
+    });
+  });
 }
 
 export async function changeHostDiscard(id: string): Promise<ActionResult<void>> {
-  return runAction(async () => (await ensureHost()).discard(id));
+  return runAction(async () => {
+    const viewer = await getViewer();
+    const host = await ensureHost();
+    const proposal = await host.getProposal(id);
+    if (proposal === undefined) {
+      // Let the host produce its own CHANGE_NOT_FOUND, with its own next.
+      return host.discard(id);
+    }
+    const gate = gateDiscard(viewer, proposal.author);
+    if (!gate.allowed) {
+      refused(gate, viewer === null ? 'CHANGE_SIGN_IN_REQUIRED' : 'CHANGE_NOT_PERMITTED');
+    }
+    return host.discard(id);
+  });
 }
 
 export async function changeHostListProposals(): Promise<ActionResult<readonly ChangeProposal[]>> {

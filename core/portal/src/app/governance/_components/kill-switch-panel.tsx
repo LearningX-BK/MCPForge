@@ -29,6 +29,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ConfirmAction, type ConsequenceView } from '@/components/write-path';
+import { gateKill, type GateViewer } from '@/lib/viewer/gates';
+
+import { forgeKillCommand } from '../_lib/kill-command';
+import { KillCommand } from './kill-command';
 
 import type { KillFlagRowView } from '../types';
 
@@ -44,6 +48,12 @@ export interface KillSwitchPanelProps {
   deploymentId: string;
   envClass: ConsequenceView['envClass'];
   onKill?: ((request: KillRequest) => void | Promise<void>) | undefined;
+  /**
+   * W0-P5b — the signed-in viewer (HELD personas), or null. Kill needs the
+   * admin persona (W0-P4 §3). Absent means nobody is signed in, so the gate
+   * refuses: fail closed.
+   */
+  viewer?: GateViewer | null | undefined;
 }
 
 const SCOPE_LABEL: Readonly<Record<KillScope, string>> = {
@@ -62,7 +72,13 @@ const SCOPE_HINT: Readonly<Record<KillScope, string>> = {
   deployment: 'Everything. Every tool, every consumer, this whole deployment.',
 };
 
-export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillSwitchPanelProps) {
+export function KillSwitchPanel({
+  flags,
+  deploymentId,
+  envClass,
+  onKill,
+  viewer = null,
+}: KillSwitchPanelProps) {
   const [scope, setScope] = React.useState<KillScope>('tool');
   const [target, setTarget] = React.useState('');
   const [reason, setReason] = React.useState('');
@@ -70,6 +86,19 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
   const deploymentWide = scope === 'deployment';
   const effectiveTarget = deploymentWide ? deploymentId : target.trim();
   const ready = effectiveTarget !== '' && reason.trim() !== '';
+  const gate = gateKill(viewer);
+  // W0-P5b — with no write path wired (W0-P4 §9 decision 4), the button is
+  // disabled rather than a live-looking no-op; the command below is the way.
+  const command =
+    gate.allowed && ready && viewer !== null
+      ? forgeKillCommand({
+          scope,
+          target: effectiveTarget,
+          reason: reason.trim(),
+          by: viewer.subject,
+          deployment: deploymentId,
+        })
+      : null;
 
   // 03 §7.3's facts, not a friction level. A kill is not reversible by a
   // reversing call — it is undone by removing the flag — so `compensating-tool`
@@ -83,7 +112,7 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
   };
 
   function fire() {
-    if (!ready) return;
+    if (!ready || !gate.allowed) return;
     void onKill?.({ scope, target: effectiveTarget, reason: reason.trim() });
   }
 
@@ -102,11 +131,21 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
             <table data-testid="kill-flag-table" className="w-full text-left text-[12.5px]">
               <thead className="border-b border-line text-text-2">
                 <tr>
-                  <th scope="col" className="px-3 py-2">Granularity</th>
-                  <th scope="col" className="px-3 py-2">Target</th>
-                  <th scope="col" className="px-3 py-2">Reason</th>
-                  <th scope="col" className="px-3 py-2">Expires</th>
-                  <th scope="col" className="px-3 py-2">Set by</th>
+                  <th scope="col" className="px-3 py-2">
+                    Granularity
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Target
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Reason
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Expires
+                  </th>
+                  <th scope="col" className="px-3 py-2">
+                    Set by
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -173,7 +212,9 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
         )}
 
         <div className="flex flex-col gap-1">
-          <Label htmlFor="kill-reason">Reason (required — it is shown to every refused caller)</Label>
+          <Label htmlFor="kill-reason">
+            Reason (required — it is shown to every refused caller)
+          </Label>
           <Input
             id="kill-reason"
             value={reason}
@@ -188,9 +229,13 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
               consequence={consequence}
               label="Kill this deployment"
               onConfirm={fire}
-              disabled={!ready}
+              disabled={!ready || !gate.allowed || onKill === undefined}
               disabledReason={
-                ready ? undefined : 'Name a reason before killing the whole deployment.'
+                !gate.allowed
+                  ? gate.message
+                  : ready
+                    ? undefined
+                    : 'Name a reason before killing the whole deployment.'
               }
             />
           </div>
@@ -199,7 +244,7 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
             <Button
               type="button"
               variant="destructive"
-              disabled={!ready}
+              disabled={!ready || !gate.allowed || onKill === undefined}
               onClick={fire}
               data-testid="kill-scoped-confirm"
             >
@@ -212,6 +257,8 @@ export function KillSwitchPanel({ flags, deploymentId, envClass, onKill }: KillS
             )}
           </div>
         )}
+
+        <KillCommand gate={gate} command={command} testId="kill-command" />
 
         <p className="max-w-[80ch] text-[12px] text-text-2">
           Every kill and un-kill writes an immutable audit record naming its author and reason. A

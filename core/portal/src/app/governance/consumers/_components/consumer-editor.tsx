@@ -50,10 +50,9 @@ export interface ConsumerEditorProps {
   compile: CompileConsumerFn;
   /** Overrides the context host — the only injection point tests need. */
   host?: ChangeHost | undefined;
-  author?: string;
 }
 
-export function ConsumerEditor({ source, compile, host, author = 'portal' }: ConsumerEditorProps) {
+export function ConsumerEditor({ source, compile, host }: ConsumerEditorProps) {
   const contextHost = useOptionalChangeHost();
   const activeHost = host ?? contextHost;
 
@@ -115,7 +114,6 @@ export function ConsumerEditor({ source, compile, host, author = 'portal' }: Con
           : `Consumer ${source.consumerId}: authorization change`,
         branch: `forge/consumer-${source.consumerId}`,
         files: proposalFiles(source, yamlText, draft),
-        author,
       });
       setProposal(saved);
     } catch (caught) {
@@ -157,8 +155,8 @@ export function ConsumerEditor({ source, compile, host, author = 'portal' }: Con
           <p className="max-w-[80ch] text-[12px] text-text-2">
             Edit <code>authorizations</code>, <code>limits</code>, <code>attestation</code> and{' '}
             <code>bindingGrants</code>. Every edit recompiles the authorization on the right.{' '}
-            <code>credential.ref</code> is a reference and never a value — a secret typed here
-            would be refused by <code>forge validate</code>.
+            <code>credential.ref</code> is a reference and never a value — a secret typed here would
+            be refused by <code>forge validate</code>.
           </p>
           <Textarea
             aria-label={`YAML source for consumer ${source.consumerId}`}
@@ -200,10 +198,10 @@ export function ConsumerEditor({ source, compile, host, author = 'portal' }: Con
           Discard
         </Button>
         <p className="max-w-[60ch] text-[12px] text-text-2">
-          Nothing here is written to the running gateway or to{' '}
-          <code>consumers/</code>. Save draft records the edit on a branch; the change
-          proposal&rsquo;s diff is the compiled <code>{source.artefactPath}</code>, and the
-          registration takes effect only once it is approved and merged.
+          Nothing here is written to the running gateway or to <code>consumers/</code>. Save draft
+          records the edit on a branch; the change proposal&rsquo;s diff is the compiled{' '}
+          <code>{source.artefactPath}</code>, and the registration takes effect only once it is
+          approved and merged.
         </p>
       </div>
 

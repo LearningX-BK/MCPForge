@@ -14,7 +14,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { ConsequenceView } from '@/components/write-path';
 
-import { ConsumerActions, type ConsumerKillRequest, type ConsumerProposalKind } from './consumer-actions';
+import {
+  ConsumerActions,
+  type ConsumerKillRequest,
+  type ConsumerProposalKind,
+} from './consumer-actions';
+import type { GateViewer } from '@/lib/viewer/gates';
 import { ConsumerEditor, type CompileConsumerFn } from './consumer-editor';
 import { RegistryTable } from './registry-table';
 import type { ConsumerRowView, ConsumerSource } from '../types';
@@ -32,8 +37,9 @@ export interface ConsumersTabProps {
   envClass: ConsequenceView['envClass'];
   onKill?: ((request: ConsumerKillRequest) => void | Promise<void>) | undefined;
   onProposeLifecycle?:
-    | ((consumerId: string, kind: ConsumerProposalKind) => void | Promise<void>)
-    | undefined;
+    ((consumerId: string, kind: ConsumerProposalKind) => void | Promise<void>) | undefined;
+  /** W0-P5b — the signed-in viewer (HELD personas), or null; handed to the kill control. */
+  viewer?: GateViewer | null | undefined;
 }
 
 export function ConsumersTab({
@@ -45,6 +51,7 @@ export function ConsumersTab({
   envClass,
   onKill,
   onProposeLifecycle,
+  viewer = null,
 }: ConsumersTabProps) {
   const [selectedId, setSelectedId] = React.useState<string | undefined>(sources[0]?.consumerId);
   const [drafted, setDrafted] = React.useState<ConsumerSource | undefined>(undefined);
@@ -58,10 +65,7 @@ export function ConsumersTab({
       ? drafted
       : sources.find((s) => s.consumerId === selectedId);
 
-  const rows = [
-    ...sources.map((s) => s.row),
-    ...(drafted === undefined ? [] : [drafted.row]),
-  ];
+  const rows = [...sources.map((s) => s.row), ...(drafted === undefined ? [] : [drafted.row])];
 
   async function onRegister() {
     setRegisterError(undefined);
@@ -146,6 +150,7 @@ export function ConsumersTab({
               consumerId={selected.consumerId}
               deploymentId={deploymentId}
               envClass={envClass}
+              viewer={viewer}
               {...(onKill === undefined ? {} : { onKill })}
               {...(onProposeLifecycle === undefined
                 ? {}

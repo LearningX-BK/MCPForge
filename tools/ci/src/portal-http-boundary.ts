@@ -70,6 +70,17 @@ const ALLOWED_RUNTIME_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> = {
     'addDays',
     'DEFAULT_REGISTRATION_DAYS',
   ]),
+  // W0-P5b. The portal's persona source (W0-P4 §9 decision 2) is the
+  // `personas:` block of the git-held `overlays/<d>/mappings/groups-to-roles.yaml`.
+  // Both symbols read that file from disk and resolve it: a DEFINITIONAL read of
+  // git (W0-P2 §7), with no gateway process, store or session involved. The
+  // portal shares the gateway's one parser so the two cannot disagree about the
+  // file. `rolesForPrincipal` is deliberately NOT admitted: the portal decides
+  // nothing from roles; the gateway does.
+  'identity/group-role-mapping': new Set([
+    'loadDeploymentGroupRoleMapping',
+    'personasForPrincipal',
+  ]),
 };
 
 /**
@@ -85,6 +96,10 @@ const ALLOWED_TEST_ONLY_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> =
   // `anomaly/config.ts` reaches `node:fs`. Deleting the pin would be less safe,
   // not more.
   anomaly: new Set(['DETECTOR_DEFAULTS', 'DETECTOR_IDS']),
+  // W0-P5b. `lib/viewer/personas.test.ts` pins the client-safe restated persona
+  // list to the gateway's closed `PERSONAS`, for the same reason: the client
+  // cannot import a module that reads the filesystem.
+  'identity/group-role-mapping': new Set(['PERSONAS']),
 };
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'build']);

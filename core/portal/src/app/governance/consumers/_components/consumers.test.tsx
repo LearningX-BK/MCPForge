@@ -169,9 +169,7 @@ describe('ConsumerEditor — the compiled authorization is explicit, and live', 
     await screen.findByTestId('compile-error');
     expect(screen.queryByTestId('compiled-authorization')).toBeNull();
     expect(screen.queryByTestId('elevated-grant-panel')).toBeNull();
-    expect(
-      screen.getByText('Fix consumers/claude-desktop-fin.consumer.yaml.'),
-    ).toBeTruthy();
+    expect(screen.getByText('Fix consumers/claude-desktop-fin.consumer.yaml.')).toBeTruthy();
   });
 });
 
@@ -240,7 +238,9 @@ describe('ConsumerEditor — nothing saves directly', () => {
     const compile = vi.fn().mockResolvedValue(compiled());
     render(<ConsumerEditor source={source} compile={compile} host={host} />);
     await screen.findByTestId('compiled-authorization');
-    fireEvent.change(screen.getByTestId('consumer-yaml'), { target: { value: 'kind: Consumer\n' } });
+    fireEvent.change(screen.getByTestId('consumer-yaml'), {
+      target: { value: 'kind: Consumer\n' },
+    });
     await waitFor(() =>
       expect((screen.getByTestId('save-draft') as HTMLButtonElement).disabled).toBe(false),
     );
@@ -362,7 +362,7 @@ describe('ElevatedGrantPanel — standing authorization, approver, expiry, chipp
   });
 });
 
-describe('RegistryTable — 03 §16.2\'s nine columns, and the effective status', () => {
+describe("RegistryTable — 03 §16.2's nine columns, and the effective status", () => {
   it('renders every declared column', () => {
     render(<RegistryTable rows={[row]} />);
     const table = screen.getByTestId('registry-table');
@@ -390,9 +390,9 @@ describe('RegistryTable — 03 §16.2\'s nine columns, and the effective status'
       />,
     );
     expect(screen.getByTestId('registry-table').textContent).toContain('Expired');
-    expect(
-      screen.getByTestId('registry-authored-status-claude-desktop-fin').textContent,
-    ).toContain('active');
+    expect(screen.getByTestId('registry-authored-status-claude-desktop-fin').textContent).toContain(
+      'active',
+    );
   });
 
   it('marks an overdue rotation with the danger token, and one inside 30 days with write', () => {
@@ -435,7 +435,47 @@ describe('RegistryTable — 03 §16.2\'s nine columns, and the effective status'
   });
 });
 
+const ADMIN = { subject: 'local:meera', displayName: 'Meera', personas: ['admin'] as const };
+const BUSINESS = { subject: 'local:arjun', displayName: 'Arjun', personas: ['business'] as const };
+
 describe('ConsumerActions — Suspend is a kill-switch act; Retire is type-to-confirm', () => {
+  // W0-P5b — suspending is a kill (W0-P4 §3): admin only; the control is disabled, not hidden.
+  it('without the admin persona, Suspend stays visible but disabled, with the refusal copy', () => {
+    const onKill = vi.fn();
+    render(
+      <ConsumerActions
+        consumerId="claude-desktop-fin"
+        deploymentId="local"
+        envClass="local"
+        onKill={onKill}
+        viewer={BUSINESS}
+      />,
+    );
+    fireEvent.change(screen.getByTestId('consumer-kill-reason'), { target: { value: 'reason' } });
+    const button = screen.getByTestId('consumer-kill-confirm') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(onKill).not.toHaveBeenCalled();
+    expect(screen.getByTestId('consumer-kill-command-refusal').textContent).toContain(
+      'Kill switches need the admin persona.',
+    );
+  });
+
+  it('an admin sees the forge kill command for this consumer', () => {
+    render(
+      <ConsumerActions
+        consumerId="claude-desktop-fin"
+        deploymentId="local"
+        envClass="local"
+        viewer={ADMIN}
+      />,
+    );
+    fireEvent.change(screen.getByTestId('consumer-kill-reason'), { target: { value: 'leak' } });
+    expect(screen.getByTestId('consumer-kill-command').textContent).toContain(
+      "forge kill 'consumer:claude-desktop-fin' --reason 'leak' --by 'local:meera' --deployment 'local'",
+    );
+  });
+
   it('refuses a consumer-scope suspend with no reason, and fires immediately once given', () => {
     const onKill = vi.fn();
     render(
@@ -444,6 +484,7 @@ describe('ConsumerActions — Suspend is a kill-switch act; Retire is type-to-co
         deploymentId="local"
         envClass="local"
         onKill={onKill}
+        viewer={ADMIN}
       />,
     );
     const button = screen.getByTestId('consumer-kill-confirm') as HTMLButtonElement;
@@ -465,7 +506,9 @@ describe('ConsumerActions — Suspend is a kill-switch act; Retire is type-to-co
   });
 
   it('a consumer-scope suspend is NOT type-to-confirm — the speed is the point', () => {
-    render(<ConsumerActions consumerId="claude-desktop-fin" deploymentId="local" envClass="local" />);
+    render(
+      <ConsumerActions consumerId="claude-desktop-fin" deploymentId="local" envClass="local" />,
+    );
     expect(screen.queryByTestId('consumer-kill-deployment-confirm')).toBeNull();
     expect(screen.getByTestId('consumer-kill-confirm')).toBeTruthy();
   });
@@ -478,6 +521,7 @@ describe('ConsumerActions — Suspend is a kill-switch act; Retire is type-to-co
         deploymentId="local"
         envClass="local"
         onKill={onKill}
+        viewer={ADMIN}
       />,
     );
     fireEvent.click(screen.getByTestId('consumer-kill-deployment-scope'));
@@ -574,9 +618,7 @@ describe('ConsumersTab — the table selects, the editor edits, Register scaffol
     expect(compile.mock.calls[0]![0]).toBe('claude-desktop-fin');
 
     fireEvent.click(screen.getByTestId('registry-select-batch-r2r'));
-    await waitFor(() =>
-      expect(compile.mock.calls.some((c) => c[0] === 'batch-r2r')).toBe(true),
-    );
+    await waitFor(() => expect(compile.mock.calls.some((c) => c[0] === 'batch-r2r')).toBe(true));
   });
 
   it('Register opens a scaffolded record in the editor and writes nothing', async () => {

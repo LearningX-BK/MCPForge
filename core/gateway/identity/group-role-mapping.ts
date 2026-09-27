@@ -46,6 +46,26 @@ export interface GroupRoleMappingFile {
    * this file format. Optional: most deployments need none.
    */
   readonly subjectOverrides?: Readonly<Record<string, { readonly roles: readonly string[] }>>;
+  /**
+   * W0-P5b, W0-P4 §2 and §9 decision 2: which portal personas a group's
+   * members may use. Keyed by group, exactly like `groups`, so persona
+   * eligibility is reviewed in the same diff as the role grant it rides on.
+   *
+   * **A persona is a lens, never a grant.** Nothing in the gateway reads this
+   * section: scope, policy and authorization are decided from `groups` and
+   * `subjectOverrides` alone. The portal reads it to choose which lenses to
+   * offer and which portal actions to enable, and the gateway still refuses
+   * whatever the human's roles do not allow.
+   */
+  readonly personas?: Readonly<Record<string, { readonly personas: readonly Persona[] }>>;
+}
+
+/** 03 §2's three portal personas. Closed: a fourth is a reviewed change. */
+export const PERSONAS = ['developer', 'business', 'admin'] as const;
+export type Persona = (typeof PERSONAS)[number];
+
+function isPersona(value: unknown): value is Persona {
+  return typeof value === 'string' && (PERSONAS as readonly string[]).includes(value);
 }
 
 export interface LoadedMappingFile {
@@ -80,6 +100,31 @@ function readRoleEntries(
       return { ok: false, message: `entry "${key}" must be { roles: [<role id>, ...] }` };
     }
     entries[key] = { roles: [...(raw['roles'] as string[])] };
+  }
+  return { ok: true, entries };
+}
+
+function readPersonaEntries(
+  value: unknown,
+):
+  | { readonly ok: true; entries: Record<string, { personas: Persona[] }> }
+  | { readonly ok: false; message: string } {
+  if (value === undefined) return { ok: true, entries: {} };
+  if (!isRecord(value))
+    return { ok: false, message: 'must be a mapping of group -> { personas: [...] }' };
+  const entries: Record<string, { personas: Persona[] }> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (!isRecord(raw) || !Array.isArray(raw['personas'])) {
+      return { ok: false, message: `entry "${key}" must be { personas: [<persona>, ...] }` };
+    }
+    const unknown = raw['personas'].filter((p) => !isPersona(p));
+    if (unknown.length > 0) {
+      return {
+        ok: false,
+        message: `entry "${key}" names ${JSON.stringify(unknown)}; a persona is one of ${PERSONAS.join(', ')}`,
+      };
+    }
+    entries[key] = { personas: [...(raw['personas'] as Persona[])] };
   }
   return { ok: true, entries };
 }
@@ -126,6 +171,10 @@ export function parseGroupRoleMappingFile(
       error: { filePath, message: `subjectOverrides: ${subjectOverrides.message}` },
     };
   }
+  const personas = readPersonaEntries(raw['personas']);
+  if (!personas.ok) {
+    return { ok: false, error: { filePath, message: `personas: ${personas.message}` } };
+  }
   const doc: GroupRoleMappingFile = {
     apiVersion: 'mcpforge/v1',
     kind: 'GroupRoleMapping',
@@ -134,6 +183,7 @@ export function parseGroupRoleMappingFile(
     ...(Object.keys(subjectOverrides.entries).length > 0
       ? { subjectOverrides: subjectOverrides.entries }
       : {}),
+    ...(Object.keys(personas.entries).length > 0 ? { personas: personas.entries } : {}),
   };
   return { ok: true, doc };
 }
@@ -248,6 +298,7 @@ export function remapSubjectAcrossMappingFiles(
       deployment: doc.deployment,
       groups: doc.groups,
       subjectOverrides: nextOverrides,
+      ...(doc.personas === undefined ? {} : { personas: doc.personas }),
     };
     writeFileSync(filePath, serializeGroupRoleMappingFile(nextDoc), 'utf-8');
 
@@ -266,6 +317,11 @@ export function serializeGroupRoleMappingFile(doc: GroupRoleMappingFile): string
     groups: doc.groups,
     ...(doc.subjectOverrides !== undefined && Object.keys(doc.subjectOverrides).length > 0
       ? { subjectOverrides: doc.subjectOverrides }
+      : {}),
+    // W0-P5b — kept on a rewrite. A remap that dropped this block would
+    // silently take every persona away from every group.
+    ...(doc.personas !== undefined && Object.keys(doc.personas).length > 0
+      ? { personas: doc.personas }
       : {}),
   };
   return `${stringifyYaml(ordered, { indent: 2, sortMapEntries: false })}`;
@@ -347,4 +403,28 @@ export function rolesForPrincipal(
     }
   }
   return [...roles].sort();
+}
+
+/**
+ * W0-P5b — the personas a principal may use in the portal: the union over its
+ * groups' `personas:` entries, in `PERSONAS` order. An unmapped group offers no
+ * persona and is not an error; a principal with none still signs in and sees
+ * every page (W0-P4 §2). **Never an input to authorization** (see the
+ * `personas` field above).
+ */
+export function personasForPrincipal(
+  mapping: readonly GroupRoleMappingFile[],
+  principal: { readonly groups: readonly string[] },
+): readonly Persona[] {
+  const held = new Set<Persona>();
+  for (const doc of mapping) {
+    const personas = doc.personas;
+    if (personas === undefined) continue;
+    for (const group of principal.groups) {
+      if (Object.prototype.hasOwnProperty.call(personas, group)) {
+        for (const persona of personas[group]!.personas) held.add(persona);
+      }
+    }
+  }
+  return PERSONAS.filter((p) => held.has(p));
 }

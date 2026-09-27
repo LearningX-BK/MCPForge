@@ -17,8 +17,11 @@ import { ConsumersTab } from './_components/consumers-tab';
 import { compileConsumerDraft } from './_lib/compile-consumer';
 import { scaffoldConsumerAction } from './_lib/register-action';
 import { loadConsumerFailures, loadConsumerSources } from './_lib/repo-consumers';
+import { getViewer } from '@/lib/viewer/session';
 
-export default function GovernanceConsumersPage(): React.ReactElement {
+export default async function GovernanceConsumersPage(): Promise<React.ReactElement> {
+  // W0-P5b — resolved on the server; the kill control gets held personas, no token.
+  const viewer = await getViewer();
   const sources = loadConsumerSources();
   const failures = loadConsumerFailures();
 
@@ -44,6 +47,7 @@ export default function GovernanceConsumersPage(): React.ReactElement {
         scaffold={scaffoldConsumerAction}
         deploymentId="local"
         envClass="local"
+        viewer={viewer}
       />
     </main>
   );

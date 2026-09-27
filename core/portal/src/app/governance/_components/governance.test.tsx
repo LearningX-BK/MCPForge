@@ -77,9 +77,7 @@ describe('RoleEditor — the compiled scope is an explicit tool-id list, live', 
     // The removed tool is still SHOWN, marked removed — a narrowing must be
     // visible, not silent.
     const removed = screen.getAllByTestId('scope-row-removed');
-    expect(removed.map((el) => el.getAttribute('data-tool-id'))).toEqual([
-      'jde.ap.voucher.search',
-    ]);
+    expect(removed.map((el) => el.getAttribute('data-tool-id'))).toEqual(['jde.ap.voucher.search']);
     expect(screen.getByTestId('scope-removed-count').textContent).toBe('−1');
     // The compiler was asked about the EDITED text, not the original.
     expect(compile).toHaveBeenLastCalledWith(
@@ -152,10 +150,7 @@ describe('RoleEditor — nothing saves directly', () => {
     await waitFor(() => expect(saveDraft).toHaveBeenCalled());
 
     const files = saveDraft.mock.calls[0]![0].files as Record<string, string>;
-    expect(Object.keys(files).sort()).toEqual([
-      'generated/roles/p2p.scope.json',
-      'roles/p2p.yaml',
-    ]);
+    expect(Object.keys(files).sort()).toEqual(['generated/roles/p2p.scope.json', 'roles/p2p.yaml']);
     // The proposal's diff IS the compiled scope — these are the compiler's bytes.
     expect(files['generated/roles/p2p.scope.json']).toBe('{"toolIds":["jde.ap.voucher.create"]}\n');
   });
@@ -232,6 +227,9 @@ describe('SodPanel — declared conflicts and implicit pairs, each with a dispos
   });
 });
 
+const ADMIN = { subject: 'local:meera', displayName: 'Meera', personas: ['admin'] as const };
+const BUSINESS = { subject: 'local:arjun', displayName: 'Arjun', personas: ['business'] as const };
+
 describe('KillSwitchPanel — five granularities, type-to-confirm on deployment-wide', () => {
   it('offers all five granularities the gateway defines', () => {
     render(<KillSwitchPanel flags={[]} deploymentId="local" envClass="local" />);
@@ -249,7 +247,13 @@ describe('KillSwitchPanel — five granularities, type-to-confirm on deployment-
   it('a deployment-wide kill requires typing the deployment id before it can fire', async () => {
     const onKill = vi.fn();
     render(
-      <KillSwitchPanel flags={[]} deploymentId="local" envClass="local" onKill={onKill} />,
+      <KillSwitchPanel
+        flags={[]}
+        deploymentId="local"
+        envClass="local"
+        onKill={onKill}
+        viewer={ADMIN}
+      />,
     );
     fireEvent.click(screen.getByTestId('kill-scope-deployment'));
     fireEvent.change(screen.getByLabelText(/Reason/), {
@@ -264,7 +268,9 @@ describe('KillSwitchPanel — five granularities, type-to-confirm on deployment-
     expect(onKill).not.toHaveBeenCalled();
 
     // The typed word is the deployment id.
-    const field = confirm.querySelector('input[type="text"], input:not([type])') as HTMLInputElement;
+    const field = confirm.querySelector(
+      'input[type="text"], input:not([type])',
+    ) as HTMLInputElement;
     fireEvent.change(field, { target: { value: 'local' } });
     await waitFor(() => expect(button.disabled).toBe(false));
     fireEvent.click(button);
@@ -277,11 +283,60 @@ describe('KillSwitchPanel — five granularities, type-to-confirm on deployment-
 
   it('refuses a kill with no reason at every granularity', () => {
     const onKill = vi.fn();
-    render(<KillSwitchPanel flags={[]} deploymentId="local" envClass="local" onKill={onKill} />);
-    fireEvent.change(screen.getByLabelText('Target'), { target: { value: 'jde.ap.voucher.create' } });
+    render(
+      <KillSwitchPanel
+        flags={[]}
+        deploymentId="local"
+        envClass="local"
+        onKill={onKill}
+        viewer={ADMIN}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Target'), {
+      target: { value: 'jde.ap.voucher.create' },
+    });
     const button = screen.getByTestId('kill-scoped-confirm') as HTMLButtonElement;
     expect(button.disabled).toBe(true);
     fireEvent.click(button);
     expect(onKill).not.toHaveBeenCalled();
+  });
+  // W0-P5b, W0-P4 §3 and §9 decision 4.
+  it('an admin who names a target and reason is shown the exact forge kill command', () => {
+    render(<KillSwitchPanel flags={[]} deploymentId="local" envClass="local" viewer={ADMIN} />);
+    fireEvent.change(screen.getByLabelText('Target'), {
+      target: { value: 'jde.ap.voucher.create' },
+    });
+    fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: "AP's JDE is down" } });
+    expect(screen.getByTestId('kill-command').textContent).toContain(
+      "forge kill 'jde.ap.voucher.create' --reason 'AP'\\''s JDE is down' --by 'local:meera' --deployment 'local'",
+    );
+  });
+
+  it('without the admin persona: the controls stay visible, disabled, with the refusal copy', () => {
+    const onKill = vi.fn();
+    for (const viewer of [BUSINESS, null]) {
+      cleanup();
+      render(
+        <KillSwitchPanel
+          flags={[]}
+          deploymentId="local"
+          envClass="local"
+          onKill={onKill}
+          viewer={viewer}
+        />,
+      );
+      fireEvent.change(screen.getByLabelText('Target'), {
+        target: { value: 'jde.ap.voucher.create' },
+      });
+      fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: 'reason' } });
+      const button = screen.getByTestId('kill-scoped-confirm') as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      fireEvent.click(button);
+      expect(onKill).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('kill-command')).toBeNull();
+      const refusal = screen.getByTestId('kill-command-refusal');
+      expect(refusal.textContent).toContain('Kill switches need the admin persona.');
+      expect(refusal.textContent).toContain('run `forge kill` if you hold the admin role locally');
+    }
   });
 });

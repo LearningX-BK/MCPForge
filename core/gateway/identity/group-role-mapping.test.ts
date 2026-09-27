@@ -8,7 +8,9 @@ import {
   findMappingFiles,
   loadMappingFiles,
   parseGroupRoleMappingFile,
+  personasForPrincipal,
   remapSubjectAcrossMappingFiles,
+  rolesForPrincipal,
 } from './group-role-mapping.js';
 
 let root: string;
@@ -181,5 +183,86 @@ subjectOverrides:
     expect(changed).toHaveLength(1);
     expect(changed[0]?.filePath).toBe(f1);
     expect(errors).toHaveLength(1);
+  });
+});
+
+describe('personas (W0-P5b) -- a lens from the git mapping, never a grant', () => {
+  const WITH_PERSONAS = `
+apiVersion: mcpforge/v1
+kind: GroupRoleMapping
+deployment: local
+groups:
+  finance-ap-clerks:
+    roles: [p2p-ap-clerk]
+  mcpforge-admins:
+    roles: [p2p-admin]
+subjectOverrides:
+  local:jdoe:
+    roles: [p2p-ap-approver]
+personas:
+  mcpforge-admins:
+    personas: [admin, developer]
+  finance-ap-clerks:
+    personas: [business]
+`;
+
+  it('parses the personas block keyed by group', () => {
+    const result = parseGroupRoleMappingFile('x.yaml', WITH_PERSONAS);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.doc.personas).toEqual({
+      'mcpforge-admins': { personas: ['admin', 'developer'] },
+      'finance-ap-clerks': { personas: ['business'] },
+    });
+  });
+
+  it('refuses a persona outside the closed set', () => {
+    const result = parseGroupRoleMappingFile(
+      'x.yaml',
+      WITH_PERSONAS.replace('[business]', '[business, superuser]'),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toMatch(/personas: .*superuser/);
+  });
+
+  it('resolves the union over groups, in PERSONAS order; an unmapped group offers none', () => {
+    const result = parseGroupRoleMappingFile('x.yaml', WITH_PERSONAS);
+    if (!result.ok) throw new Error('fixture must parse');
+    expect(
+      personasForPrincipal([result.doc], { groups: ['finance-ap-clerks', 'mcpforge-admins'] }),
+    ).toEqual(['developer', 'business', 'admin']);
+    expect(personasForPrincipal([result.doc], { groups: ['nobody-maps-this'] })).toEqual([]);
+    expect(personasForPrincipal([result.doc], { groups: ['__proto__', 'constructor'] })).toEqual(
+      [],
+    );
+  });
+
+  it('personas never change the roles a principal holds', () => {
+    const withBlock = parseGroupRoleMappingFile('x.yaml', WITH_PERSONAS);
+    const without = parseGroupRoleMappingFile(
+      'x.yaml',
+      WITH_PERSONAS.slice(0, WITH_PERSONAS.indexOf('personas:')),
+    );
+    if (!withBlock.ok || !without.ok) throw new Error('fixtures must parse');
+    for (const principal of [
+      { subject: 'local:a', groups: ['mcpforge-admins'] },
+      { subject: 'local:jdoe', groups: ['finance-ap-clerks'] },
+      { subject: 'local:b', groups: [] },
+    ]) {
+      expect(rolesForPrincipal([withBlock.doc], principal)).toEqual(
+        rolesForPrincipal([without.doc], principal),
+      );
+    }
+  });
+
+  it('a subject remap keeps the personas block', () => {
+    const file = writeMapping('local', WITH_PERSONAS);
+    remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
+    const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
+    expect(reparsed.ok && reparsed.doc.personas?.['mcpforge-admins']?.personas).toEqual([
+      'admin',
+      'developer',
+    ]);
   });
 });

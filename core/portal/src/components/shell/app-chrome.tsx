@@ -29,8 +29,7 @@ import { CommandPalette } from '../palette/command-palette';
 import { fixtureFindClient } from '../palette/find-fixture';
 import { NAV_DESTINATIONS, isDestinationActive } from './nav';
 import { useOptionalChangeHost, type ChangeProposal } from '@/lib/change-host';
-
-const PORTAL_AUTHOR = 'portal';
+import type { ViewerSummary } from '@/lib/viewer/summary';
 
 /** `merged` proposals have nothing left to act on — the tray only ever
  * shows work still in flight (03 §6.3: "3 changes", never a completed one). */
@@ -54,7 +53,14 @@ function titleForPathname(pathname: string): string {
   return firstSegment ? firstSegment[0]!.toUpperCase() + firstSegment.slice(1) : 'MCPForge';
 }
 
-export function AppChrome({ children }: { readonly children: React.ReactNode }): React.ReactElement {
+export function AppChrome({
+  children,
+  viewer = null,
+}: {
+  readonly children: React.ReactNode;
+  /** W0-P5b — resolved on the server by the root layout. Carries no token. */
+  readonly viewer?: ViewerSummary | null;
+}): React.ReactElement {
   const pathname = usePathname();
   const title = titleForPathname(pathname ?? '/');
 
@@ -79,7 +85,7 @@ export function AppChrome({ children }: { readonly children: React.ReactNode }):
   const onProposeOne = React.useCallback(
     (id: string) => {
       if (host === undefined) return;
-      void host.propose({ id, author: PORTAL_AUTHOR }).then(refreshTray);
+      void host.propose({ id }).then(refreshTray);
     },
     [host, refreshTray],
   );
@@ -95,9 +101,7 @@ export function AppChrome({ children }: { readonly children: React.ReactNode }):
   const onProposeAll = React.useCallback(() => {
     if (host === undefined) return;
     const draftIds = trayItems.filter((item) => item.state === 'draft').map((item) => item.id);
-    void Promise.all(draftIds.map((id) => host.propose({ id, author: PORTAL_AUTHOR }))).then(
-      refreshTray,
-    );
+    void Promise.all(draftIds.map((id) => host.propose({ id }))).then(refreshTray);
   }, [host, refreshTray, trayItems]);
 
   const [paletteOpen, setPaletteOpen] = React.useState(false);
@@ -110,7 +114,8 @@ export function AppChrome({ children }: { readonly children: React.ReactNode }):
   const lastFocusedRef = React.useRef<HTMLElement | null>(null);
 
   const openPalette = React.useCallback(() => {
-    lastFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    lastFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setPaletteOpen(true);
   }, []);
 
@@ -140,6 +145,7 @@ export function AppChrome({ children }: { readonly children: React.ReactNode }):
     <>
       <AppShell
         title={title}
+        viewer={viewer}
         onOpenCommandPalette={openPalette}
         changeTrayItems={trayItems}
         onProposeOne={onProposeOne}

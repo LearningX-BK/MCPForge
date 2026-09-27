@@ -130,7 +130,7 @@ export interface LaunchOptions {
    * starting `next start` (which is not built in a unit-test run) or
    * shelling out at all.
    */
-  readonly spawnPortal?: (repoRoot: string) => ChildProcess;
+  readonly spawnPortal?: (repoRoot: string, gatewayUrl: string) => ChildProcess;
 }
 
 export interface LaunchedGateway {
@@ -154,9 +154,12 @@ export interface LaunchedGateway {
   close(): Promise<void>;
 }
 
-function defaultSpawnPortal(repoRoot: string): ChildProcess {
+function defaultSpawnPortal(repoRoot: string, gatewayUrl: string): ChildProcess {
   const options: SpawnOptions = {
     cwd: repoRoot,
+    // W0-P5b: the portal signs its viewers in through this gateway's
+    // `/auth/local/*`, so it is told where the gateway actually listens.
+    env: { ...process.env, MCPFORGE_GATEWAY_URL: gatewayUrl },
     stdio: 'inherit',
     // Windows needs a shell to resolve the `pnpm` shim; POSIX does not.
     shell: process.platform === 'win32',
@@ -361,7 +364,9 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     const { port } = await gateway.listen(options.gatewayPort ?? 0, options.gatewayHost);
     cleanups.unshift(() => gateway.close());
 
-    const portal = mode === 'full' ? (options.spawnPortal ?? defaultSpawnPortal)(repoRoot) : null;
+    const gatewayUrl = `http://${options.gatewayHost ?? '127.0.0.1'}:${port}`;
+    const portal =
+      mode === 'full' ? (options.spawnPortal ?? defaultSpawnPortal)(repoRoot, gatewayUrl) : null;
 
     return {
       mode,
