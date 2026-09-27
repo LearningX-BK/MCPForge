@@ -11,19 +11,28 @@ steward: Bikash Pattnaik
 status: active
 expiresAt: 2027-09-15
 credential:
-  method: client-secret
+  method: private-key-jwt
   ref: secretRef://consumer/portal-local/client
   boundIssuers:
     - local
   rotation:
     intervalDays: 90
-    lastRotatedAt: 2026-09-15
+    lastRotatedAt: 2026-09-27
+  publicKeys:
+    - kid: 2026-09-27-06e2
+      kty: OKP
+      crv: Ed25519
+      x: VqISKnakHcwaRLFZwzAdNg1B9cIWPl4c1c4fpCSbpts
+      addedAt: 2026-09-27
 authorizations:
-  bindingTypes: [function]
+  bindingTypes:
+    - function
   maxSensitivity: financial
   writeAllowed: true
-  roles: [p2p]
-  packages: [jde-fin]
+  roles:
+    - p2p
+  packages:
+    - jde-fin
 limits:
   callsPerMinute: 60
   writesPerDay: 50
