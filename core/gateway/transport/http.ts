@@ -54,6 +54,7 @@ import {
 } from './session-binding.js';
 import { handleSignInRequest, isSignInPath } from './sign-in-routes.js';
 import type { LocalSignInService } from '../identity/index.js';
+import type { ReadApi } from '../api/v1/read-api.js';
 
 const MCP_PATH = '/mcp';
 const SESSION_ID_HEADER = 'mcp-session-id';
@@ -136,6 +137,12 @@ export interface GatewayHttpTransportOptions {
    * local provider is configured. Absent, those paths are a plain 404.
    */
   readonly localSignIn?: LocalSignInService;
+  /**
+   * W0-P3a — the read-only governance API (`/api/v1/**`, W0-P2 §7). It runs
+   * the same `[2a]` gate and session establishment as `/mcp` on every request.
+   * Absent, those paths are a plain 404.
+   */
+  readonly readApi?: ReadApi;
 }
 
 /** A metadata document this gateway serves, and where. */
@@ -335,6 +342,15 @@ export function createGatewayHttpTransport(
     const signIn = options.localSignIn;
     if (signIn !== undefined && isSignInPath(url.pathname)) {
       handleSignInRequest(req, res, url.pathname, signIn).catch(() => {
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
+      return;
+    }
+
+    const readApi = options.readApi;
+    if (readApi !== undefined && readApi.handles(url.pathname)) {
+      readApi.handle(req, res, url).catch(() => {
         if (!res.headersSent) res.writeHead(500);
         res.end();
       });

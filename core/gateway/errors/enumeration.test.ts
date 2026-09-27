@@ -49,6 +49,8 @@ import {
   TOOLS as SCOPE_TOOLS,
 } from '../scope/scope.fixtures.js';
 import { killSwitchRefusalError } from '../flags/checks.js';
+import { createReadApi } from '../api/v1/read-api.js';
+import { ConsumerAuthenticator, readConsumerPresentation } from '../transport/consumer-auth/index.js';
 import { constructReversingCall } from '../reversal/construct.js';
 import {
   approvalGate,
@@ -640,7 +642,66 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
   },
   // (identityUnresolvedForEcho()'s `next` is a single template literal, so the
   // scan classifies it as a LITERAL site and checks it above — no rule needed.)
+  {
+    match: (s) => basename(s.file) === 'read-api.ts' && s.raw === 'v.firstBreak.next',
+    description:
+      'api/v1/read-api.ts (W0-P3a) forwards AuditChainBreak.next from store/audit/verify.ts unchanged; every break that verify.ts constructs carries one of its own LITERAL next sites, which this same scan checked above (same-module backing).',
+    dynamicCheck: () => {
+      const verifySites = SITES.filter(
+        (s) => basename(s.file) === 'verify.ts' && s.file.includes('audit') && s.kind === 'literal',
+      );
+      if (verifySites.length < 3) {
+        throw new Error(
+          'store/audit/verify.ts no longer backs every chain break with a literal next',
+        );
+      }
+      return verifySites
+        .map((s) => s.literalFixedText ?? '')
+        .reduce((a, b) => (a.length <= b.length ? a : b));
+    },
+  },
+  {
+    match: (s) => basename(s.file) === 'read-api.ts' && s.raw === 'refusal.next',
+    description:
+      "api/v1/read-api.ts (W0-P3a) renders an ApiRefusal's next: either one of its own literal sites or a ForgeError.next forwarded from the [2a] gate / session establishment. Driven through the REAL handler and the REAL ConsumerAuthenticator with nothing presented.",
+    dynamicCheck: () => readApiRefusalNext(),
+  },
 ];
+
+async function readApiRefusalNext(): Promise<string> {
+  const authenticator = new ConsumerAuthenticator({
+    registry: { consumers: [], failures: [] },
+    audience: 'https://mcpforge.local/mcp',
+  });
+  const api = createReadApi({
+    repoRoot: '.',
+    store: {} as never,
+    catalogue: { toolIds: [], tools: new Map(), entries: [] } as never,
+    consumerAuth: {
+      authenticate: (headers, correlationId) =>
+        authenticator.authenticate(readConsumerPresentation(headers), correlationId),
+    },
+    sessions: {} as never,
+    consumers: { consumers: [], failures: [] },
+    identityProviderKind: 'local',
+    gatewayVersion: 'test',
+  });
+  let body = '';
+  const res = {
+    setHeader: () => res,
+    writeHead: () => res,
+    end: (chunk: string) => {
+      body = chunk;
+      return res;
+    },
+  };
+  await api.handle(
+    { method: 'GET', headers: {} } as never,
+    res as never,
+    new URL('http://localhost/api/v1/calls'),
+  );
+  return (JSON.parse(body) as { error: { next: string } }).error.next;
+}
 
 /**
  * Drives the real `function` executor's identity-echo step and returns the real

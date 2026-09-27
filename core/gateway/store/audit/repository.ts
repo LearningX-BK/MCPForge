@@ -32,6 +32,7 @@ import type {
   AuditRepository,
   AuditResultKey,
   CompensatingControl,
+  ListRecentCallsFilter,
 } from './types.js';
 
 const CALL = sql.identifier(AUDIT_CALL.name);
@@ -566,6 +567,40 @@ export function auditRepository(
         creds.get(id) ?? [],
         await reversedBy(id),
       );
+    },
+
+    async listRecent(filter: ListRecentCallsFilter): Promise<AuditCallRecord[]> {
+      const limit = Math.max(0, Math.min(500, Math.trunc(filter.limit)));
+      const authority: SQL[] = [];
+      if (filter.visibleToolIds.length > 0) {
+        authority.push(
+          sql`${sql.identifier('tool_id')} in (${sql.join(
+            filter.visibleToolIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+        );
+      }
+      if (filter.ownSubject !== undefined && filter.ownSubject.length > 0) {
+        authority.push(sql`${sql.identifier('caller_subject')} = ${filter.ownSubject}`);
+      }
+      // Fail closed: a viewer with no visible tool and no subject sees nothing.
+      if (authority.length === 0 || limit === 0) return [];
+
+      const where: SQL[] = [sql`(${sql.join(authority, sql` or `)})`];
+      if (filter.toolId !== undefined)
+        where.push(sql`${sql.identifier('tool_id')} = ${filter.toolId}`);
+      if (filter.consumerId !== undefined) {
+        where.push(sql`${sql.identifier('consumer_id')} = ${filter.consumerId}`);
+      }
+      if (filter.outcome !== undefined)
+        where.push(sql`${sql.identifier('outcome')} = ${filter.outcome}`);
+      if (filter.beforeId !== undefined)
+        where.push(sql`${sql.identifier('id')} < ${filter.beforeId}`);
+
+      const rows = await connection.all<CallRow>(
+        sql`${selectCall} where ${sql.join(where, sql` and `)} order by ${sql.identifier('id')} desc limit ${limit}`,
+      );
+      return hydrate(rows);
     },
 
     async reversalLinks(callId: string) {

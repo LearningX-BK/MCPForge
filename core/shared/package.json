@@ -8,14 +8,16 @@
     ".": "./src/index.ts",
     "./manifest": "./src/manifest/index.ts",
     "./errors": "./src/errors/index.ts",
-    "./tokens": "./src/tokens/index.ts"
+    "./tokens": "./src/tokens/index.ts",
+    "./api/v1": "./src/api/v1/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --build --force",
     "test": "vitest run"
   },
   "dependencies": {
-    "js-tiktoken": "1.0.21"
+    "js-tiktoken": "1.0.21",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

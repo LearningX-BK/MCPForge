@@ -546,6 +546,9 @@ describe('the append-only rule is in the type system as well as the database', (
       // one deletion path in the product is `store.retention`, which is a
       // separate, gated repository precisely so this assertion stays true.
       'listDeployments',
+      // W0-P3a added one READ method: the `/api/v1/calls` page, newest first,
+      // with the read authority inside the query. Still no update or delete.
+      'listRecent',
       // W0-F5 added one more READ method: both ends of a reversal edge, with
       // `reversed_by_call_id` resolved from the index because an append-only
       // row can never be rewritten once its reversal lands.
