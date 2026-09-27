@@ -22,7 +22,7 @@ export type MyQueueItem =
 
 /** "What broke" — probe regressions, guardrail refusals, hash-chain breaks. */
 export type WhatBrokeItem =
-  | { readonly kind: 'probe_disabled'; readonly tool: CatalogTool; readonly href: string }
+  | { readonly kind: 'probe_disabled'; readonly toolId: string; readonly status: string; readonly href: string }
   | { readonly kind: 'guardrail_refusal'; readonly call: ActivityCallSummary; readonly href: string }
   | { readonly kind: 'chain_break'; readonly detail: string; readonly href: string };
 

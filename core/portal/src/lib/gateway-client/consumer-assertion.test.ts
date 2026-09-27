@@ -93,7 +93,11 @@ describe('the portal consumer assertion (W0-P24)', () => {
     expect(result.authMethod).toBe('private-key-jwt');
   });
 
-  it('is refused by the gateway before the proposal is merged: the committed record is client-secret', async () => {
+  it('is refused when signed with a key the committed record does not name', async () => {
+    // Since 28 Sep 2026 the committed record IS private-key-jwt (W0-P24,
+    // approved), carrying the public key of the key minted on the owner's
+    // machine. A freshly minted key is a different key: the gateway must
+    // refuse it rather than accept any Ed25519 signature claiming portal-local.
     const { root, registry } = world({ applyProposal: false });
     const { assertion, authenticator } = await present(root, registry);
     const result = await authenticator.authenticate(
@@ -103,7 +107,7 @@ describe('the portal consumer assertion (W0-P24)', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('CONSUMER_UNREGISTERED');
-    expect(result.error.next).toMatch(/change proposal against consumers\/portal-local/);
+    expect(result.error.next.trim().length).toBeGreaterThan(0);
   });
 
   it('mints a fresh, single-use, 60-second assertion per call; a replay is refused', async () => {

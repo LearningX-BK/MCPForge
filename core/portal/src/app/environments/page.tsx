@@ -1,14 +1,26 @@
 // MCPForge — W0-J17: `/environments` — "This deployment" (03 §5.3).
-'use client';
+// W0-P3b: live. The fingerprint is read from `/api/v1/deployment` (and the
+// last probe run from `/api/v1/enablement`); the git remote from the
+// ChangeHost. A failed read renders its notice in place of the panel.
 
 import * as React from 'react';
 
-import { EnvNav } from './_components/env-nav';
-import { DeploymentFingerprintPanel } from './_components/deployment-fingerprint-panel';
-import { loadDeploymentFingerprint } from './fixtures';
+import { LiveStateNotice } from '@/components/live/live-state-notice';
+import { serverChangeHost } from '@/lib/change-host/server';
+import { readDeployment, readEnablement } from '@/lib/gateway-client/read-client';
 
-export default function EnvironmentsPage(): React.ReactElement {
-  const fingerprint = React.useMemo(() => loadDeploymentFingerprint(), []);
+import { DeploymentFingerprintPanel } from './_components/deployment-fingerprint-panel';
+import { EnvNav } from './_components/env-nav';
+import { toFingerprint } from './live';
+
+export const dynamic = 'force-dynamic';
+
+export default async function EnvironmentsPage(): Promise<React.ReactElement> {
+  const [deployment, enablement, remote] = await Promise.all([
+    readDeployment(),
+    readEnablement(),
+    serverChangeHost.describeRemote().catch(() => ({ configured: false as const })),
+  ]);
 
   return (
     <main className="flex flex-col gap-6 px-6 py-6">
@@ -22,7 +34,17 @@ export default function EnvironmentsPage(): React.ReactElement {
 
       <EnvNav />
 
-      <DeploymentFingerprintPanel fingerprint={fingerprint} />
+      {deployment.kind === 'ok' ? (
+        <DeploymentFingerprintPanel
+          fingerprint={toFingerprint(
+            deployment.data,
+            enablement.kind === 'ok' ? enablement.data : null,
+            remote,
+          )}
+        />
+      ) : (
+        <LiveStateNotice state={deployment} subject="This deployment" />
+      )}
     </main>
   );
 }

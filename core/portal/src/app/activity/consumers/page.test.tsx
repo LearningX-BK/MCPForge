@@ -7,11 +7,29 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import ActivityConsumersPage from './page';
-import * as fixtures from './fixtures';
-import { loadConsumerUsageOverview } from './fixtures';
+import { ConsumersView } from './consumers-view';
+import { CONSUMER_OPTIONS, loadConsumerUsageOverview } from './fixtures';
 
-afterEach(cleanup);
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ refresh: () => undefined, push: () => undefined, replace: () => undefined }),
+}));
+
+const refreshSpy = vi.fn();
+
+/** The view, fed the same fixtures the page used to read directly. */
+function ActivityConsumersPage() {
+  return (
+    <ConsumersView
+      overviews={CONSUMER_OPTIONS.map((o) => loadConsumerUsageOverview(o.consumerId))}
+      onRefresh={refreshSpy}
+    />
+  );
+}
+
+afterEach(() => {
+  cleanup();
+  refreshSpy.mockReset();
+});
 
 describe('ActivityConsumersPage', () => {
   it('renders the quota meters for both enforced limits', () => {
@@ -45,7 +63,7 @@ describe('ActivityConsumersPage', () => {
     expect(link.getAttribute('href')).toBe(`/activity/calls/${firstEvent.auditCallLinks[0]!.callId}`);
   });
 
-  it('re-fetches on the visible consumer switch', () => {
+  it('switches to the chosen consumer’s snapshot', () => {
     render(<ActivityConsumersPage />);
     fireEvent.change(screen.getByTestId('consumer-select'), { target: { value: 'con_agent_client' } });
     const overview = loadConsumerUsageOverview('con_agent_client');
@@ -82,16 +100,14 @@ describe('ActivityConsumersPage', () => {
       });
 
       expect(wsSpy).not.toHaveBeenCalled();
+      expect(refreshSpy).toHaveBeenCalledTimes(2);
       (globalThis as { WebSocket?: unknown }).WebSocket = OriginalWebSocket;
     });
 
     it('manual refresh re-fetches immediately, independent of the poll interval', () => {
       render(<ActivityConsumersPage />);
-      const spy = vi.spyOn(fixtures, 'loadConsumerUsageOverview');
-      const callsBefore = spy.mock.calls.length;
       fireEvent.click(screen.getByTestId('consumers-refresh-button'));
-      expect(spy.mock.calls.length).toBe(callsBefore + 1);
-      spy.mockRestore();
+      expect(refreshSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

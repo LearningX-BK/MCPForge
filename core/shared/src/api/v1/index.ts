@@ -160,14 +160,33 @@ export type CallDetailResponse = z.infer<typeof callDetailResponseSchema>;
 
 // --- audit integrity ---------------------------------------------------------
 
-/** One deployment chain's verification. Counts and positions only, never row contents. */
+export const AUDIT_CHAIN_STATUSES = [
+  'empty',
+  'intact',
+  'intact_from_retention_boundary',
+  'broken',
+] as const;
+
+/**
+ * One deployment chain's verification: counts, positions and row IDS, never
+ * row contents or hashes. An id is what the operator needs to investigate
+ * ("inspect this call id"); opening it is still subject to the read authority.
+ */
 export const chainVerificationSchema = z.object({
   deploymentId: z.string(),
-  status: z.string(),
+  status: z.enum(AUDIT_CHAIN_STATUSES),
   rowsChecked: z.number(),
-  origin: z.object({ kind: z.enum(['genesis', 'retention_boundary']) }).nullable(),
+  origin: z
+    .object({
+      kind: z.enum(['genesis', 'retention_boundary']),
+      firstRowId: z.string(),
+      /** The retention attestation row that accounts for a boundary origin. */
+      attestationCallId: z.string().nullable(),
+    })
+    .nullable(),
   firstBreak: z
     .object({
+      rowId: z.string(),
       position: z.number(),
       reason: z.string(),
       message: z.string(),

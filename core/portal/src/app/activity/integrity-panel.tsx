@@ -12,14 +12,14 @@
 import { CircleCheck, TriangleAlert, FileClock, Info } from 'lucide-react';
 import { cn } from 'cn';
 
-import type { AuditChainVerification } from './types';
+import type { IntegrityView } from './types';
 
 export interface IntegrityPanelProps {
-  verification: AuditChainVerification;
+  verification: IntegrityView;
   className?: string | undefined;
 }
 
-function statusSentence(v: AuditChainVerification): string {
+function statusSentence(v: IntegrityView): string {
   switch (v.status) {
     case 'empty':
       return 'No calls recorded yet for this deployment. That is the expected state of a fresh local checkout — there is no chain to verify until the first call is written.';

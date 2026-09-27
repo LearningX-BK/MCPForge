@@ -30,6 +30,28 @@ import type {
 export type { AuditChainVerification, AuditChainStatus };
 export type { AuditOutcome, AuditPhase, AuditResultKey, AuditCredentialRef, CompensatingControl };
 
+/**
+ * What the Integrity panel renders. `AuditChainVerification` (the fixtures)
+ * and the `/api/v1/audit/verify` contract (live) both satisfy it; the live
+ * contract carries row ids but never row contents or hashes.
+ */
+export interface IntegrityView {
+  readonly deploymentId: string;
+  readonly status: AuditChainStatus;
+  readonly rowsChecked: number;
+  readonly origin: {
+    readonly kind: 'genesis' | 'retention_boundary';
+    readonly firstRowId: string;
+    readonly attestation?: { readonly callId: string } | undefined;
+  } | null;
+  readonly firstBreak: {
+    readonly rowId: string;
+    readonly reason: string;
+    readonly message: string;
+    readonly next: string;
+  } | null;
+}
+
 /** One row in the Calls table. Field names mirror `AuditCallRecord` exactly. */
 export interface ActivityCallSummary {
   readonly id: string;

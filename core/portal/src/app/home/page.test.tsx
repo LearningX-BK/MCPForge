@@ -5,8 +5,13 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import HomePage from './page';
+import { HomeView } from './home-view';
+import type { HomeSource } from './types';
 import { EMPTY_HOME_WORKLIST, fixtureHomeSource } from './fixtures';
+
+function HomePage({ source }: { readonly source: HomeSource }) {
+  return <HomeView worklist={source()} />;
+}
 
 afterEach(cleanup);
 
