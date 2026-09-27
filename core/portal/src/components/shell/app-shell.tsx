@@ -22,6 +22,7 @@ import { Sidebar } from './sidebar';
 import { Topbar, persistTheme, type Density, type ThemeChoice, type TopbarProps } from './topbar';
 import { ChangeTray, type ChangeTrayItem } from './change-tray';
 import { TooltipProvider } from '../ui/tooltip';
+import type { ViewerSummary } from '@/lib/viewer/summary';
 
 export interface ShellProps {
   title: string;
@@ -29,8 +30,8 @@ export interface ShellProps {
   envClass?: EnvClass;
   branch?: string;
   remote?: string | undefined;
-  personaName?: string;
-  personaRole?: string | undefined;
+  /** W0-P5b — the signed-in viewer, or null. See `Topbar`. */
+  viewer?: ViewerSummary | null;
   approvalsCount?: number;
   changeTrayItems?: readonly ChangeTrayItem[];
   onProposeAll?: (() => void) | undefined;
@@ -56,8 +57,7 @@ export function AppShell({
   envClass = 'local',
   branch,
   remote,
-  personaName = 'You',
-  personaRole,
+  viewer = null,
   approvalsCount = 0,
   changeTrayItems = [],
   onProposeAll,
@@ -87,34 +87,33 @@ export function AppShell({
 
   return (
     <TooltipProvider>
-    <div className="flex h-dvh flex-col bg-canvas text-text-1" data-density={density}>
-      <a
-        href="#main-content"
-        className="sr-only rounded-md bg-accent-solid-bg px-3 py-2 text-sm font-semibold text-accent-solid-fg focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
-      >
-        Skip to main content
-      </a>
+      <div className="flex h-dvh flex-col bg-canvas text-text-1" data-density={density}>
+        <a
+          href="#main-content"
+          className="sr-only rounded-md bg-accent-solid-bg px-3 py-2 text-sm font-semibold text-accent-solid-fg focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50"
+        >
+          Skip to main content
+        </a>
 
-      {topRuleClass && <div aria-hidden="true" className={`h-[3px] w-full ${topRuleClass}`} />}
+        {topRuleClass && <div aria-hidden="true" className={`h-[3px] w-full ${topRuleClass}`} />}
 
-      <Topbar
-        title={title}
-        subtitle={subtitle}
-        envClass={envClass}
-        branch={branch}
-        remote={remote}
-        personaName={personaName}
-        personaRole={personaRole}
-        density={density}
-        onDensityChange={setDensity}
-        theme={theme}
-        onThemeChange={handleThemeChange}
-        onOpenCommandPalette={onOpenCommandPalette}
-      />
+        <Topbar
+          title={title}
+          subtitle={subtitle}
+          envClass={envClass}
+          branch={branch}
+          remote={remote}
+          viewer={viewer}
+          density={density}
+          onDensityChange={setDensity}
+          theme={theme}
+          onThemeChange={handleThemeChange}
+          onOpenCommandPalette={onOpenCommandPalette}
+        />
 
-      <div className="flex min-h-0 flex-1">
-        <Sidebar approvalsCount={approvalsCount} />
-        {/*
+        <div className="flex min-h-0 flex-1">
+          <Sidebar approvalsCount={approvalsCount} />
+          {/*
           A plain `<div>`, not `<main>`: every route's own page (built
           against this shell being unmounted, W0-J6/J22's own finding)
           already renders its own top-level `<main>` for its content — a
@@ -134,18 +133,18 @@ export function AppShell({
           target (focus() works on either) while also making it
           independently keyboard-scrollable.
         */}
-        <div id="main-content" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto p-6">
-          {children}
+          <div id="main-content" tabIndex={0} className="min-w-0 flex-1 overflow-y-auto p-6">
+            {children}
+          </div>
         </div>
-      </div>
 
-      <ChangeTray
-        items={changeTrayItems}
-        onProposeAll={onProposeAll}
-        onProposeOne={onProposeOne}
-        onDiscardOne={onDiscardOne}
-      />
-    </div>
+        <ChangeTray
+          items={changeTrayItems}
+          onProposeAll={onProposeAll}
+          onProposeOne={onProposeOne}
+          onDiscardOne={onDiscardOne}
+        />
+      </div>
     </TooltipProvider>
   );
 }

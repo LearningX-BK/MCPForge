@@ -5,12 +5,14 @@
 // search affordance (not a small icon). Right: environment chip · branch
 // chip · persona pill · density toggle · theme toggle · account.
 import * as React from 'react';
-import { Search, Sun, Moon, Rows3, LayoutList, User } from 'lucide-react';
+import { Search, Sun, Moon, Rows3, LayoutList } from 'lucide-react';
 import { cn } from 'cn';
 import type { EnvClass } from '@mcpforge/shared';
 
 import { EnvChip } from '../chips';
 import { BranchChip, type BranchChipProps } from './branch-chip';
+import { ViewerControls } from './viewer-controls';
+import type { ViewerSummary } from '@/lib/viewer/summary';
 
 export type Density = 'comfortable' | 'compact';
 export type ThemeChoice = 'light' | 'dark';
@@ -21,9 +23,11 @@ export interface TopbarProps {
   envClass: EnvClass;
   branch?: BranchChipProps['branch'] | undefined;
   remote?: BranchChipProps['remote'] | undefined;
-  /** Judgment call: persona is prop-driven placeholder text — no auth/session backend yet (see app-shell.tsx). */
-  personaName?: string;
-  personaRole?: string | undefined;
+  /**
+   * W0-P5b — the signed-in viewer, resolved on the server from the session
+   * (lib/viewer/session.ts), or null when nobody is signed in. Carries no token.
+   */
+  viewer?: ViewerSummary | null;
   density?: Density;
   onDensityChange?: (density: Density) => void;
   /** Reads/writes the same `mcpforge-theme` key `THEME_INIT_SCRIPT` reads (03 §13.2). `undefined` means "system". */
@@ -39,8 +43,7 @@ export function Topbar({
   envClass,
   branch,
   remote,
-  personaName = 'You',
-  personaRole,
+  viewer = null,
   density = 'comfortable',
   onDensityChange,
   theme,
@@ -53,10 +56,7 @@ export function Topbar({
 
   return (
     <header
-      className={cn(
-        'flex h-14 items-center gap-4 border-b border-line bg-surface px-4',
-        className,
-      )}
+      className={cn('flex h-14 items-center gap-4 border-b border-line bg-surface px-4', className)}
     >
       <div className="min-w-0 flex-none">
         <h1 className="truncate text-sm font-bold text-text-1">{title}</h1>
@@ -91,12 +91,7 @@ export function Topbar({
         <EnvChip envClass={envClass} />
         <BranchChip branch={branch} remote={remote} />
 
-        <span
-          className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-xs font-semibold text-text-1"
-          aria-label={personaRole ? `Signed in as ${personaName}, ${personaRole}.` : `Signed in as ${personaName}.`}
-        >
-          {personaName}
-        </span>
+        <ViewerControls viewer={viewer} />
 
         <button
           type="button"
@@ -124,14 +119,6 @@ export function Topbar({
           ) : (
             <Moon aria-hidden="true" className="size-4" />
           )}
-        </button>
-
-        <button
-          type="button"
-          aria-label={`Account: ${personaName}`}
-          className="flex size-8 items-center justify-center rounded-full bg-surface-3 text-text-2 hover:bg-surface-2 hover:text-text-1 focus-visible:outline-2 focus-visible:outline-focus-ring"
-        >
-          <User aria-hidden="true" className="size-4" />
         </button>
       </div>
     </header>

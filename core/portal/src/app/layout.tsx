@@ -16,6 +16,9 @@ import { AppChangeHostProvider } from '../components/shell/app-change-host';
 // "must be used within `TooltipProvider`" otherwise; `AppShell` itself
 // renders it, so the root layout no longer needs its own).
 import { AppChrome } from '../components/shell/app-chrome';
+// W0-P5b — the viewer of this request, from the portal-server session.
+import { getViewer } from '../lib/viewer/session';
+import { toViewerSummary } from '../lib/viewer/summary';
 
 // Self-hosted Inter (03 §4.5, §13.2 rule 4): no external font request, no
 // CLS. Variable font, latin subset, vendored under public/fonts/. Exposed
@@ -44,11 +47,14 @@ export const metadata: Metadata = {
     'MCPForge — the governed control plane and runtime gateway that turns Oracle application capability into MCP tools.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Resolved on the server for every request (and renewed silently when the
+  // access token is near expiry). Only a token-free summary reaches the shell.
+  const viewer = toViewerSummary(await getViewer());
   return (
     // `THEME_INIT_SCRIPT` (03 §13.2 rule 4) sets `data-theme` on this element
     // directly via the DOM, before React hydrates, whenever `localStorage`
@@ -67,7 +73,7 @@ export default function RootLayout({
       </head>
       <body>
         <AppChangeHostProvider>
-          <AppChrome>{children}</AppChrome>
+          <AppChrome viewer={viewer}>{children}</AppChrome>
         </AppChangeHostProvider>
       </body>
     </html>

@@ -1,5 +1,3 @@
-'use client';
-
 // MCPForge — W0-J18: `/governance/kill-switch` (03 §5.3 "Governance" item 4).
 //
 // Runtime data. There is no gateway HTTP client in the portal at Wave 0 (see
@@ -17,12 +15,15 @@ import * as React from 'react';
 
 import { GovNav } from '../_components/gov-nav';
 import { KillSwitchPanel } from '../_components/kill-switch-panel';
+import { getViewer } from '@/lib/viewer/session';
 import type { KillFlagRowView } from '../types';
 
 /** Wave 0: no gateway client, so no flags are known. Never fabricated. */
 const FLAGS: readonly KillFlagRowView[] = [];
 
-export default function GovernanceKillSwitchPage(): React.ReactElement {
+export default async function GovernanceKillSwitchPage(): Promise<React.ReactElement> {
+  // W0-P5b — resolved on the server; the panel gets held personas, no token.
+  const viewer = await getViewer();
   return (
     <main className="flex flex-col gap-6 px-6 py-6">
       <div>
@@ -35,7 +36,7 @@ export default function GovernanceKillSwitchPage(): React.ReactElement {
 
       <GovNav />
 
-      <KillSwitchPanel flags={FLAGS} deploymentId="local" envClass="local" />
+      <KillSwitchPanel flags={FLAGS} deploymentId="local" envClass="local" viewer={viewer} />
     </main>
   );
 }

@@ -44,16 +44,16 @@ import path from 'node:path';
 import {
   ChangeHostError,
   type ChangeDiffSet,
-  type ChangeHost,
+  type GitChangeHost,
   type ChangeProposal,
   type ChangeState,
   type DiffFile,
   type DiffFileStatus,
-  type ProposeInput,
+  type AuthoredProposeInput,
   type RemoteInfo,
   type ReviewRecord,
   type RoleScopeDelta,
-  type SaveDraftInput,
+  type AuthoredSaveDraftInput,
 } from './types';
 
 const run = promisify(execFile);
@@ -165,7 +165,7 @@ function missing(a: readonly string[], b: readonly string[]): string[] {
   return a.filter((entry) => !other.has(entry)).sort();
 }
 
-export class LocalGit implements ChangeHost {
+export class LocalGit implements GitChangeHost {
   readonly #repoRoot: string;
   readonly #baseBranch: string;
   readonly #branchPrefix: string;
@@ -220,7 +220,7 @@ export class LocalGit implements ChangeHost {
       : { configured: true, name };
   }
 
-  async saveDraft(input: SaveDraftInput): Promise<ChangeProposal> {
+  async saveDraft(input: AuthoredSaveDraftInput): Promise<ChangeProposal> {
     const existing = await this.#tryGit(['rev-parse', '--verify', '--quiet', input.branch]);
     if (existing !== undefined && existing.trim().length > 0) {
       await this.#git_(['checkout', input.branch]);
@@ -264,7 +264,7 @@ export class LocalGit implements ChangeHost {
     return proposal;
   }
 
-  async propose(input: ProposeInput): Promise<ChangeProposal> {
+  async propose(input: AuthoredProposeInput): Promise<ChangeProposal> {
     const draft = await this.getProposal(input.id);
     if (draft === undefined) {
       throw new ChangeHostError(

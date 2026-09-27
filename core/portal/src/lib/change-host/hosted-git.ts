@@ -18,7 +18,7 @@
 import {
   ChangeHostError,
   type ChangeDiffSet,
-  type ChangeHost,
+  type GitChangeHost,
   type ChangeProposal,
   type RemoteInfo,
 } from './types';
@@ -41,7 +41,7 @@ function notImplemented(operation: string): ChangeHostError {
   );
 }
 
-export class HostedGit implements ChangeHost {
+export class HostedGit implements GitChangeHost {
   readonly #options: HostedGitOptions;
 
   constructor(options: HostedGitOptions) {

@@ -50,7 +50,6 @@ export interface RoleEditorProps {
   compile: CompileRoleFn;
   /** Overrides the context host — the only injection point tests need. */
   host?: ChangeHost | undefined;
-  author?: string;
 }
 
 const STATE_CLASS = {
@@ -61,7 +60,7 @@ const STATE_CLASS = {
 
 const STATE_MARK = { added: '+', removed: '−', unchanged: ' ' } as const;
 
-export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEditorProps) {
+export function RoleEditor({ sources, compile, host }: RoleEditorProps) {
   const contextHost = useOptionalChangeHost();
   const activeHost = host ?? contextHost;
 
@@ -72,9 +71,9 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
   const [draft, setDraft] = React.useState<CompiledRoleDraft | undefined>(undefined);
   const [compiling, setCompiling] = React.useState(false);
   const [proposal, setProposal] = React.useState<ChangeProposal | undefined>(undefined);
-  const [saveError, setSaveError] = React.useState<
-    { message: string; next: string } | undefined
-  >(undefined);
+  const [saveError, setSaveError] = React.useState<{ message: string; next: string } | undefined>(
+    undefined,
+  );
 
   // Re-seed when the selected role changes.
   React.useEffect(() => {
@@ -116,9 +115,10 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
     );
   }
 
-  const rows = draft?.error === undefined && draft !== undefined
-    ? scopeRows(source.mergedToolIds, draft.toolIds)
-    : [];
+  const rows =
+    draft?.error === undefined && draft !== undefined
+      ? scopeRows(source.mergedToolIds, draft.toolIds)
+      : [];
   const proposable = canProposeEdit(source, yamlText, draft);
 
   async function onSaveDraft() {
@@ -136,13 +136,13 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
         title: `Role ${source.roleId}: scope change`,
         branch: `forge/role-${source.roleId}`,
         files: proposalFiles(source, yamlText, draft),
-        author,
       });
       setProposal(saved);
     } catch (caught) {
       const err = caught as { message?: unknown; next?: unknown };
       setSaveError({
-        message: typeof err.message === 'string' ? err.message : 'The change host refused the draft.',
+        message:
+          typeof err.message === 'string' ? err.message : 'The change host refused the draft.',
         next:
           typeof err.next === 'string'
             ? err.next
@@ -179,8 +179,8 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
             Role source
           </h2>
           <p className="text-[12px] text-text-2">
-            Edit <code>includes</code>, <code>excludes</code> and <code>coreTools</code>. Every
-            edit recompiles the scope on the right.
+            Edit <code>includes</code>, <code>excludes</code> and <code>coreTools</code>. Every edit
+            recompiles the scope on the right.
           </p>
           <Textarea
             aria-label={`YAML source for role ${source.roleId}`}
@@ -199,7 +199,11 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
               Compiled scope
             </h2>
             <span data-testid="compile-state" className="text-[12px] text-text-2">
-              {compiling ? 'compiling…' : draft === undefined ? 'not yet compiled' : source.scopePath}
+              {compiling
+                ? 'compiling…'
+                : draft === undefined
+                  ? 'not yet compiled'
+                  : source.scopePath}
             </span>
           </div>
 
@@ -281,8 +285,7 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
         )}
         <p className="max-w-[60ch] text-[12px] text-text-2">
           Nothing here is written to the running gateway. Save draft records the edit on a branch;
-          the change proposal&rsquo;s diff is the compiled{' '}
-          <code>{source.scopePath}</code>.
+          the change proposal&rsquo;s diff is the compiled <code>{source.scopePath}</code>.
         </p>
       </div>
 
@@ -292,7 +295,12 @@ export function RoleEditor({ sources, compile, host, author = 'portal' }: RoleEd
           to be announced — same pattern as the write-path's plan/execute
           regions. */}
       {proposal === undefined ? null : (
-        <p role="status" aria-live="polite" data-testid="role-editor-status" className="text-[12px] text-text-2">
+        <p
+          role="status"
+          aria-live="polite"
+          data-testid="role-editor-status"
+          className="text-[12px] text-text-2"
+        >
           {proposal.state === 'draft'
             ? `Draft saved on ${proposal.branch}.`
             : `Proposed — this change is now ${proposal.state.replace(/_/g, ' ')}.`}

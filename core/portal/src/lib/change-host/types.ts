@@ -154,7 +154,6 @@ export interface SaveDraftInput {
   branch: string;
   /** Files to write, keyed by repo-relative path. */
   files: Readonly<Record<string, string>>;
-  author: string;
 }
 
 export interface ProposeInput {
@@ -162,7 +161,20 @@ export interface ProposeInput {
   id: string;
   /** Optional richer description recorded alongside the review record. */
   description?: string;
-  author: string;
+}
+
+/**
+ * W0-P5b, W0-P4 §3: **the author is never a caller's input.** The portal-facing
+ * inputs above carry no `author`. The server actions in `local-git-actions.ts`
+ * add the signed-in viewer's `Principal.subject` and hand these to the git
+ * layer. A component, a test double or a crafted request cannot name who
+ * proposed a change.
+ */
+export interface AuthoredSaveDraftInput extends SaveDraftInput {
+  readonly author: string;
+}
+export interface AuthoredProposeInput extends ProposeInput {
+  readonly author: string;
 }
 
 /** The closed failure vocabulary for this seam (CLAUDE.md §5: no bare Errors). */
@@ -172,6 +184,9 @@ export const changeHostErrorCodes = [
   'CHANGE_NOTHING_TO_COMMIT',
   'CHANGE_HOST_UNAVAILABLE',
   'CHANGE_HOST_NOT_IMPLEMENTED',
+  // W0-P5b — the portal's action gates (W0-P4 §3).
+  'CHANGE_SIGN_IN_REQUIRED',
+  'CHANGE_NOT_PERMITTED',
 ] as const;
 export type ChangeHostErrorCode = (typeof changeHostErrorCodes)[number];
 
@@ -207,4 +222,16 @@ export interface ChangeHost {
   getProposal(id: string): Promise<ChangeProposal | undefined>;
   /** The three diffs of 03 §6.5, always computed together. */
   diff(id: string): Promise<ChangeDiffSet>;
+}
+
+/**
+ * The git layer: `LocalGit`, `HostedGit`, and the contract suite that holds
+ * them to one behaviour. The same seam as `ChangeHost`, except that saving and
+ * proposing take the author explicitly, because at this layer the author is
+ * the committer. Only the server actions construct these inputs, from the
+ * session (W0-P5b).
+ */
+export interface GitChangeHost extends Omit<ChangeHost, 'saveDraft' | 'propose'> {
+  saveDraft(input: AuthoredSaveDraftInput): Promise<ChangeProposal>;
+  propose(input: AuthoredProposeInput): Promise<ChangeProposal>;
 }

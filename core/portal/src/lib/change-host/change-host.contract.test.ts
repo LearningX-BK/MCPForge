@@ -21,7 +21,7 @@ import {
   serialiseReviewRecord,
 } from './local-git';
 import { HostedGit } from './hosted-git';
-import { ChangeHostError, changeProposalSchema, type ChangeHost } from './types';
+import { ChangeHostError, changeProposalSchema, type GitChangeHost } from './types';
 
 const temps: string[] = [];
 
@@ -251,7 +251,7 @@ describe('RemoteInfo is a fact about the repository, not about the implementatio
 });
 
 describe('HostedGit — a stub that fails loudly, never quietly (CLAUDE.md §3.1)', () => {
-  const host: ChangeHost = new HostedGit({
+  const host: GitChangeHost = new HostedGit({
     hostUrl: 'https://example.invalid/mcpforge',
     credentialRef: 'secretRef://change-host/example/pat',
   });

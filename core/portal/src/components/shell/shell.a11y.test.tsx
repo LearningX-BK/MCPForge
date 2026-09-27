@@ -10,6 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/approvals',
+  useRouter: () => ({ push: () => undefined, refresh: () => undefined }),
+}));
+vi.mock('@/lib/viewer/actions', () => ({
+  selectPersonaAction: () => Promise.resolve({ ok: true }),
+  signOutAction: () => Promise.resolve(),
 }));
 
 import { AppShell } from './app-shell';
