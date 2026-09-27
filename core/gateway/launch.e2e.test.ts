@@ -320,4 +320,111 @@ describe('W0-P11 — the launched gateway serves the governed surface', () => {
     const body = (await response.json()) as { error: { data: { code: string } } };
     expect(body.error.data.code).toBe('CONSUMER_UNREGISTERED');
   });
+
+  // ---- W0-P5a — the gateway as the local provider's token endpoint ---------
+
+  interface WireGrant {
+    tokenType: string;
+    accessToken: string;
+    refreshToken: string;
+    principal: { subject: string; groups: string[] };
+  }
+
+  function post(path: string, body: unknown, contentType = 'application/json') {
+    return fetch(`http://127.0.0.1:${launched.gatewayPort}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': contentType },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it('a human signs in over POST /auth/local/token, and that token is the human on /mcp', async () => {
+    const response = await post('/auth/local/token', {
+      username: 'p11-clerk',
+      password: 'a-long-enough-test-password-1',
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const grant = (await response.json()) as WireGrant;
+    expect(grant.tokenType).toBe('Bearer');
+    expect(grant.principal).toMatchObject({ subject: CLERK_SUBJECT, groups: [TEST_GROUP] });
+    expect(grant).not.toHaveProperty('sessionId');
+
+    const client = await connect(grant.accessToken);
+    const listed = await client.listTools();
+    expect(listed.tools.some((t) => t.name === 'forge.find')).toBe(true);
+  });
+
+  it('the signed-in token alone opens nothing: no consumer is CONSUMER_UNREGISTERED', async () => {
+    const grant = (await (
+      await post('/auth/local/token', {
+        username: 'p11-clerk',
+        password: 'a-long-enough-test-password-1',
+      })
+    ).json()) as WireGrant;
+    const response = await fetch(`http://127.0.0.1:${launched.gatewayPort}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${grant.accessToken}`,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'x', version: '1' },
+        },
+      }),
+    });
+    expect(response.status).toBe(401);
+    const body = (await response.json()) as { error: { data: { code: string } } };
+    expect(body.error.data.code).toBe('CONSUMER_UNREGISTERED');
+  });
+
+  it('refresh rotates over HTTP; the spent token is refused; sign-out ends the session', async () => {
+    const first = (await (
+      await post('/auth/local/token', {
+        username: 'p11-clerk',
+        password: 'a-long-enough-test-password-1',
+      })
+    ).json()) as WireGrant;
+    const renewedResponse = await post('/auth/local/refresh', { refreshToken: first.refreshToken });
+    expect(renewedResponse.status).toBe(200);
+    const renewed = (await renewedResponse.json()) as WireGrant;
+    expect(renewed.refreshToken).not.toBe(first.refreshToken);
+
+    const signOut = await post('/auth/local/signout', { refreshToken: renewed.refreshToken });
+    expect(signOut.status).toBe(204);
+    const afterSignOut = await post('/auth/local/refresh', { refreshToken: renewed.refreshToken });
+    expect(afterSignOut.status).toBe(401);
+    const refused = (await afterSignOut.json()) as { error: { code: string; next: string } };
+    expect(refused.error.code).toBe('AUTH_REQUIRED');
+    expect(refused.error.next).toMatch(/Sign in again/);
+    expect(JSON.stringify(refused)).not.toContain(renewed.refreshToken);
+  });
+
+  it('refuses a wrong password (401, with a next), a non-JSON body (400) and a GET (405)', async () => {
+    const wrong = await post('/auth/local/token', {
+      username: 'p11-clerk',
+      password: 'not-the-password-at-all',
+    });
+    expect(wrong.status).toBe(401);
+    const body = (await wrong.json()) as { error: { code: string; next: string } };
+    expect(body.error.code).toBe('AUTH_REQUIRED');
+    expect(body.error.next.length).toBeGreaterThan(0);
+    expect(JSON.stringify(body)).not.toContain('not-the-password-at-all');
+
+    const form = await post('/auth/local/token', { username: 'p11-clerk' }, 'text/plain');
+    expect(form.status).toBe(400);
+    expect(((await form.json()) as { error: { code: string } }).error.code).toBe('INPUT_INVALID');
+
+    const get = await fetch(`http://127.0.0.1:${launched.gatewayPort}/auth/local/token`);
+    expect(get.status).toBe(405);
+    const unknown = await post('/auth/local/authorize', {});
+    expect(unknown.status).toBe(404);
+  });
 });

@@ -1139,6 +1139,43 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - reads: 03#2, 05#1.3
   - touches: core/portal/src/lib/viewer/**, core/portal/src/components/shell/topbar.tsx, core/portal/src/components/write-path/**, core/portal/src/app/**
   - done: exactly what W0-P4's approved note specifies, and no more; the persona pill reflects real held roles and offers only personas the viewer holds; every gated action refuses with the note's copy when the viewer lacks the grant; no page is hidden from any viewer (a test asserts every route renders for every persona, because 03 §2 makes that a requirement rather than an oversight); `pnpm test:policy` still green; a test proving the selected persona pill cannot widen any grant — it is a lens, never an escalation.
+  - **Split 27 Sep 2026, when W0-P5 started.** W0-P4's §2–§6 reaches well past this task's `touches:`: a gateway token endpoint, a refresh-token store, the multi-provider overlay, OIDC PKCE, a new `forge validate` rule and a consumer-record change. W0-P5 is now the umbrella. It is done when **W0-P5a** and **W0-P5b** are both done, and W0-P5b carries this `done:` criterion unchanged. Three parts of the note that are not needed for a working local sign-in went to their own tasks: **W0-P22** (the `approval-not-self-approved` rule), **W0-P23** (multi-provider sign-in) and **W0-P24** (`portal-local` → `private-key-jwt`, which needs the owner's approval of a consumer-record proposal).
+  - **Owner decision, 27 Sep 2026 (the note was silent on it):** the local sign-in endpoint asks for the **human only**, not a consumer as well, as any IdP token endpoint does. The token alone opens nothing: every `/mcp` session and every `/api/v1/**` read still needs a registered consumer too (non-negotiable 6). Brute force is held by `LocalUserStore`'s lockout. Asked with that recommendation; the owner chose "Human only (Recommended)".
+
+- [x] **W0-P5a** — The gateway as the local provider's token endpoint: sign-in, silent renewal, sign-out
+  - model: opus
+  - deps: W0-P4
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §2, §9 decision 6; 02#4.4
+  - touches: core/gateway/identity/**, core/gateway/store/**, core/gateway/transport/**, core/gateway/launch.ts
+  - done: `POST /auth/local/token` (username + password + TOTP when enrolled) returns a 15-minute access token, a rotating refresh token and the principal; `POST /auth/local/refresh` rotates; `POST /auth/local/signout` ends the session; refresh tokens are stored only as a hash; reuse of a spent token revokes the whole session; 8 h idle / 12 h absolute; a disabled account stops renewing at the next refresh; the signed-in token alone opens no `/mcp` session; every refusal carries a `next`.
+  - **Status: done 27 Sep 2026, branch `forge/W0-P5a-local-sign-in`.** `OPUS_GUARDED_PATHS`: `core/gateway/identity/**`.
+    - **Store:** two new tables in the one schema (`auth_session`, `auth_refresh_token`; migration 0011 in both dialects), plus `RuntimeStore.authSessions` (`store/identity/auth-session.ts`). The repository owns the rotation state machine. A spend is `update … set spent_at, replaced_by = <successor id> where spent_at is null`, followed by a re-read: whoever's id is on the row won. That keeps the check independent of driver row counts, like `approvals.expireDue`. Reuse, idle and absolute expiry each revoke the session in the same transaction. The first revoke reason is kept. The only token column is `token_hash`, and a test pins that.
+    - **Identity:** `identity/local/sign-in.ts` `localSignInService` composes `LocalUserStore.authenticate` → `issueToken` → `authSessions`. `issueToken` gained an optional `authTime`, so a renewed token keeps the sign-in's `auth_time` rather than claiming a fresh authentication. Every renewal failure is **one** `AUTH_REQUIRED`: telling a thief "reused" would tell them they were noticed. A disabled account surfaces `issueToken`'s own `IDENTITY_UNRESOLVED` and revokes the session (`account_unavailable`).
+    - **Transport:** `transport/sign-in-routes.ts`, mounted only when `localSignIn` is passed (launch passes it). It accepts only `application/json` (no cross-site form post; any script needs a preflight, which is never answered), caps the body at 16 KiB, sends `Cache-Control: no-store`, and turns any unexpected failure into a generic `INTERNAL` without its message. `sessionId` stays server-side. **Not a REST facade:** these routes serve no discovery, invocation or governance data.
+    - **Session limits** default to 8 h / 12 h and are overridable through `LaunchOptions.sessionLimits`. **Their overlay home arrives with W0-P23's `identity.providers` block.** I did not invent an overlay file format here.
+    - **Not in this task, stated:** sign-in and sign-out events are not written to the audit trail (the note does not ask for it, and `audit_call` is shaped for tool calls). There is no sweep of expired session rows yet; that is retention, like the nonce table's.
+  - **Verified:** `store/identity/auth-session.test.ts` 9/9 (on SQLite the "concurrent" renewal pair is serialised, so it proves the one-winner outcome rather than racing the `replaced_by` claim; that race is Postgres-shaped). `identity/local/sign-in.test.ts` 11/11: real Argon2id store, real HS256 issuer, injected clock at the 8 h and 12 h edges; the refresh and access token values appear in no file under the store directory. `launch.e2e.test.ts` 8/8, with 4 new tests:
+    - sign-in over HTTP gives a token that is the human on a real `/mcp` session with the registered test consumer;
+    - the same token with no consumer is `CONSUMER_UNREGISTERED`;
+    - refresh rotates, sign-out ends the session, and the refusal body does not echo the token;
+    - wrong password is 401 with a `next`, `text/plain` is 400, GET is 405, and an unknown path is 404.
+  - **Suite results:** `core/gateway` full suite 1250 passed / 16 skipped, with 1 failure. That failure is `store/driver-isolation.test.ts › pg is imported only under the store`: it timed out at 5.6 s against Vitest's 5 s default under full parallel load, and passes 6/6 when run alone. This task does not touch it. `driver-isolation`'s exhaustive `RuntimeStore` key list gained `authSessions` deliberately. `pnpm test:policy` **107/108**; the one failure is the pre-existing W0-P12 tripwire. `pnpm -r typecheck` clean; eslint clean on every touched file; `npx vitest run tools/ci/src` 95/95. The Postgres leg (`pnpm test:postgres`, Docker) was not run.
+
+- [ ] **W0-P5b** — The portal viewer: signed-in session, personas, author from the session, action gates
+  - model: opus
+  - deps: W0-P5a
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §2–§6, §9; 03#2
+  - touches: core/portal/src/lib/viewer/**, core/portal/src/app/** (sign-in route, server actions), core/portal/src/components/shell/topbar.tsx, core/portal/src/components/shell/app-chrome.tsx, core/portal/src/lib/change-host/types.ts, core/portal/src/components/write-path/**, overlays/local/mappings/groups-to-roles.yaml (`personas:` block), core/gateway/identity/group-role-mapping.ts (accept and read `personas:`)
+  - done: W0-P5's `done:` criterion, unchanged. Specifically:
+    - the portal signs its viewer in through `POST /auth/local/token` from its **server**;
+    - tokens live only in a portal-server session behind an httpOnly, `SameSite=Strict` cookie, and are renewed silently through `/auth/local/refresh`;
+    - `author` is removed from `SaveDraftInput`/`ProposeInput` and taken from the session subject;
+    - the hard-coded `'portal'` author and `meera.rao@example.com` approver are gone;
+    - personas come from the mapping's `personas:` block; the pill offers only held personas and carries §6's tooltip;
+    - the §3 gates refuse server-side with the note's copy: Save draft/Propose, Discard, definitional Approve with the admin self-approval exception, Kill showing `forge kill`, and `issue-credential` showing the CLI;
+    - every route renders for every persona, and the selected pill cannot widen a grant.
 
 - [ ] **W0-P6** — The module-server inventory surface
   - model: sonnet
@@ -1349,6 +1386,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: docs/build-plan/w0-p19-local-token-issuance.md
   - context: Found 25 Sep 2026 while surveying `W0-P11`. The local `IdentityProvider` has a token issuer (`identity/jwt.ts`, `localTokenIssuer`) and a user store with Argon2id and optional TOTP (W0-D2), but nothing lets a human **obtain** a token for an external MCP client: no authorize or token endpoint, and no CLI. The OIDC path relies on an external IdP (Keycloak, contract-tested). Without this, `W0-Q12`'s live external-agent demo cannot run on the local provider.
   - done: a design note, reviewed by the owner before any code, choosing between a CLI (`forge identity token`, password + TOTP → short-lived JWT, printed once, refused when `CI=true`), local OAuth authorize/token endpoints on the gateway, or requiring the Keycloak docker profile for external agents at Wave 0; stating the token TTL, what is logged (never the token), and how it composes with the consumer's private-key JWT (both are required, non-negotiable #6).
+  - **Note, 27 Sep 2026:** W0-P5a built `POST /auth/local/token` (and `/refresh`, `/signout`) on the gateway, which is this task's option 2 in substance. It is human-only, by owner decision. What is still open here is the external-agent half: whether an agent's human uses that endpoint directly, a CLI that prints a token once and is refused when `CI=true`, or both.
 
 - [ ] **W0-P21** — `forge probe` registers no executor: a real probe report disables every tool
   - model: opus
@@ -1367,6 +1405,33 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: core/cli/src/cli.test.ts, core/cli/src/commands/audit-reverse.test.ts, core/cli/src/commands/dev.test.ts
   - context: Found 25 Sep 2026 while verifying `W0-P13`; they fail identically on `main` at `114708c`, so they predate it. Run in isolation (`pnpm -C core/cli exec vitest run`), 3 of 132 fail, and every one is a test written before the repo had manifests or a `portal-local` consumer record. (1) `cli.test.ts › forge codegen (real handler) › …(no manifests authored yet)` expects `manifestsProcessed: 0` and a single written file, but there are now 11 manifests. (2) `audit-reverse.test.ts › reports the frozen contract and refuses to guess an argMap…` expects exit 1 (`no_arg_map`, *"which holds no tool manifests at this point in the build"*), but the real registry now **has** `voucher.create`'s argMap, so it exits 0. (3) `dev.test.ts › this suite never writes into the real repository` asserts that `consumers/portal-local.consumer.yaml` does not exist in the real repo, but that record is now committed. In a full root `vitest run` these three are buried among about 28 more spawned-binary failures that pass in isolation (subprocess/RPC-timeout load, as `W0-P1`'s stage-6 note records).
   - done: each test asserts what is true of the populated repo **without losing what it guarded**. (1) runs codegen against a fixture root or asserts on the real counts. (2) keeps a fail-closed `no_arg_map` case against a fixture registry with no argMap **and** adds the populated-repo success case. (3) checks for writes the suite itself made (for example an mtime or content snapshot taken before the suite), not for the existence of a committed file. `pnpm -C core/cli exec vitest run` green in isolation.
+
+- [ ] **W0-P22** — `forge validate` rule `approval-not-self-approved`, with the admin `selfApproved` exception
+  - model: opus
+  - deps: W0-P4
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §4, §9 decision 3
+  - touches: core/codegen/rules/**, approvals/** (read only)
+  - context: Split out of W0-P5 on 27 Sep 2026. Today no rule compares an approval record's `approver` with its `requestedBy`, so a hand-edited record can approve itself. Existing records write `approver: Admin`, a display label, while `requestedBy` is an email.
+  - done: an approval record whose `approver` equals its `requestedBy` **fails**; one that carries `selfApproved: true` **and** whose approver holds the `admin` persona is a **warning** naming the admin; a record dated before the rule is grandfathered as a warning (the note's §4 recommendation); from the rule on, `approver` holds a `Principal.subject`; rule tests green; `forge validate` on the real repo still passes.
+
+- [ ] **W0-P23** — Multi-provider sign-in: `identity.providers`, issuer-qualified subjects, per-provider mapping keys, portal OIDC code + PKCE
+  - model: opus
+  - deps: W0-P5b
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §2.1, §2.2, §9 decisions 1 and 6; 02#4.4
+  - touches: core/gateway/identity/**, overlays/local/**, core/portal/src/lib/viewer/**, tools/ci/src/overlay-purity.ts
+  - context: Split out of W0-P5 on 27 Sep 2026. The owner decided that several providers may be active at once (local, Entra ID, OCI IAM, Agentis). That makes the list form, `<providerId>:<sub>` subjects and a per-provider `groups:` mapping requirements, not options. The single `identity.provider` in `identity/config.ts` has to become a list. The session limits (8 h / 12 h, currently `LaunchOptions.sessionLimits`) get their overlay home here.
+  - done: an overlay can configure several providers; the gateway verifies each OIDC provider's tokens against its own JWKS; subjects are issuer-qualified from the first row written; the mapping file's `groups:` is keyed per provider; the portal's sign-in page offers a chooser when more than one provider is configured and runs authorization code + PKCE for OIDC ones, holding the provider's refresh token only in its server session; the identity contract suite runs against every configured kind.
+
+- [ ] **W0-P24** — `portal-local` moves to `private-key-jwt`, so the portal never reads a secret store
+  - model: opus
+  - deps: none
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §7, §9 decision 5; 05#1.3.3
+  - touches: consumers/portal-local.consumer.yaml (via a reviewed proposal), approvals/**, core/portal/src/lib/gateway-client/**
+  - context: Split out of W0-P5 on 27 Sep 2026. **A prerequisite of W0-P3**, because the portal must present `portal-local`'s consumer credential on every `/api/v1/**` read. Non-negotiable 8 allows `SecretStore.get()` only in `adapters/**` and `core/gateway/identity/**`, so the portal cannot hold a client secret. **Human gate:** the agent stages the consumer-record proposal and the owner approves and merges it; the agent never fills the approval record.
+  - done: a staged proposal changing `portal-local`'s credential method to `private-key-jwt`, awaiting the owner's approval; once approved, `forge consumer issue-credential portal-local` mints the key into the git-ignored `.mcpforge/portal/`; the portal server signs its consumer assertion with it; the registry holds only the public key; no `SecretStore.get()` in `core/portal`.
 
 ---
 

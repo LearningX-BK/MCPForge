@@ -50,9 +50,11 @@ import {
   DEFAULT_LOCAL_AUDIENCE,
   DEFAULT_LOCAL_ISSUER,
   localIdentityProvider,
+  localSignInService,
   localTokenIssuer,
   localUserStore,
   type LocalIdentityProvider,
+  type SessionLimits,
 } from './identity/index.js';
 import { resolveGatewayKeys } from './identity/keys.js';
 import { approvalGate } from './policy/approval/index.js';
@@ -114,6 +116,12 @@ export interface LaunchOptions {
   readonly storeConfig?: StoreConfig;
   /** Defaults to `EncryptedFileStore` under `<repoRoot>` (02 §11.5). Injected by tests. */
   readonly secretStore?: SecretStore;
+  /**
+   * Sign-in session limits (W0-P4 §9 decision 6; defaults 8 h idle, 12 h
+   * absolute). An overlay home for these values arrives with the
+   * multi-provider `identity.providers` block (W0-P23).
+   */
+  readonly sessionLimits?: Partial<SessionLimits>;
   /** Kill-switch poll interval (02 §4.7, default 5 s). */
   readonly flagPollMs?: number;
   /**
@@ -134,9 +142,9 @@ export interface LaunchedGateway {
   /** The runtime store the gateway writes audit and state to. */
   readonly store: RuntimeStore;
   /**
-   * The identity provider sessions authenticate humans against. Exposed so the
-   * local issuer's `issueToken` is reachable by a login flow (W0-P19) and by
-   * tests; nothing in the gateway itself issues tokens.
+   * The identity provider sessions authenticate humans against. Humans sign in
+   * over `POST /auth/local/token` (W0-P5a); this handle is exposed for tests
+   * and for the token-issuance CLI (W0-P19).
    */
   readonly identity: LocalIdentityProvider;
   /** Refs of gateway keys minted on this start because they did not exist. Refs only. */
@@ -260,13 +268,21 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
 
     // [2]/[3] — the Wave 0 local provider, verifying tokens signed with the
     // gateway's own key against accounts in the runtime store (W0-D1/D2).
+    const users = localUserStore({ store });
     const identity = localIdentityProvider({
       issuer: localTokenIssuer({
         signingKey: keys.jwtSigning,
         issuer: DEFAULT_LOCAL_ISSUER,
         audience: DEFAULT_LOCAL_AUDIENCE,
       }),
-      source: localUserStore({ store }).principalSource(),
+      source: users.principalSource(),
+    });
+    // W0-P5a — the gateway as the local provider's token endpoint (W0-P4 §2).
+    const localSignIn = localSignInService({
+      store,
+      users,
+      provider: identity,
+      ...(options.sessionLimits === undefined ? {} : { limits: options.sessionLimits }),
     });
 
     // ¬KillSwitched — polled from the store (02 §4.7).
@@ -339,6 +355,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
           authenticator.authenticate(readConsumerPresentation(headers), correlationId),
       },
       sessions,
+      localSignIn,
       createServer: (handle) => surface.createServer(handle),
     });
     const { port } = await gateway.listen(options.gatewayPort ?? 0, options.gatewayHost);

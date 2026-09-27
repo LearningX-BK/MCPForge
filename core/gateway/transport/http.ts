@@ -52,6 +52,8 @@ import {
   type SessionEstablisher,
   type SessionHandle,
 } from './session-binding.js';
+import { handleSignInRequest, isSignInPath } from './sign-in-routes.js';
+import type { LocalSignInService } from '../identity/index.js';
 
 const MCP_PATH = '/mcp';
 const SESSION_ID_HEADER = 'mcp-session-id';
@@ -128,6 +130,12 @@ export interface GatewayHttpTransportOptions {
    * structurally absent from anything this gateway publishes.
    */
   readonly publishedMetadata?: PublishedMetadata;
+  /**
+   * W0-P5a — the local provider's token endpoint (`/auth/local/token`,
+   * `/refresh`, `/signout`; see `./sign-in-routes.ts`). Present only when a
+   * local provider is configured. Absent, those paths are a plain 404.
+   */
+  readonly localSignIn?: LocalSignInService;
 }
 
 /** A metadata document this gateway serves, and where. */
@@ -321,6 +329,15 @@ export function createGatewayHttpTransport(
       res
         .writeHead(200, { 'content-type': 'application/json' })
         .end(JSON.stringify(assertNoRegistrationEndpoint(metadata.document)));
+      return;
+    }
+
+    const signIn = options.localSignIn;
+    if (signIn !== undefined && isSignInPath(url.pathname)) {
+      handleSignInRequest(req, res, url.pathname, signIn).catch(() => {
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
       return;
     }
 

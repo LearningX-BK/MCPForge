@@ -19,6 +19,7 @@ import type {
   IdempotencyRepository,
 } from './runtime/types.js';
 import type { LocalUserRepository } from './identity/types.js';
+import type { AuthSessionRepository } from './identity/auth-session-types.js';
 import type { RuntimeFlagsRepository } from './flags/types.js';
 import type { UsageRepository } from './usage/types.js';
 import type { AnomalyEventRepository } from './anomaly/types.js';
@@ -98,6 +99,12 @@ export interface RuntimeStore {
    * `core/gateway/identity/local/**`.
    */
   readonly localUsers: LocalUserRepository;
+  /**
+   * Signed-in sessions behind the gateway's local sign-in endpoint (W0-P5a,
+   * W0-P4 §9 decision 6). Holds refresh tokens BY HASH only, and owns the
+   * rotation state machine: a spent token presented again revokes the session.
+   */
+  readonly authSessions: AuthSessionRepository;
   /**
    * The kill switch's persistence (W0-E5, 02 §4.7). Append-only from the
    * caller's point of view — `clear` soft-flips `active` rather than deleting,

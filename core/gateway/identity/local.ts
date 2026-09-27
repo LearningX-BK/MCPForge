@@ -85,7 +85,21 @@ export interface LocalIdentityProvider extends IdentityProvider {
    * factor nobody verified would be a lie recorded in the audit trail. W0-D1
    * has no credential check of its own and therefore invents no `amr`.
    */
-  issueToken(subject: string, amr: readonly string[], correlationId: string): Promise<IssuedToken>;
+  issueToken(
+    subject: string,
+    amr: readonly string[],
+    correlationId: string,
+    options?: IssueTokenOptions,
+  ): Promise<IssuedToken>;
+}
+
+export interface IssueTokenOptions {
+  /**
+   * When the human actually authenticated. Supplied only by a renewal (W0-P5a),
+   * so a refreshed token keeps the sign-in's `auth_time` instead of claiming a
+   * fresh authentication that never happened. Absent, it is now.
+   */
+  readonly authTime?: Date;
 }
 
 export function localIdentityProvider(
@@ -171,6 +185,7 @@ export function localIdentityProvider(
       subject: string,
       amr: readonly string[],
       correlationId: string,
+      issueOptions: IssueTokenOptions = {},
     ): Promise<IssuedToken> {
       if (amr.length === 0) {
         throw new Error(
@@ -184,7 +199,7 @@ export function localIdentityProvider(
         ...(record.email === undefined ? {} : { email: record.email }),
         groups: record.groups,
         idp: 'local',
-        authTime: now(),
+        authTime: issueOptions.authTime ?? now(),
         amr,
       };
       return options.issuer.issue(principal);

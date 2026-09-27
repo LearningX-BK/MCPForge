@@ -75,6 +75,9 @@ export const approvalRequest = table(RUNTIME_TABLES.approvalRequest);
 // W0-D2 — same order as the SQLite projection, from the same definition.
 export const localUser = table(RUNTIME_TABLES.localUser);
 export const localUserGroup = table(RUNTIME_TABLES.localUserGroup);
+// W0-P5a — sign-in sessions; `authSession` before the token table referencing it.
+export const authSession = table(RUNTIME_TABLES.authSession);
+export const authRefreshToken = table(RUNTIME_TABLES.authRefreshToken);
 // W0-E5 — the kill switch.
 export const runtimeFlags = table(RUNTIME_TABLES.runtimeFlags);
 // W0-N7 — consumer usage rollups; same order as the SQLite projection.

@@ -47,3 +47,16 @@ export {
   type TotpEnrolment,
   type TotpVerification,
 } from './totp.js';
+// W0-P5a — sign-in, renewal and sign-out over the store above.
+export {
+  DEFAULT_SESSION_ABSOLUTE_SECONDS,
+  DEFAULT_SESSION_IDLE_SECONDS,
+  LOCAL_PROVIDER_ID,
+  REFRESH_TOKEN_PREFIX,
+  localSignInService,
+  type LocalSignInService,
+  type LocalSignInServiceOptions,
+  type SessionLimits,
+  type SignInGrant,
+  type SignedInPrincipal,
+} from './sign-in.js';

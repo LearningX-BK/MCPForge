@@ -131,6 +131,19 @@ export {
   type SetLocalTotpInput,
   type UpdateLocalUserInput,
 } from './identity/types.js';
+// W0-P5a — sign-in sessions. Types only, plus the id prefix: the repository
+// is reached through `RuntimeStore.authSessions`, never constructed above.
+export { AUTH_SESSION_ID_PREFIX } from './identity/auth-session.js';
+export {
+  AUTH_SESSION_REVOKED_REASONS,
+  type AuthSessionRecord,
+  type AuthSessionRepository,
+  type AuthSessionRevokedReason,
+  type OpenAuthSessionInput,
+  type RefreshTokenRecord,
+  type RotateRefreshTokenInput,
+  type RotateRefreshTokenOutcome,
+} from './identity/auth-session-types.js';
 export { RUNTIME_TABLES, type ColumnKind, type ColumnSpec, type TableSpec } from './schema/spec.js';
 // W0-E5 — the kill switch's persistence.
 export {
