@@ -14,8 +14,10 @@ import { getViewer } from '@/lib/viewer/session';
 
 import HomePage from './home/page';
 
+export const dynamic = 'force-dynamic';
+
 export default async function RootPage() {
   const viewer = await getViewer();
   if (viewer?.persona != null) redirect(PERSONA_LANDING[viewer.persona]);
-  return <HomePage />;
+  return HomePage();
 }

@@ -78,7 +78,8 @@ export interface StalenessView {
 export interface EnablementEntry {
   readonly toolId: string;
   readonly app: string;
-  readonly status: ProbeStatus;
+  /** `null` when no probe report names this tool: not probed, and so not enabled. */
+  readonly status: ProbeStatus | null;
   readonly failingCheck: string;
   readonly remediation: string;
   /** Sourced from the owning module server manifest's `owner` field (never invented — see fixtures.ts). */

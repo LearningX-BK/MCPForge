@@ -45,7 +45,12 @@ export function loadHomeWorklist(now: number = Date.now()): HomeWorklist {
   const whatBroke: WhatBrokeItem[] = [];
   for (const tool of catalog.tools) {
     if (tool.probeStatus.startsWith('disabled_')) {
-      whatBroke.push({ kind: 'probe_disabled', tool, href: `/catalog/${tool.manifest.id}` });
+      whatBroke.push({
+        kind: 'probe_disabled',
+        toolId: tool.manifest.id,
+        status: tool.probeStatus,
+        href: `/catalog/${tool.manifest.id}`,
+      });
     }
   }
   for (const call of calls) {

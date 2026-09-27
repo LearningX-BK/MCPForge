@@ -208,11 +208,19 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
         deploymentId: v.deploymentId,
         status: v.status,
         rowsChecked: v.rowsChecked,
-        origin: v.origin === null ? null : { kind: v.origin.kind },
+        origin:
+          v.origin === null
+            ? null
+            : {
+                kind: v.origin.kind,
+                firstRowId: v.origin.firstRowId,
+                attestationCallId: v.origin.attestation?.callId ?? null,
+              },
         firstBreak:
           v.firstBreak === null
             ? null
             : {
+                rowId: v.firstBreak.rowId,
                 position: v.firstBreak.position,
                 reason: v.firstBreak.reason,
                 message: v.firstBreak.message,

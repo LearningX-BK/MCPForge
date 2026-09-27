@@ -7,13 +7,15 @@ import type * as React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import ActivityCallDetailPage from './page';
+import { getActivityCall } from '../../fixtures';
+import { CallDetailView } from './call-detail-view';
 
 afterEach(cleanup);
 
 async function renderCall(callId: string) {
-  const element = await ActivityCallDetailPage({ params: Promise.resolve({ callId }) });
-  return render(element as React.ReactElement);
+  const detail = getActivityCall(callId);
+  if (detail === undefined) throw new Error(`no fixture call ${callId}`);
+  return render(<CallDetailView detail={detail} />);
 }
 
 describe('Activity call detail', () => {

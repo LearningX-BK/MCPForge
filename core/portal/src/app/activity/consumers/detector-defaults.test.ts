@@ -1,4 +1,4 @@
-// MCPForge — W0-N13: pins `fixtures.ts`'s restated `DETECTOR_ROW_DEFAULTS`
+// MCPForge — W0-N13: pins `overview.ts`'s restated `DETECTOR_ROW_DEFAULTS`
 // against the real `core/gateway/anomaly/config.ts` `DETECTOR_DEFAULTS` and
 // `DETECTOR_IDS`, so the two cannot silently drift (see `fixtures.ts`'s file
 // header for why the client fixture restates rather than imports these
@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { DETECTOR_DEFAULTS } from '@mcpforge/gateway/anomaly';
 import { DETECTOR_IDS } from '@mcpforge/gateway/anomaly';
 
-import { DETECTOR_ROW_DEFAULTS } from './fixtures';
+import { DETECTOR_ROW_DEFAULTS } from './overview';
 
 describe('DETECTOR_ROW_DEFAULTS mirrors the real DETECTOR_DEFAULTS', () => {
   it('lists exactly the seven declared detector ids, in order', () => {

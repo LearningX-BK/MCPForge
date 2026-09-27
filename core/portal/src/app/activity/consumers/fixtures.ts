@@ -29,6 +29,9 @@ import type {
   DetectorRowView,
   QuotaMeterView,
 } from './types';
+import { DETECTOR_ROW_DEFAULTS, meterState } from './overview';
+
+export { DETECTOR_ROW_DEFAULTS };
 
 // A FIXED anchor, not `Date.now()` — this page is `'use client'`, so this
 // module evaluates once during SSR and again on hydration; a wall-clock
@@ -59,72 +62,6 @@ const DECLARED_LIMITS: Readonly<Record<string, DeclaredLimits>> = {
   con_agent_client: { callsPerMinute: 30, writesPerDay: 40 },
 };
 
-/**
- * `DETECTOR_DEFAULTS`, restated as data — see the file header. Exported so
- * `detector-defaults.test.ts` (a Node-environment, non-client test file) can
- * pin these seven rows against the real `DETECTOR_DEFAULTS` object and catch
- * drift.
- */
-export const DETECTOR_ROW_DEFAULTS: readonly Omit<DetectorRowView, 'state' | 'lastFireTs'>[] = [
-  {
-    detectorId: 'burst-write',
-    describes:
-      'Writes per consumer per window above N× its trailing baseline, or above its declared writesPerDay ceiling.',
-    window: '1h',
-    threshold: 5,
-    severity: 'high',
-    implemented: true,
-  },
-  {
-    detectorId: 'off-hours-elevated-binding',
-    describes: 'A plsql/function write outside the consumer’s declared operatingWindow.',
-    window: '1h',
-    threshold: 1,
-    severity: 'high',
-    implemented: false,
-  },
-  {
-    detectorId: 'scope-probing',
-    describes:
-      'A rising rate of TOOL_NOT_IN_SCOPE / CONSUMER_NOT_AUTHORIZED / ELEVATED_GRANT_REQUIRED refusals from one consumer.',
-    window: '1h',
-    threshold: 10,
-    severity: 'high',
-    implemented: true,
-  },
-  {
-    detectorId: 'subject-fan-out',
-    describes: 'An unusual distinct caller_subject count acting under one consumer.',
-    window: '24h',
-    threshold: 25,
-    severity: 'medium',
-    implemented: false,
-  },
-  {
-    detectorId: 'identity-echo-mismatch',
-    describes: 'A rising rate of identity_match = false occurrences from one consumer.',
-    window: '1h',
-    threshold: 3,
-    severity: 'high',
-    implemented: true,
-  },
-  {
-    detectorId: 'plan-abandonment',
-    describes: 'An elevated plan:execute ratio per consumer.',
-    window: '24h',
-    threshold: 5,
-    severity: 'medium',
-    implemented: false,
-  },
-  {
-    detectorId: 'first-write-to-tool',
-    describes: 'The first-ever write by this consumer to a write-capable tool — notable, not an alarm.',
-    window: '24h',
-    threshold: 1,
-    severity: 'low',
-    implemented: false,
-  },
-];
 
 function usagePoints(consumerId: string, now: number = NOW): readonly ConsumerUsagePointView[] {
   // 24 hourly buckets — `ConsumerUsageGranularity: 'hour'`, matching the
@@ -147,11 +84,6 @@ function usagePoints(consumerId: string, now: number = NOW): readonly ConsumerUs
   });
 }
 
-function meterState(percentUsed: number): QuotaMeterView['state'] {
-  if (percentUsed >= 100) return 'exceeded';
-  if (percentUsed >= 80) return 'warning';
-  return 'ok';
-}
 
 function quotaMeters(consumerId: string, points: readonly ConsumerUsagePointView[]): readonly QuotaMeterView[] {
   const declared = DECLARED_LIMITS[consumerId] ?? { callsPerMinute: 60, writesPerDay: 200 };

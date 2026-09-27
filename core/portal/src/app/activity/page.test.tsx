@@ -5,7 +5,18 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import ActivityPage from './page';
+import { ActivityView } from './activity-view';
+import { CURRENT_USER_SUBJECT, loadActivityCalls, loadIntegrityVerification } from './fixtures';
+
+function ActivityPage() {
+  return (
+    <ActivityView
+      calls={loadActivityCalls()}
+      verifications={[loadIntegrityVerification()]}
+      currentSubject={CURRENT_USER_SUBJECT}
+    />
+  );
+}
 
 afterEach(cleanup);
 
