@@ -15,3 +15,4 @@ export * from './approval.js';
 export * from './proposal.js';
 export * from './lifecycle.js';
 export * from './credential.js';
+export * from './keypair.js';

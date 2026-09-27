@@ -100,6 +100,23 @@ const ALLOWED_TEST_ONLY_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> =
   // list to the gateway's closed `PERSONAS`, for the same reason: the client
   // cannot import a module that reads the filesystem.
   'identity/group-role-mapping': new Set(['PERSONAS']),
+  // W0-P24. `lib/gateway-client/consumer-assertion.test.ts` proves the portal's
+  // `private-key-jwt` assertion passes the gateway's REAL `[2a]` gate, not a
+  // restatement of it: the key is minted and written by the functions
+  // `forge consumer issue-credential` uses, the record is `portal-local` with
+  // the staged key proposal applied, and the verdict is `ConsumerAuthenticator`'s.
+  // A restated verifier could agree with the portal and disagree with the gateway.
+  consumer: new Set([
+    'mintConsumerKeypair',
+    'proposePrivateKeyJwtKey',
+    'writeConsumerPrivateKeyFile',
+    'PORTAL_CONSUMER_KEY_FILE',
+  ]),
+  transport: new Set([
+    'ConsumerAuthenticator',
+    'ConsumerPresentation',
+    'MCPFORGE_CONSUMER_ASSERTION_HEADER',
+  ]),
 };
 
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'build']);
