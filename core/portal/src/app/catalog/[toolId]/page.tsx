@@ -2,20 +2,27 @@
 // this route is opened directly (typed URL, refresh, shared link) rather
 // than navigated to from the list. See `../layout.tsx` and
 // `../@modal/(.)[toolId]/page.tsx` for the drawer counterpart.
+//
+// W0-P3e: the tool is its committed manifest; its status and 30-day
+// consumption are read from `/api/v1` as the viewer.
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ToolPageBody } from '../_components/tool-page-body';
-import { findTool, loadCatalogData, manifestsById } from '../load-tool';
+import { loadCatalogData, loadToolConsumption } from '../load-catalog';
+import { findTool, manifestsById } from '../load-tool';
+
+export const dynamic = 'force-dynamic';
 
 export default async function ToolPage({ params }: { params: Promise<{ toolId: string }> }) {
   const { toolId } = await params;
-  const data = loadCatalogData();
-  const tool = findTool(data, toolId);
+  const data = await loadCatalogData();
+  const found = findTool(data, decodeURIComponent(toolId));
 
-  if (!tool) {
+  if (!found) {
     notFound();
   }
+  const tool = { ...found, consumption: await loadToolConsumption(found.manifest.id) };
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-6">

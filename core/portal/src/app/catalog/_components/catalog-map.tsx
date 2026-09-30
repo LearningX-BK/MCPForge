@@ -15,7 +15,8 @@
 // 03 §5.3 or say what "Map" should show instead.
 'use client';
 
-import { BindingChip, ProbeStatusChip } from '@/components/chips';
+import { BindingChip } from '@/components/chips';
+import { CatalogStatusChip } from './catalog-status-chip';
 import type { CatalogTool } from '../types';
 
 export interface CatalogMapProps {
@@ -53,7 +54,7 @@ export function CatalogMap({ rows, onOpen }: CatalogMapProps) {
                     >
                       <span className="truncate text-text-1">{t.manifest.entity}.{t.manifest.verb}</span>
                       <BindingChip type={t.manifest.binding.type} className="shrink-0" />
-                      <ProbeStatusChip status={t.probeStatus} className="shrink-0" />
+                      <CatalogStatusChip status={t.probeStatus} className="shrink-0" />
                     </button>
                   ))}
                 </div>

@@ -34,12 +34,8 @@ import { dirname, join, relative } from 'node:path';
 
 /** `from -> to` edges (paths relative to `core/portal/src`) that are known and owned. */
 export const ALLOWED_FIXTURE_EDGES: Readonly<Record<string, string>> = {
-  // W0-P3e. The Catalog's `CatalogTool` mixes git facts (the manifest) with
-  // runtime ones (probe status, identity carriage, 30-day consumption), so
-  // moving it off its fixture needs `/api/v1` as well as git. Filed as its
-  // own task in W0-P3c rather than half-done here.
-  'app/catalog/load-tool.ts -> app/catalog/fixtures.ts':
-    'W0-P3e: the Catalog onto git (manifests) and /api/v1 (probe status, consumption).',
+  // Empty since W0-P3e moved the Catalog onto git and /api/v1. An entry here
+  // must name the task that removes it; the check fails a stale one.
 };
 
 const ENTRY_FILES = new Set([
