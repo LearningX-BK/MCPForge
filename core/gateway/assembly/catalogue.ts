@@ -40,9 +40,11 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   BINDING_TYPES,
+  CREDENTIAL_CLASSES,
   REVERSAL_CLASSES,
   SENSITIVITIES,
   type BindingType,
+  type CredentialClass,
   type Guardrail,
   type ReversalClass,
   type Sensitivity,
@@ -350,7 +352,7 @@ async function resolveTool(
     const manifest = doc as ToolManifest;
     const reversal = view.write ? reversalContractFor(manifest, view) : undefined;
     const writeSafety = view.write ? writeSafetyViewFor(view, reversal!) : undefined;
-    const entry = catalogueEntryFor(view, reversal);
+    const entry = catalogueEntryFor(view, reversal, manifest.binding?.credentialClass);
     const functionDescriptor =
       view.bindingType === 'function' ? buildFunctionBindingDescriptor(manifest) : undefined;
     const dryRunDescriptor =
@@ -470,9 +472,21 @@ function writeSafetyViewFor(view: ToolView, reversal: ReversalContract): WriteSa
 function catalogueEntryFor(
   view: ToolView,
   reversal: ReversalContract | undefined,
+  credentialClass: string | undefined,
 ): PolicyCatalogueEntry {
   const ws = view.writeSafety;
   return Object.freeze({
+    // W0-P12: carried so stage 6e′ can refuse a stored-credential binding.
+    // Narrowed by checking, like every other closed field here.
+    ...(credentialClass === undefined
+      ? {}
+      : {
+          credentialClass: oneOf<CredentialClass>(
+            CREDENTIAL_CLASSES,
+            credentialClass,
+            'binding.credentialClass',
+          ),
+        }),
     toolId: view.id,
     serverId: required(view.server, 'server'),
     bindingType: oneOf<BindingType>(BINDING_TYPES, view.bindingType, 'binding.type'),
