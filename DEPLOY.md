@@ -81,9 +81,15 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
 
 8. **Point it at a JD Edwards target and probe (optional).** Start the mock
    (`pnpm --filter @mcpforge/mocks mock-jde`, or run it as a second service),
-   seed the three per-server client credentials named in
-   `overlays/local/ais-targets.yaml` into the SecretStore (no `forge secrets put`
-   yet, W0-P26), then run `forge probe --env local` so tools are enabled.
+   store the three per-server client credentials named in
+   `overlays/local/ais-targets.yaml`, one at a time, typing each value at the
+   prompt (or `--from-file <path>`; never as an argument):
+   ```sh
+   docker compose exec -it mcpforge-core node core/cli/bin/forge.js \n     secrets put secretRef://binding/jde-fin-ap/token-provider-client
+   ```
+   (W0-P26: refused when `CI=true`, for a ref the overlay does not name, and
+   for one already stored unless `--replace`.) Restart the gateway, then run
+   `forge probe --env local` so tools are enabled.
    Without a probe report every tool reads "Not probed" and nothing can execute.
 
 ## Verified (30 Sep 2026, local Docker)
@@ -100,6 +106,5 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
 - **A real JD Edwards target:** the real token-provider protocol is an open human decision (W0-P14 note).
 - **Anyone approving anything:** no local group maps to the real role `p2p` (owner fix to the mapping).
 - **External agents (Claude Desktop etc.):** no supported way to issue a key to a new consumer; W0-P19, W0-Q12.
-- **Storing binding credentials without a script:** W0-P26.
 - **Production secrets:** `OciVaultStore` is the named production target and is not built in Wave 0.
 - **More than one instance:** SQLite is single-instance; multi-replica needs the Postgres store (built and tested, not wired for this image).

@@ -125,6 +125,13 @@ export const CANONICAL_COMMANDS: readonly StubCommandSpec[] = [
     description:
       'Invalidate a credential AND kill-switch every dependent, in one act (02 §11.5 rule 6).',
   },
+  // W0-P26. Storing a binding credential issued elsewhere. The value comes from
+  // a file or stdin, never argv, and is never printed.
+  {
+    path: ['secrets', 'put'],
+    description:
+      'Store a binding credential the overlay names, from --from-file or stdin (never argv). Refused when CI=true.',
+  },
   { path: ['ci'], description: 'Run the whole CI pipeline locally, host-agnostic (02 §7.2).' },
   {
     path: ['dev'],

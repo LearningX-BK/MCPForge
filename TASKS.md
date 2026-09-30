@@ -1582,7 +1582,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Found in W0-P28, 30 Sep 2026. `runOverlayPurityCheck` on main fails on `consumers/portal-local.consumer.yaml`: the Ed25519 public key `x` under `publicKeys` is a 43-character high-entropy string. A public key is not a secret, and registration requires it. So `forge ci`'s overlay-purity stage cannot pass on this repo. The secret scanner needs to recognise a JWK public-key member under `publicKeys` without opening a hole for private members (`d`) or anything else.
   - done: `runOverlayPurityCheck` is ok on this repo; a `publicKeys[].x` is accepted; a `d` member or a high-entropy string anywhere else is still refused; tests prove all three.
 
-- [ ] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
+- [x] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
   - model: opus
   - deps: W0-P21
   - wave: 0
@@ -1590,6 +1590,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: core/cli/src/commands/secrets.ts, core/gateway/secrets/**
   - context: Found in W0-P21, 30 Sep 2026. To probe (or run the gateway) against the mock JDE, the three per-server client credentials named in `overlays/local/ais-targets.yaml` must be in the SecretStore. `forge secrets` offers `status`, `rotate` (which refuses an unknown ref) and `revoke`; nothing creates one. The W0-P21 live run seeded them with a scratch script calling `EncryptedFileStore.put` (the same thing `launch.e2e.test.ts` does in-test). An operator needs a supported path that never echoes the value: e.g. `forge secrets put <ref> --from-file <path>` or from stdin, refused when `CI=true`, refused for a ref whose scope the overlay does not name, and never printing the value (non-negotiable 8).
   - done: a `forge secrets` subcommand stores a new credential for a `secretRef://` from a file or stdin without echoing it; it refuses in CI and for a malformed ref, with a `next`; the value appears in no output, log or error; tests prove all three.
+  - result (30 Sep 2026): `forge secrets put <ref> [--from-file <path>] [--replace] [--deployment <id>]`. Value from the file, or a no-echo prompt / stdin (shared `core/cli/src/lib/hidden-input.ts`, also used by W0-P28's bootstrap-admin); never argv, never printed, not even its length. Decided as implementation, all narrowing: `binding` scope only (consumer keys come from `forge consumer issue-credential`, gateway keys from the gateway); the ref must be named in a YAML file under `overlays/<deployment>/` (no orphans from typos); an existing ref needs `--replace` (then a new version); 64 KiB cap; one trailing newline dropped from a file. No audit row, matching `rotate`. 9 new tests in `core/cli/src/commands/secrets.test.ts`. DEPLOY.md step 8 uses it.
 
 - [x] **W0-P20** — Three CLI tests still assume an empty repo ("no manifests authored yet")
   - model: sonnet

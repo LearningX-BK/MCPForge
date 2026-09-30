@@ -74,7 +74,7 @@ const REAL_HANDLERS: Readonly<
   // secretRef, lifted into `opts.target` by `registerCommand` exactly as
   // `kill`'s and `consumer`'s ids are.
   ...Object.fromEntries(
-    (['status', 'rotate', 'revoke'] as const).map((verb) => [
+    (['status', 'rotate', 'revoke', 'put'] as const).map((verb) => [
       `secrets ${verb}`,
       (opts: { json: boolean } & Record<string, unknown>) => runSecretsCommand(verb, opts as never),
     ]),
@@ -147,7 +147,7 @@ const ARGUMENTS: Readonly<Record<string, PositionalSpec | readonly PositionalSpe
     // W0-N6. OPTIONAL for the same reason: a missing ref must reach this CLI's
     // own INPUT_INVALID envelope with an actionable `next`.
     ...Object.fromEntries(
-      (['rotate', 'revoke'] as const).map((verb) => [
+      (['rotate', 'revoke', 'put'] as const).map((verb) => [
         `secrets ${verb}`,
         {
           name: '[ref]',
@@ -361,6 +361,25 @@ const EXTRA_OPTIONS: Readonly<
       flags: '--root <dir>',
       description:
         'Repository root the sealed vault lives under. Default: the enclosing repository.',
+    },
+  ],
+  // W0-P26.
+  'secrets put': [
+    {
+      flags: '--from-file <path>',
+      description: 'Read the value from this file (one trailing newline dropped). Default: prompt, or stdin.',
+    },
+    {
+      flags: '--replace',
+      description: 'Allow replacing a ref that already holds a value (a new version).',
+    },
+    {
+      flags: '--deployment <id>',
+      description: 'Deployment whose overlay must name the ref. Default: MCPFORGE_DEPLOYMENT or "local".',
+    },
+    {
+      flags: '--root <dir>',
+      description: 'Repository root the sealed vault lives under. Default: the enclosing repository.',
     },
   ],
   'secrets revoke': [

@@ -1,4 +1,5 @@
-// MCPForge — `forge secrets status | rotate | revoke`. W0-N6, 02 §11.5 rules 5 and 6.
+// MCPForge — `forge secrets status | rotate | revoke | put`. W0-N6, 02 §11.5 rules 5
+// and 6; `put` is W0-P26.
 //
 // CLAUDE.md §7 names this surface verbatim:
 //
@@ -17,6 +18,16 @@
 // `./audit.ts` already use. That matters more here than elsewhere: a CLI that
 // re-derived "is this credential overdue" would be a second definition of
 // overdue, and the portal's Governance screen reads the first one.
+//
+// **W0-P26 — `put`.** The one verb that takes a value IN: a binding credential
+// issued by someone else (e.g. an AIS token-provider client secret), which
+// `rotate` cannot supply because it mints its own. The value comes from
+// `--from-file` or stdin (a no-echo prompt on a terminal), never argv, and is
+// never printed, not even its length. It is refused under CI=true; for any
+// scope but `binding` (consumer keys come from `forge consumer
+// issue-credential`, gateway keys are minted by the gateway); for a ref the
+// deployment's overlay does not name (a typo would otherwise store an orphan);
+// and for a ref that already holds a value unless `--replace` says so.
 //
 // **Nothing in this file resolves a credential value.** `status` walks
 // `list()` and `metadata()`, both the safe-to-log half of the seam;
@@ -45,8 +56,11 @@ import {
   type SecretsRotationReport,
 } from '@mcpforge/gateway/secrets/server';
 import { findRepoRoot } from '@mcpforge/ci';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { readHiddenLine } from '../lib/hidden-input.js';
 
-export type SecretsVerb = 'status' | 'rotate' | 'revoke';
+export type SecretsVerb = 'status' | 'rotate' | 'revoke' | 'put';
 
 export interface SecretsOptions {
   readonly json: boolean;
@@ -56,11 +70,15 @@ export interface SecretsOptions {
   readonly by?: string;
   readonly root?: string;
   readonly deployment?: string;
+  /** W0-P26 — `put` reads the value from this file instead of stdin. */
+  readonly fromFile?: string;
+  /** W0-P26 — `put` may replace a ref that already holds a value only with this. */
+  readonly replace?: boolean;
 }
 
 export interface SecretsCliError {
   readonly ok: false;
-  readonly code: 'INPUT_INVALID';
+  readonly code: 'INPUT_INVALID' | 'POLICY_GUARDRAIL_BREACH';
   readonly verb: SecretsVerb;
   readonly message: string;
   readonly next: string;
@@ -142,7 +160,9 @@ function usageError(verb: SecretsVerb, message: string): SecretsCliError {
     next:
       verb === 'status'
         ? 'Run "forge secrets status [--root <dir>] [--json]".'
-        : verb === 'rotate'
+        : verb === 'put'
+          ? 'Run "forge secrets put <secretRef://binding/subject/purpose> [--from-file <path>] [--replace] [--deployment <id>]" and type the value at the prompt, or pipe it on stdin. Never pass it as an argument.'
+          : verb === 'rotate'
           ? 'Run "forge secrets rotate <secretRef://scope/subject/purpose> [--root <dir>] [--json]".'
           : 'Run "forge secrets revoke <secretRef://scope/subject/purpose> --reason \\"...\\" --by <subject> [--deployment <id>] [--json]".',
   };
@@ -155,7 +175,7 @@ function emitError(error: SecretsCliError, json: boolean): number {
     process.stderr.write(`forge: secrets ${error.verb} — ${error.message}\n`);
     process.stderr.write(`forge: next — ${error.next}\n`);
   }
-  return USAGE_EXIT_CODE;
+  return error.code === 'POLICY_GUARDRAIL_BREACH' ? 1 : USAGE_EXIT_CODE;
 }
 
 function parseRefArgument(verb: SecretsVerb, raw: string | undefined): SecretRef | SecretsCliError {
@@ -213,6 +233,10 @@ export interface SecretsCommandDeps {
   readonly openStore?: () => Promise<RuntimeStore>;
   readonly repoRoot?: string;
   readonly now?: () => Date;
+  /** W0-P26 — the environment `put` checks for CI=true. Default: process.env. */
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  /** W0-P26 — reads the value without echo. Default: a TTY prompt, or stdin. */
+  readonly readValue?: () => Promise<string>;
 }
 
 function resolveRoot(opts: SecretsOptions, deps: SecretsCommandDeps): string {
@@ -391,7 +415,174 @@ async function runRevoke(opts: SecretsOptions, deps: SecretsCommandDeps): Promis
   }
 }
 
-/** `forge secrets <status|rotate|revoke>`. */
+// --- put (W0-P26) --------------------------------------------------------------
+
+export interface SecretsPutEnvelope {
+  readonly ok: true;
+  readonly verb: 'put';
+  readonly ref: string;
+  readonly version: number;
+  readonly replaced: boolean;
+  readonly nextDueAt: string;
+  readonly intervalDays: number;
+  readonly next: string;
+}
+
+/** A credential value is small; anything larger is a mistake. */
+export const PUT_VALUE_MAX_BYTES = 64 * 1024;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Every `*.yaml`/`*.yml` under the deployment's overlay that names `uri` verbatim. */
+function overlayFilesNaming(repoRoot: string, deployment: string, uri: string): string[] {
+  // Followed by a non-ref character, so ".../client" does not match ".../client-2".
+  const pattern = new RegExp(`${escapeRegExp(uri)}(?![A-Za-z0-9_.-])`);
+  const found: string[] = [];
+  const walk = (dir: string): void => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      const full = path.join(dir, name);
+      if (statSync(full).isDirectory()) walk(full);
+      else if (/\.ya?ml$/.test(name) && pattern.test(readFileSync(full, 'utf8'))) {
+        found.push(path.relative(repoRoot, full).replace(/\\/g, '/'));
+      }
+    }
+  };
+  walk(path.join(repoRoot, 'overlays', deployment));
+  return found.sort();
+}
+
+function putRefusal(message: string, next: string): SecretsCliError {
+  return { ok: false, code: 'POLICY_GUARDRAIL_BREACH', verb: 'put', message, next };
+}
+
+/** The value, from `--from-file` or the no-echo reader. `undefined` when too large. */
+async function readPutValue(
+  opts: SecretsOptions,
+  deps: SecretsCommandDeps,
+): Promise<string | undefined> {
+  if (opts.fromFile !== undefined) {
+    if (statSync(opts.fromFile).size > PUT_VALUE_MAX_BYTES) return undefined;
+    // One trailing newline is the editor's, not the credential's.
+    return readFileSync(opts.fromFile, 'utf8').replace(/\r?\n$/, '');
+  }
+  const value = await (deps.readValue ?? (() => readHiddenLine({ label: 'Credential value' })))();
+  return Buffer.byteLength(value) > PUT_VALUE_MAX_BYTES ? undefined : value;
+}
+
+async function runPut(opts: SecretsOptions, deps: SecretsCommandDeps): Promise<number> {
+  const env = deps.env ?? process.env;
+  if (env['CI'] === 'true') {
+    return emitError(
+      putRefusal(
+        'forge secrets put is refused when CI=true: a pipeline never handles a credential value.',
+        'Run it by hand on the host that holds the sealed store, with CI unset.',
+      ),
+      opts.json,
+    );
+  }
+  const parsed = parseRefArgument('put', opts.target);
+  if (isCliError(parsed)) return emitError(parsed, opts.json);
+  const ref = parsed;
+  if (ref.scope !== 'binding') {
+    return emitError(
+      putRefusal(
+        `forge secrets put stores binding credentials only; ${ref.uri} is a ${ref.scope} credential.`,
+        ref.scope === 'consumer'
+          ? 'Mint a consumer credential with "forge consumer issue-credential <id>".'
+          : 'Gateway keys are minted by the gateway itself; change one with "forge secrets rotate <ref>".',
+      ),
+      opts.json,
+    );
+  }
+
+  const repoRoot = resolveRoot(opts, deps);
+  const deployment = opts.deployment?.trim() || env['MCPFORGE_DEPLOYMENT'] || 'local';
+  const namedIn = overlayFilesNaming(repoRoot, deployment, ref.uri);
+  if (namedIn.length === 0) {
+    return emitError(
+      putRefusal(
+        `No file under overlays/${deployment}/ names ${ref.uri}, so nothing would use this credential.`,
+        `Check the ref for a typo against overlays/${deployment}/ (e.g. ais-targets.yaml), or add it there through a reviewed change first, then store it.`,
+      ),
+      opts.json,
+    );
+  }
+
+  const store = resolveSecretStore(repoRoot, deps);
+  const existing = (await store.list()).some((r) => r.uri === ref.uri);
+  if (existing && opts.replace !== true) {
+    return emitError(
+      putRefusal(
+        `${ref.uri} already holds a value; nothing was changed.`,
+        'If the issuer changed this credential, run the same command with --replace. See its age first with "forge secrets status".',
+      ),
+      opts.json,
+    );
+  }
+
+  let value: string | undefined;
+  try {
+    value = await readPutValue(opts, deps);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === undefined) throw err;
+    return emitError(
+      usageError(
+        'put',
+        `--from-file ${opts.fromFile ?? ''} could not be read (${(err as NodeJS.ErrnoException).code}); nothing was stored.`,
+      ),
+      opts.json,
+    );
+  }
+  if (value === undefined || value.length === 0) {
+    return emitError(
+      usageError(
+        'put',
+        value === undefined
+          ? `The credential value is larger than ${PUT_VALUE_MAX_BYTES} bytes; nothing was stored.`
+          : 'No credential value was read (empty input, or the two entries did not match); nothing was stored.',
+      ),
+      opts.json,
+    );
+  }
+
+  const metadata = await store.put(ref, value);
+  const intervalDays = ROTATION_INTERVAL_DAYS[ref.scope];
+  const anchor = Date.parse(metadata.rotatedAt ?? metadata.createdAt);
+  const envelope: SecretsPutEnvelope = {
+    ok: true,
+    verb: 'put',
+    ref: ref.uri,
+    version: metadata.version,
+    replaced: existing,
+    nextDueAt: new Date(anchor + intervalDays * 86_400_000).toISOString(),
+    intervalDays,
+    next: `Stored. ${namedIn.join(', ')} ${namedIn.length === 1 ? 'names' : 'name'} it. Restart the gateway to pick it up, then run "forge probe" so the tools that depend on it can be enabled.`,
+  };
+  if (opts.json) {
+    process.stdout.write(`${JSON.stringify(envelope)}\n`);
+  } else {
+    process.stdout.write(
+      [
+        `forge secrets put: OK`,
+        `  ref: ${envelope.ref}`,
+        `  version: ${envelope.version}${envelope.replaced ? ' (replaced the previous value)' : ''}`,
+        `  next due: ${envelope.nextDueAt} (${envelope.intervalDays}-day interval)`,
+        `  next: ${envelope.next}`,
+      ].join('\n') + '\n',
+    );
+  }
+  return 0;
+}
+
+/** `forge secrets <status|rotate|revoke|put>`. */
 export async function runSecretsCommand(
   verb: SecretsVerb,
   opts: SecretsOptions,
@@ -404,5 +595,7 @@ export async function runSecretsCommand(
       return runRotate(opts, deps);
     case 'revoke':
       return runRevoke(opts, deps);
+    case 'put':
+      return runPut(opts, deps);
   }
 }

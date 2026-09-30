@@ -329,6 +329,143 @@ describe('forge secrets revoke', () => {
   });
 });
 
+describe('forge secrets put (W0-P26)', () => {
+  const VALUE = 'client-secret-value-p26-do-not-print';
+
+  function writeOverlay(ref: string): void {
+    const dir = path.join(repoRoot, 'overlays', 'local');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      path.join(dir, 'ais-targets.yaml'),
+      `targets:\n  - clientCredentialRef: ${ref}\n`,
+      'utf8',
+    );
+  }
+
+  /** A store double that records what `put` was handed; no value is read back. */
+  function recordingStore(): { store: EncryptedFileStore; puts: { uri: string; value: string }[] } {
+    const puts: { uri: string; value: string }[] = [];
+    const store = new Proxy(vault, {
+      get(target, prop, receiver) {
+        if (prop === 'put') {
+          return async (ref: { uri: string }, value: string) => {
+            puts.push({ uri: ref.uri, value });
+            return target.put(ref as never, value);
+          };
+        }
+        const v = Reflect.get(target, prop, receiver) as unknown;
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+    return { store, puts };
+  }
+
+  function put(
+    opts: Record<string, unknown>,
+    deps: { value?: string; env?: Record<string, string>; store?: EncryptedFileStore } = {},
+  ): Promise<number> {
+    return runSecretsCommand(
+      'put',
+      { json: true, target: BINDING_REF.uri, ...opts },
+      {
+        secretStore: deps.store ?? vault,
+        repoRoot,
+        env: deps.env ?? {},
+        readValue: () => Promise.resolve(deps.value ?? VALUE),
+      },
+    );
+  }
+
+  function allOutput(): string {
+    return stdout.join('') + stderr.join('');
+  }
+
+  it('stores a binding credential the overlay names, from stdin, and prints no value', async () => {
+    writeOverlay(BINDING_REF.uri);
+    const { store, puts } = recordingStore();
+    expect(await put({}, { store })).toBe(0);
+    const out = jsonOut<{ ok: boolean; version: number; replaced: boolean; next: string }>();
+    expect(out.ok).toBe(true);
+    expect(out.version).toBe(1);
+    expect(out.replaced).toBe(false);
+    expect(out.next).toContain('overlays/local/ais-targets.yaml');
+    expect(puts).toEqual([{ uri: BINDING_REF.uri, value: VALUE }]);
+    expect(allOutput()).not.toContain(VALUE);
+  });
+
+  it('reads --from-file, dropping one trailing newline', async () => {
+    writeOverlay(BINDING_REF.uri);
+    const file = path.join(dbDir, 'value.txt');
+    writeFileSync(file, `${VALUE}\n`, 'utf8');
+    const { store, puts } = recordingStore();
+    expect(await put({ fromFile: file }, { store })).toBe(0);
+    expect(puts[0]!.value).toBe(VALUE);
+    expect(allOutput()).not.toContain(VALUE);
+  });
+
+  it('refuses when CI=true, before reading anything', async () => {
+    writeOverlay(BINDING_REF.uri);
+    const readValue = vi.fn(() => Promise.resolve(VALUE));
+    const code = await runSecretsCommand(
+      'put',
+      { json: true, target: BINDING_REF.uri },
+      { secretStore: vault, repoRoot, env: { CI: 'true' }, readValue },
+    );
+    expect(code).toBe(1);
+    expect(jsonOut<{ code: string }>().code).toBe('POLICY_GUARDRAIL_BREACH');
+    expect(readValue).not.toHaveBeenCalled();
+    expect(await vault.list()).toEqual([]);
+  });
+
+  it('refuses a malformed ref with INPUT_INVALID and a next', async () => {
+    expect(await put({ target: 'binding/not-a-ref' })).toBe(64);
+    const err = jsonOut<{ code: string; next: string }>();
+    expect(err.code).toBe('INPUT_INVALID');
+    expect(err.next.length).toBeGreaterThan(0);
+  });
+
+  it('refuses a consumer or gateway ref, naming the command that does mint it', async () => {
+    writeOverlay(CONSUMER_REF.uri);
+    expect(await put({ target: CONSUMER_REF.uri })).toBe(1);
+    expect(jsonOut<{ next: string }>().next).toContain('issue-credential');
+    expect(await vault.list()).toEqual([]);
+  });
+
+  it('refuses a ref the overlay does not name, including a longer look-alike', async () => {
+    writeOverlay(`${BINDING_REF.uri}-2`);
+    expect(await put({})).toBe(1);
+    expect(jsonOut<{ message: string }>().message).toContain('names');
+    expect(await vault.list()).toEqual([]);
+  });
+
+  it('refuses to replace an existing value without --replace, and makes version 2 with it', async () => {
+    writeOverlay(BINDING_REF.uri);
+    expect(await put({})).toBe(0);
+    stdout.length = 0;
+    expect(await put({})).toBe(1);
+    expect(jsonOut<{ next: string }>().next).toContain('--replace');
+    expect((await vault.metadata(BINDING_REF)).version).toBe(1);
+    stdout.length = 0;
+    expect(await put({ replace: true })).toBe(0);
+    expect(jsonOut<{ version: number; replaced: boolean }>()).toMatchObject({
+      version: 2,
+      replaced: true,
+    });
+  });
+
+  it('refuses an empty value and stores nothing', async () => {
+    writeOverlay(BINDING_REF.uri);
+    expect(await put({}, { value: '' })).toBe(64);
+    expect(await vault.list()).toEqual([]);
+  });
+
+  it('refuses an unreadable --from-file without a stack trace', async () => {
+    writeOverlay(BINDING_REF.uri);
+    expect(await put({ fromFile: path.join(dbDir, 'missing.txt') })).toBe(64);
+    expect(jsonOut<{ message: string }>().message).toContain('ENOENT');
+  });
+});
+
 describe('the wired binary', () => {
   function forge(args: string[]): { stdout: string; stderr: string; status: number | null } {
     const result = spawnSync(process.execPath, [binPath, ...args], {
