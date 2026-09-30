@@ -28,6 +28,7 @@ import {
   identityAdminGroups,
   loadDeploymentGroupRoleMapping,
 } from '@mcpforge/gateway/identity/group-role-mapping';
+import { readHiddenLine } from '../lib/hidden-input.js';
 
 export const BOOTSTRAP_TOOL_ID = 'forge.identity.bootstrap_admin';
 const USAGE_EXIT_CODE = 64;
@@ -130,7 +131,7 @@ export async function runBootstrapAdminCommand(
       );
     }
 
-    const password = await (deps.readPassword ?? readPasswordFromTerminalOrStdin)();
+    const password = await (deps.readPassword ?? (() => readHiddenLine({ label: 'Password' })))();
     if (password.length < MIN_PASSWORD_LENGTH) {
       return emit(
         usage(
@@ -217,60 +218,4 @@ function emit(error: CliError, json: boolean): number {
     process.stderr.write(`forge: next — ${error.next}\n`);
   }
   return error.code === 'INPUT_INVALID' ? USAGE_EXIT_CODE : 1;
-}
-
-/**
- * The password, never echoed. A terminal gets a raw-mode prompt, asked twice;
- * a pipe is read to its first line. Nothing here writes the value anywhere.
- */
-export async function readPasswordFromTerminalOrStdin(): Promise<string> {
-  const stdin = process.stdin;
-  if (!stdin.isTTY) {
-    const chunks: Buffer[] = [];
-    for await (const chunk of stdin)
-      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
-    return Buffer.concat(chunks).toString('utf8').split(/\r?\n/)[0] ?? '';
-  }
-  const first = await promptHidden('Password: ');
-  const second = await promptHidden('Repeat password: ');
-  if (first !== second) {
-    // Returning '' fails the length rule with a message that names no value.
-    process.stderr.write('forge: the two passwords did not match.\n');
-    return '';
-  }
-  return first;
-}
-
-function promptHidden(label: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const stdin = process.stdin;
-    process.stderr.write(label);
-    stdin.setRawMode(true);
-    stdin.resume();
-    stdin.setEncoding('utf8');
-    let value = '';
-    const onData = (key: string): void => {
-      for (const ch of key) {
-        if (ch === '\r' || ch === '\n') {
-          done();
-          resolve(value);
-          return;
-        }
-        if (ch === '\u0003') {
-          done();
-          reject(new Error('Interrupted.'));
-          return;
-        }
-        if (ch === '\u007f' || ch === '\b') value = value.slice(0, -1);
-        else value += ch;
-      }
-    };
-    const done = (): void => {
-      stdin.off('data', onData);
-      stdin.setRawMode(false);
-      stdin.pause();
-      process.stderr.write('\n');
-    };
-    stdin.on('data', onData);
-  });
 }

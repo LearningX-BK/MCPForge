@@ -98,6 +98,8 @@ const REAL_HANDLER_LABELS = new Set([
   'secrets status',
   'secrets rotate',
   'secrets revoke',
+  // W0-P26 — writes the sealed vault; see ./commands/secrets.test.ts.
+  'secrets put',
   // W0-N11 — `forge dev`'s local bootstrap self-registration (02 §11.2). A
   // real handler that WRITES consumers/portal-local.consumer.yaml, so it must
   // never be run against this repo from here; its coverage is ./commands/
