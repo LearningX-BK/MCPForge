@@ -193,6 +193,34 @@ describe('auth sessions', () => {
     expect(outcome.kind).toBe('revoked');
   });
 
+  it('revokeAllForSubject ends every live session of that subject only, keeping first reasons (W0-P29)', async () => {
+    const other = await store.authSessions.open({
+      subject: 'local:0192-bbbb',
+      providerId: 'local',
+      amr: ['pwd'],
+      tokenHash: hash('other'),
+      now: T0,
+      idleExpiresAt: IDLE,
+      absoluteExpiresAt: ABSOLUTE,
+    });
+    const live = await openSession(hash('h'));
+    const signedOut = await openSession(hash('h'));
+    await store.authSessions.revoke(signedOut.session.id, 'signed_out', T1);
+
+    const ended = await store.authSessions.revokeAllForSubject(
+      'local:0192-aaaa',
+      'credential_reset',
+      T1,
+    );
+    expect(ended).toBeGreaterThanOrEqual(1);
+    expect((await store.authSessions.get(live.session.id))?.revokedReason).toBe('credential_reset');
+    expect((await store.authSessions.get(signedOut.session.id))?.revokedReason).toBe('signed_out');
+    expect((await store.authSessions.get(other.session.id))?.revokedAt).toBeNull();
+    expect(
+      await store.authSessions.revokeAllForSubject('local:0192-aaaa', 'credential_reset', T1),
+    ).toBe(0);
+  });
+
   it('an unknown token is unknown, and changes nothing', async () => {
     const outcome = await store.authSessions.rotate({
       presentedHash: hash('nobody'),

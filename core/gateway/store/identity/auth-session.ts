@@ -220,5 +220,15 @@ export function authSessionRepository(connection: DialectConnection): AuthSessio
     revoke(sessionId, reason, now) {
       return revokeSession(sessionId, reason, now);
     },
+
+    revokeAllForSubject(subject, reason, now) {
+      return connection.transaction(async () => {
+        const live = await connection.all<Row>(
+          sql`select ${col('id')} from ${S} where ${col('subject')} = ${subject} and ${col('revoked_at')} is null`,
+        );
+        for (const row of live) await revokeSession(String(row['id']), reason, now);
+        return live.length;
+      });
+    },
   };
 }

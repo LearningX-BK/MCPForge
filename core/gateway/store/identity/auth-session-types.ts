@@ -14,6 +14,8 @@ export const AUTH_SESSION_REVOKED_REASONS = [
   'idle_expired',
   'absolute_expired',
   'account_unavailable',
+  // W0-P29: the account's password was reset, so every session it held ends.
+  'credential_reset',
 ] as const;
 export type AuthSessionRevokedReason = (typeof AUTH_SESSION_REVOKED_REASONS)[number];
 
@@ -100,4 +102,14 @@ export interface AuthSessionRepository {
   rotate(input: RotateRefreshTokenInput): Promise<RotateRefreshTokenOutcome>;
   /** End a session. Idempotent: an already-revoked session keeps its first reason. */
   revoke(sessionId: string, reason: AuthSessionRevokedReason, now: string): Promise<void>;
+  /**
+   * W0-P29 — end EVERY live session of `subject` (a password reset, a disabled
+   * account). Same first-reason-stands rule as `revoke`. Returns how many
+   * sessions this call ended.
+   */
+  revokeAllForSubject(
+    subject: string,
+    reason: AuthSessionRevokedReason,
+    now: string,
+  ): Promise<number>;
 }
