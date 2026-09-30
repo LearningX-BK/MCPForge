@@ -2,8 +2,8 @@
 
 // MCPForge — W0-J18: the Governance tab nav (03 §5.3 "Governance").
 //
-// Five tabs — Roles · Policy & guardrails · Security posture · Kill switch ·
-// Consumers. The fifth (03 §16.2) was deliberately absent until its route
+// Six tabs — Roles · Policy & guardrails · Security posture · Kill switch ·
+// Consumers · Users (W0-P28). The fifth (03 §16.2) was deliberately absent until its route
 // existed, on the rule that a nav entry leading nowhere is worse than one that
 // is not yet there; `W0-N12` built `/governance/consumers`, so it is listed
 // here now. This one line is the only edit W0-N12 makes outside
@@ -23,6 +23,8 @@ export const GOVERNANCE_TABS = [
   { href: '/governance/posture', label: 'Security posture' },
   { href: '/governance/kill-switch', label: 'Kill switch' },
   { href: '/governance/consumers', label: 'Consumers' },
+  // W0-P28 — local user administration. The gateway decides who may use it.
+  { href: '/governance/users', label: 'Users' },
 ] as const;
 
 export function GovNav() {

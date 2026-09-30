@@ -59,6 +59,12 @@ import {
 import type { IncomingHttpHeaders } from 'node:http';
 import { createReadApi } from './api/v1/read-api.js';
 import { resolveGatewayKeys } from './identity/keys.js';
+import {
+  identityAdminGroups,
+  loadDeploymentGroupRoleMapping,
+} from './identity/group-role-mapping.js';
+import type { LocalUserStore } from './identity/local/index.js';
+import type { UserAdminDeps } from './api/v1/user-admin.js';
 import { approvalGate } from './policy/approval/index.js';
 import {
   confirmWriteGate,
@@ -77,6 +83,25 @@ import {
   loadRuntimeCatalogue,
   type RuntimeCatalogue,
 } from './assembly/index.js';
+
+/**
+ * W0-P28 — the user-admin half the read API needs: the local store, and who
+ * may administer it, from this deployment's git mapping. The session assembly
+ * reads the same files at startup and refuses to start on a broken one, so a
+ * failure here cannot be reached with a gateway that is otherwise serving.
+ */
+function userAdminFor(
+  repoRoot: string,
+  deployment: string,
+  users: LocalUserStore,
+): Omit<UserAdminDeps, 'store' | 'gatewayVersion' | 'now'> {
+  const mapping = loadDeploymentGroupRoleMapping(join(repoRoot, 'overlays'), deployment);
+  const mappedGroups = new Set<string>();
+  for (const doc of mapping) for (const g of Object.keys(doc.groups)) mappedGroups.add(g);
+  const admins = identityAdminGroups(mapping);
+  for (const g of admins) mappedGroups.add(g);
+  return { users, identityAdminGroups: admins, mappedGroups };
+}
 
 /** The closed, two-value vocabulary 02 §6.5 names. Nothing else is a mode. */
 export const GATEWAY_MODES = ['headless', 'full'] as const;
@@ -373,6 +398,9 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       consumers: registry,
       identityProviderKind: 'local',
       approvals,
+      // W0-P28 — who may administer local users is git: `identityAdmins:` in
+      // this deployment's group mapping, read once here like the grants.
+      userAdmin: userAdminFor(repoRoot, deployment, users),
     });
     const gateway = createGatewayHttpTransport({
       consumerAuth,

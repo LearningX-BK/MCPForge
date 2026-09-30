@@ -19,9 +19,15 @@
 // `/api/v1`, deciding a runtime approval, goes through this same module and
 // the same two-halves request, so there is still exactly one file that knows a
 // gateway URL. The approver is never sent: the gateway takes it from the token.
+//
+// W0-P28 (owner decision, 30 Sep 2026): local user administration goes through
+// here too. Whether the viewer may administer users is the gateway's call
+// (`identityAdmins:` in git); the portal only forwards and renders the answer.
 
 import {
   API_V1_PATHS,
+  adminUserChangeResponseSchema,
+  adminUsersResponseSchema,
   apiErrorSchema,
   approvalDecisionResponseSchema,
   approvalDetailResponseSchema,
@@ -32,6 +38,10 @@ import {
   consumerUsageResponseSchema,
   deploymentResponseSchema,
   enablementResponseSchema,
+  type AdminCreateUserRequest,
+  type AdminUserActionRequest,
+  type AdminUserChangeResponse,
+  type AdminUsersResponse,
   type ApprovalDecisionRequest,
   type ApprovalDecisionResponse,
   type ApprovalDetailResponse,
@@ -260,4 +270,28 @@ export function decideApproval(
   return request(API_V1_PATHS.approvalDecision(approvalId), approvalDecisionResponseSchema, deps, {
     body: decision,
   });
+}
+
+// --- local user administration (W0-P28) --------------------------------------------
+
+/** Every local account, for an identity admin. Anyone else is refused by the gateway. */
+export function readAdminUsers(deps: ReadDeps = {}): Promise<ReadResult<AdminUsersResponse>> {
+  return read(API_V1_PATHS.adminUsers, adminUsersResponseSchema, deps);
+}
+
+/** Create one account. The password goes in the body and is never returned. */
+export function createAdminUser(
+  body: AdminCreateUserRequest,
+  deps: ReadDeps = {},
+): Promise<ReadResult<AdminUserChangeResponse>> {
+  return request(API_V1_PATHS.adminUsers, adminUserChangeResponseSchema, deps, { body });
+}
+
+/** One change to one account: disable, enable, set groups or reset the password. */
+export function changeAdminUser(
+  subject: string,
+  body: AdminUserActionRequest,
+  deps: ReadDeps = {},
+): Promise<ReadResult<AdminUserChangeResponse>> {
+  return request(API_V1_PATHS.adminUser(subject), adminUserChangeResponseSchema, deps, { body });
 }

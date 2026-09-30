@@ -44,6 +44,12 @@ describe('checkOverlayFileTypes', () => {
         '    roles:',
         '      - p2p-ap-clerk',
         'subjectOverrides: {}',
+        // W0-P5b and W0-P28: declared by the gateway's mapping reader.
+        'personas:',
+        '  finance-ap-clerks:',
+        '    personas: [business]',
+        'identityAdmins:',
+        '  - mcpforge-admins',
       ].join('\n'),
     );
     expect(checkOverlayFileTypes(repoRoot)).toEqual([]);

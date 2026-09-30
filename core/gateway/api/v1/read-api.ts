@@ -5,11 +5,13 @@
 // (`@mcpforge/shared/api/v1`) and the row filter. This module serves exactly
 // that and nothing more:
 //
-//  - GET only, with ONE exception. Any other method is 405 with a `next`.
-//    The exception is W0-P25's `POST /api/v1/approvals/{id}/decision` (owner
-//    decision, 30 Sep 2026), served by ./approval-decision.ts behind the same
-//    front door. No other write may be added without a fresh decision (W0-P2
-//    §7 item 1).
+//  - GET only, with TWO exceptions. Any other method is 405 with a `next`.
+//    The first is W0-P25's `POST /api/v1/approvals/{id}/decision` (owner
+//    decision, 30 Sep 2026), served by ./approval-decision.ts. The second is
+//    W0-P28's local user administration under `/api/v1/admin/users` (owner
+//    decision, 30 Sep 2026), served by ./user-admin.ts. Both sit behind the
+//    same front door. No other write may be added without a fresh decision
+//    (W0-P2 §7 item 1).
 //  - No tool discovery and no invocation: nothing here reads a tool's
 //    description, schema or card, and nothing calls the policy chain's
 //    execute path. Agents reach tools through `/mcp` only.
@@ -73,6 +75,14 @@ import {
 } from './approval-decision.js';
 import { verifiedPlanBody } from './plan-body.js';
 import { ApiRefusal, STATUS_BY_CODE } from './refusal.js';
+import {
+  ADMIN_BODY_MAX_BYTES,
+  adminUsersRoute,
+  changeAdminUser,
+  createAdminUser,
+  listAdminUsers,
+  type UserAdminDeps,
+} from './user-admin.js';
 
 export interface ReadApiOptions {
   readonly repoRoot: string;
@@ -92,6 +102,11 @@ export interface ReadApiOptions {
    * write method: nothing here can decide without the gate.
    */
   readonly approvals?: ApprovalGate;
+  /**
+   * W0-P28 — local user administration. Absent (no local user store, or no
+   * mapping), every `/api/v1/admin/users` path is refused as not served.
+   */
+  readonly userAdmin?: Omit<UserAdminDeps, 'store' | 'gatewayVersion' | 'now'>;
 }
 
 export interface ReadApi {
@@ -387,7 +402,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     throw new ApiRefusal(
       'NOT_FOUND',
       `${url.pathname} is not an /api/v1 endpoint.`,
-      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, and POST /approvals/{id}/decision. Agents reach tools through /mcp only.',
+      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, and /admin/users for identity admins. Agents reach tools through /mcp only.',
     );
   }
 
@@ -399,12 +414,17 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     async handle(req, res, url) {
       const correlationId = randomUUID();
       try {
+        const adminRoute = adminUsersRoute(url.pathname);
+        if (adminRoute !== undefined) {
+          await handleAdmin(req, res, adminRoute, correlationId);
+          return;
+        }
         const decisionFor = decisionPathApprovalId(url.pathname);
         const gate = options.approvals;
         if (decisionFor !== undefined && gate !== undefined && req.method === 'POST') {
           // The front door runs before the body is even read.
           const viewer = await authenticate(req, correlationId);
-          const body = await readBoundedJson(req);
+          const body = await readBoundedJson(req, DECISION_BODY_MAX_BYTES);
           const decided = await decideApproval(
             { store: options.store, catalogue: options.catalogue, gate, gatewayVersion, now },
             viewer,
@@ -448,6 +468,50 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
       }
     },
   };
+
+  /**
+   * W0-P28 — `/api/v1/admin/users` (GET list, POST create) and
+   * `/api/v1/admin/users/{subject}` (POST change). The front door runs first,
+   * before the method is checked or the body read, exactly as for the reads.
+   */
+  async function handleAdmin(
+    req: IncomingMessage,
+    res: ServerResponse,
+    route: NonNullable<ReturnType<typeof adminUsersRoute>>,
+    correlationId: string,
+  ): Promise<void> {
+    const allow = route.kind === 'collection' ? 'GET, POST' : 'POST';
+    const allowed = req.method === 'POST' || (route.kind === 'collection' && req.method === 'GET');
+    if (!allowed) {
+      res.setHeader('allow', allow);
+      throw new ApiRefusal(
+        'METHOD_NOT_ALLOWED',
+        `${req.method ?? 'This method'} is not served on ${API_V1_PREFIX}/admin/users.`,
+        `Use ${allow} here: GET /api/v1/admin/users lists accounts, POST it creates one, and POST /api/v1/admin/users/{subject} changes one.`,
+      );
+    }
+    const viewer = await authenticate(req, correlationId);
+    const admin = options.userAdmin;
+    if (admin === undefined) {
+      throw new ApiRefusal(
+        'NOT_FOUND',
+        'Local user administration is not served by this gateway.',
+        'This deployment has no local user store to administer; accounts come from its identity provider. Change group membership there.',
+      );
+    }
+    const deps: UserAdminDeps = { ...admin, store: options.store, gatewayVersion, now };
+    const actor = { session: viewer.session, subject: viewer.subject, correlationId };
+    if (req.method === 'GET') {
+      send(res, 200, await listAdminUsers(deps, actor));
+      return;
+    }
+    const body = await readBoundedJson(req, ADMIN_BODY_MAX_BYTES);
+    const changed =
+      route.kind === 'collection'
+        ? await createAdminUser(deps, actor, body)
+        : await changeAdminUser(deps, actor, route.subject, body);
+    send(res, 200, changed);
+  }
 
   async function toDetail(r: AuditCallRecord): Promise<CallDetail> {
     const approval =
@@ -630,21 +694,21 @@ function pageLimit(url: URL): number {
 }
 
 /**
- * The decision body, parsed. Bounded: a verdict and a reason never need more
- * than `DECISION_BODY_MAX_BYTES`, and a larger body is refused unread rather
- * than buffered. Malformed JSON is `INPUT_INVALID`, never a 500.
+ * A POST body, parsed. Bounded: a larger body than `maxBytes` is refused
+ * unread rather than buffered. Malformed JSON is `INPUT_INVALID`, never a
+ * 500. Neither refusal echoes any of the body (it may hold a password).
  */
-async function readBoundedJson(req: IncomingMessage): Promise<unknown> {
+async function readBoundedJson(req: IncomingMessage, maxBytes: number): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer);
     size += buf.length;
-    if (size > DECISION_BODY_MAX_BYTES) {
+    if (size > maxBytes) {
       throw new ApiRefusal(
         'INPUT_INVALID',
-        `The decision body is larger than ${DECISION_BODY_MAX_BYTES} bytes.`,
-        'Send only {"decision":"approved"} or {"decision":"rejected","reason":"<why>"}, with a reason of at most 2000 characters.',
+        `The request body is larger than ${maxBytes} bytes.`,
+        'Send only the fields the endpoint takes: a decision and a reason of at most 2000 characters, or a user change with a password of at most 1024 characters.',
       );
     }
     chunks.push(buf);
@@ -656,8 +720,8 @@ async function readBoundedJson(req: IncomingMessage): Promise<unknown> {
   } catch {
     throw new ApiRefusal(
       'INPUT_INVALID',
-      'The decision body is not JSON.',
-      'Send a JSON body: {"decision":"approved"} or {"decision":"rejected","reason":"<why>"}, with content-type application/json.',
+      'The request body is not JSON.',
+      'Send a JSON object body with content-type application/json, containing only the fields the endpoint takes.',
     );
   }
 }

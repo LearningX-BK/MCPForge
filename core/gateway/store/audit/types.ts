@@ -31,8 +31,10 @@ export interface AuditCredentialRef {
  * decision 30 Sep 2026): a human deciding a runtime approval request, or a
  * refused attempt to. The column is free text in both dialects, so no
  * migration is needed; the value is covered by the row hash like any other.
+ * `identity` (W0-P28, owner decision 30 Sep 2026): an identity admin changing a
+ * local user, or a refused attempt to. The row never carries a password.
  */
-export type AuditPhase = 'plan' | 'execute' | 'reject' | 'reverse' | 'approve';
+export type AuditPhase = 'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity';
 
 /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
 export type AuditOutcome = 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';

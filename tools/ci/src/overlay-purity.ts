@@ -116,7 +116,18 @@ function checkDeclaredKeys(doc: Record<string, unknown>): string | null {
     return null;
   }
   if (kind === 'GroupRoleMapping') {
-    const allowedTop = new Set(['apiVersion', 'kind', 'deployment', 'groups', 'subjectOverrides']);
+    // `personas` (W0-P5b) and `identityAdmins` (W0-P28) are declared by the
+    // gateway's one mapping reader (identity/group-role-mapping.ts), which
+    // validates their shape; this job only refuses keys nobody declared.
+    const allowedTop = new Set([
+      'apiVersion',
+      'kind',
+      'deployment',
+      'groups',
+      'subjectOverrides',
+      'personas',
+      'identityAdmins',
+    ]);
     for (const key of Object.keys(doc)) {
       if (!allowedTop.has(key))
         return `top-level key "${key}" is not part of the GroupRoleMapping overlay schema`;

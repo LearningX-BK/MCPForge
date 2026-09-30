@@ -32,7 +32,10 @@ import { z } from 'zod';
 
 export const API_V1_PREFIX = '/api/v1';
 
-/** The eight approved reads and the one decision write. Nothing else under the prefix exists. */
+/**
+ * The eight approved reads, the one decision write (W0-P25) and local user
+ * administration (W0-P28). Nothing else under the prefix exists.
+ */
 export const API_V1_PATHS = {
   calls: '/api/v1/calls',
   call: (callId: string) => `/api/v1/calls/${encodeURIComponent(callId)}`,
@@ -45,6 +48,10 @@ export const API_V1_PATHS = {
   consumerUsage: '/api/v1/consumers/usage',
   enablement: '/api/v1/enablement',
   deployment: '/api/v1/deployment',
+  /** W0-P28 — `GET` lists local users, `POST` creates one. Identity admins only. */
+  adminUsers: '/api/v1/admin/users',
+  /** W0-P28 — `POST` only: disable, enable, set groups, reset password. */
+  adminUser: (subject: string) => `/api/v1/admin/users/${encodeURIComponent(subject)}`,
 } as const;
 
 /** Default and ceiling for `?limit=` on list endpoints. */
@@ -67,7 +74,15 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 // --- calls -------------------------------------------------------------------
 
 /** `approve` (W0-P25): a human deciding a runtime approval request, or a refused attempt to. */
-export const AUDIT_PHASES = ['plan', 'execute', 'reject', 'reverse', 'approve'] as const;
+/** `identity` (W0-P28): an identity admin changing a local user, or a refused attempt to. */
+export const AUDIT_PHASES = [
+  'plan',
+  'execute',
+  'reject',
+  'reverse',
+  'approve',
+  'identity',
+] as const;
 export const AUDIT_OUTCOMES = [
   'ok',
   'business_error',
@@ -438,3 +453,87 @@ export const deploymentResponseSchema = z.object({
   killFlags: z.array(killFlagSchema),
 });
 export type DeploymentResponse = z.infer<typeof deploymentResponseSchema>;
+
+// --- local user administration (W0-P28) --------------------------------------
+//
+// Owner decisions, 30 Sep 2026: local users are administered from the portal,
+// through these endpoints, by members of the groups listed under
+// `identityAdmins:` in the deployment's git-held group mapping. Every change
+// and every refused attempt is a hash-chained `identity` audit row that never
+// carries a password. A password travels only in a request body, is never
+// returned, and is never echoed in a refusal.
+
+/** Mirrors the gateway's floor (`identity/local/password.ts`). Length is the only rule. */
+export const LOCAL_PASSWORD_MIN = 12;
+export const LOCAL_PASSWORD_MAX = 1024;
+
+const groupNameSchema = z.string().trim().min(1).max(256);
+const groupListSchema = z.array(groupNameSchema).max(64);
+const passwordSchema = z.string().min(LOCAL_PASSWORD_MIN).max(LOCAL_PASSWORD_MAX);
+
+/** A local account as an identity admin sees it. No credential field exists on it. */
+export const adminUserSchema = z.object({
+  subject: z.string(),
+  username: z.string(),
+  displayName: z.string(),
+  email: z.string().nullable(),
+  active: z.boolean(),
+  totpEnrolled: z.boolean(),
+  lockedUntil: z.string().nullable(),
+  lastAuthenticatedAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  groups: z.array(z.string()),
+  /** Holds a group listed in `identityAdmins:`. */
+  identityAdmin: z.boolean(),
+});
+export type AdminUser = z.infer<typeof adminUserSchema>;
+
+export const adminUsersResponseSchema = z.object({
+  asOf: z.string(),
+  /** The `identityAdmins:` groups, as git holds them for this deployment. */
+  identityAdminGroups: z.array(z.string()),
+  users: z.array(adminUserSchema),
+});
+export type AdminUsersResponse = z.infer<typeof adminUsersResponseSchema>;
+
+/** `POST /api/v1/admin/users`: create one account. */
+export const adminCreateUserRequestSchema = z
+  .object({
+    username: z.string().trim().min(1).max(128),
+    displayName: z.string().trim().min(1).max(256),
+    email: z.string().trim().email().max(320).optional(),
+    password: passwordSchema,
+    groups: groupListSchema.default([]),
+  })
+  .strict();
+export type AdminCreateUserRequest = z.input<typeof adminCreateUserRequestSchema>;
+
+/** `POST /api/v1/admin/users/{subject}`: one change to one account. */
+export const adminUserActionRequestSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('disable') }).strict(),
+  z.object({ action: z.literal('enable') }).strict(),
+  z.object({ action: z.literal('set_groups'), groups: groupListSchema }).strict(),
+  z.object({ action: z.literal('reset_password'), password: passwordSchema }).strict(),
+]);
+export type AdminUserActionRequest = z.infer<typeof adminUserActionRequestSchema>;
+
+export const ADMIN_USER_ACTIONS = [
+  'create',
+  'disable',
+  'enable',
+  'set_groups',
+  'reset_password',
+] as const;
+export type AdminUserAction = (typeof ADMIN_USER_ACTIONS)[number];
+
+/** The answer to a change that was made. */
+export const adminUserChangeResponseSchema = z.object({
+  asOf: z.string(),
+  action: z.enum(ADMIN_USER_ACTIONS),
+  user: adminUserSchema,
+  /** The hash-chained `identity` audit row this change wrote. */
+  auditCallId: z.string(),
+  next: z.string().min(1),
+});
+export type AdminUserChangeResponse = z.infer<typeof adminUserChangeResponseSchema>;
