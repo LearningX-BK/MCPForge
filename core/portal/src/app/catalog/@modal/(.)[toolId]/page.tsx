@@ -4,42 +4,26 @@
 // the page. A direct load of the same URL never hits this file — Next.js
 // only intercepts client-side navigations from a matching origin route — so
 // it falls through to `../[toolId]/page.tsx`, the full page.
-'use client';
+//
+// W0-P3e: a server page now, because the data comes from git and `/api/v1`
+// and neither can be read in the browser. The Sheet itself is the client
+// component `ToolDrawer`.
 
-import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { ToolDrawer } from '../../_components/tool-drawer';
+import { loadCatalogData, loadToolConsumption } from '../../load-catalog';
+import { findTool } from '../../load-tool';
 
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ToolPageBody } from '../../_components/tool-page-body';
-import { findTool, loadCatalogData, manifestsById } from '../../load-tool';
+export const dynamic = 'force-dynamic';
 
-export default function ToolModal({ params }: { params: Promise<{ toolId: string }> }) {
-  const { toolId } = React.use(params);
-  const router = useRouter();
-  const data = loadCatalogData();
-  const tool = findTool(data, toolId);
+export default async function ToolModal({ params }: { params: Promise<{ toolId: string }> }) {
+  const { toolId } = await params;
+  const id = decodeURIComponent(toolId);
+  const data = await loadCatalogData();
+  const found = findTool(data, id);
+  const tool =
+    found === undefined
+      ? undefined
+      : { ...found, consumption: await loadToolConsumption(found.manifest.id) };
 
-  const [open, setOpen] = React.useState(true);
-
-  const close = () => {
-    setOpen(false);
-    router.back();
-  };
-
-  return (
-    <Sheet open={open} onOpenChange={(next) => (!next ? close() : undefined)}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-2xl" data-testid="tool-detail-drawer">
-        <SheetHeader>
-          <SheetTitle className="sr-only">{tool ? tool.manifest.title : 'Tool not found'}</SheetTitle>
-        </SheetHeader>
-        <div className="px-4 pb-6">
-          {tool ? (
-            <ToolPageBody tool={tool} data={data} manifestsById={manifestsById(data)} />
-          ) : (
-            <p className="text-[13px] text-text-2">No tool with id &quot;{toolId}&quot; was found.</p>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
+  return <ToolDrawer toolId={id} tool={tool} data={data} />;
 }

@@ -383,6 +383,7 @@ function row(
           },
     consumption:
       extra.consumption ?? {
+        kind: 'counted' as const,
         last30dCalls: 0,
         consumers: [],
       },
@@ -396,6 +397,7 @@ const DEFAULT_TOOLS: readonly CatalogTool[] = [
     changeState: 'deployed',
     probeIdentity: { carries: 'verified', probeRef: 'probe-report-2026-09-08T06:00Z#jde-ap', probedAt: '2026-09-08T06:00:00Z' },
     consumption: {
+      kind: 'counted' as const,
       last30dCalls: 212,
       lastCallAt: '2026-09-09T08:12:00Z',
       consumers: [{ id: 'consumer-ap-agent', platform: 'Claude Desktop', calls30d: 212 }],
@@ -407,6 +409,7 @@ const DEFAULT_TOOLS: readonly CatalogTool[] = [
     changeState: 'deployed',
     probeIdentity: { carries: 'verified', probeRef: 'probe-report-2026-09-08T06:00Z#jde-ap', probedAt: '2026-09-08T06:00:00Z' },
     consumption: {
+      kind: 'counted' as const,
       last30dCalls: 540,
       lastCallAt: '2026-09-09T09:01:00Z',
       consumers: [{ id: 'consumer-ap-agent', platform: 'Claude Desktop', calls30d: 540 }],
@@ -417,20 +420,20 @@ const DEFAULT_TOOLS: readonly CatalogTool[] = [
     probeStatus: 'resolved',
     changeState: 'deployed',
     probeIdentity: { carries: 'verified', probeRef: 'probe-report-2026-09-08T06:00Z#jde-ap', probedAt: '2026-09-08T06:00:00Z' },
-    consumption: { last30dCalls: 3, lastCallAt: '2026-09-05T14:00:00Z', consumers: [] },
+    consumption: { kind: 'counted' as const, last30dCalls: 3, lastCallAt: '2026-09-05T14:00:00Z', consumers: [] },
   }),
   row(poReceiptStatus, {
     probeStatus: 'disabled_identity_unverified',
     changeState: 'deployed',
     probeIdentity: { carries: 'unverified', probeRef: 'probe-report-2026-09-08T06:00Z#jde-scm', probedAt: '2026-09-08T06:00:00Z' },
-    consumption: { last30dCalls: 0, consumers: [] },
+    consumption: { kind: 'counted' as const, last30dCalls: 0, consumers: [] },
   }),
   row(glReconcile, {
     probeStatus: 'degraded_readonly',
     changeState: 'deployed',
     packages: ['jde-fin'],
     probeIdentity: { carries: 'no', probeRef: 'probe-report-2026-09-08T06:00Z#jde-gl', probedAt: '2026-09-08T06:00:00Z' },
-    consumption: { last30dCalls: 41, lastCallAt: '2026-09-08T11:00:00Z', consumers: [] },
+    consumption: { kind: 'counted' as const, last30dCalls: 41, lastCallAt: '2026-09-08T11:00:00Z', consumers: [] },
     lastBenchmark: { saAt1: 0.87, runAt: '2026-09-07T00:00:00Z' },
   }),
   row(oicInvoiceSubmit, {
@@ -438,21 +441,21 @@ const DEFAULT_TOOLS: readonly CatalogTool[] = [
     changeState: 'in_review',
     packages: ['oic-integ'],
     probeIdentity: { carries: 'no', probeRef: 'probe-report-2026-09-08T06:00Z#oic-ar', probedAt: '2026-09-08T06:00:00Z' },
-    consumption: { last30dCalls: 0, consumers: [] },
+    consumption: { kind: 'counted' as const, last30dCalls: 0, consumers: [] },
   }),
   row(hcmEmployeeGet, {
     probeStatus: 'disabled_no_grant',
     changeState: 'deployed',
     packages: ['jde-hcm'],
     probeIdentity: null,
-    consumption: { last30dCalls: 0, consumers: [] },
+    consumption: { kind: 'counted' as const, last30dCalls: 0, consumers: [] },
   }),
   row(arInvoiceList, {
     probeStatus: 'resolved',
     changeState: 'draft',
     packages: ['jde-fin'],
     probeIdentity: { carries: 'verified', probeRef: 'probe-report-2026-09-08T06:00Z#jde-ar', probedAt: '2026-09-08T06:00:00Z' },
-    consumption: { last30dCalls: 88, lastCallAt: '2026-09-09T07:40:00Z', consumers: [] },
+    consumption: { kind: 'counted' as const, last30dCalls: 88, lastCallAt: '2026-09-09T07:40:00Z', consumers: [] },
   }),
 ];
 

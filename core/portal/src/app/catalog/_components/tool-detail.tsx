@@ -4,7 +4,8 @@
 import * as React from 'react';
 import Link from 'next/link';
 
-import { BindingChip, ChangeStateChip, PackageChip, ProbeStatusChip, VerbChip, WriteChip } from '@/components/chips';
+import { BindingChip, ChangeStateChip, PackageChip, VerbChip, WriteChip } from '@/components/chips';
+import { CatalogStatusChip } from './catalog-status-chip';
 import { Button } from '@/components/ui/button';
 import { ERROR_TAXONOMY, type ErrorCode } from '@mcpforge/shared';
 import type { CatalogData, CatalogTool } from '../types';
@@ -92,7 +93,7 @@ export function ToolDetail({ tool, data, onOpenAgentView }: ToolDetailProps) {
           <span className="rounded-full border border-line px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.4px] text-text-2">{m.archetype}</span>
           <BindingChip type={m.binding.type} />
           <SensitivityChip sensitivity={m.sensitivity} />
-          <ProbeStatusChip status={tool.probeStatus} owningTeam={m.governance.owner} />
+          <CatalogStatusChip status={tool.probeStatus} owningTeam={m.governance.owner} />
           {tool.packages.map((pkg) => (
             <PackageChip key={pkg} label={pkg} />
           ))}
@@ -323,9 +324,29 @@ export function ToolDetail({ tool, data, onOpenAgentView }: ToolDetailProps) {
 
       {/* 10. Consumption */}
       <Section title="Consumption" testId="section-consumption">
+        {/* W0-P3e: counted from /api/v1/calls for this one tool, so only calls
+            the viewer may read are in it; the copy says so. */}
+        {tool.consumption === undefined ? (
+          <p data-testid="consumption-not-loaded" className="text-[13px] text-text-2">
+            Consumption is read on the tool&apos;s own page. Open it to see the calls you may read.
+          </p>
+        ) : tool.consumption.kind === 'unavailable' ? (
+          <div data-testid="consumption-unavailable" role="status" className="text-[13px] text-text-2">
+            <p>{tool.consumption.message}</p>
+            <p>
+              <span className="font-semibold">Next: </span>
+              {tool.consumption.next}
+            </p>
+          </div>
+        ) : (
+          <>
         <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-[13.5px]/[1.55] text-text-1">
           <dt className="text-text-2">30-day volume</dt>
-          <dd>{tool.consumption.last30dCalls}</dd>
+          <dd data-testid="consumption-volume">
+            {tool.consumption.atLeast ? 'at least ' : ''}
+            {tool.consumption.last30dCalls}
+            <span className="text-text-2"> (calls you may read)</span>
+          </dd>
           <dt className="text-text-2">Last call</dt>
           <dd>{tool.consumption.lastCallAt ?? 'Never called'}</dd>
         </dl>
@@ -351,6 +372,8 @@ export function ToolDetail({ tool, data, onOpenAgentView }: ToolDetailProps) {
           </table>
         ) : (
           <p className="text-[13px] text-text-2">No consumer has called this tool yet.</p>
+        )}
+          </>
         )}
         <Link href={`/activity?tool=${encodeURIComponent(m.id)}`} className="text-[13px] underline decoration-dotted underline-offset-2">
           View in Activity

@@ -5,7 +5,8 @@ import * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { DataTable } from '@/components/data';
-import { BindingChip, ChangeStateChip, ProbeStatusChip, VerbChip, WriteChip } from '@/components/chips';
+import { BindingChip, ChangeStateChip, VerbChip, WriteChip } from '@/components/chips';
+import { CatalogStatusChip } from './catalog-status-chip';
 import type { CatalogTool } from '../types';
 
 export interface CatalogTableProps {
@@ -52,7 +53,7 @@ const columns: ColumnDef<CatalogTool, unknown>[] = [
     id: 'status',
     header: 'Probe status',
     accessorFn: (r) => r.probeStatus,
-    cell: ({ row }) => <ProbeStatusChip status={row.original.probeStatus} owningTeam={row.original.manifest.governance.owner} />,
+    cell: ({ row }) => <CatalogStatusChip status={row.original.probeStatus} owningTeam={row.original.manifest.governance.owner} />,
   },
   {
     id: 'change',

@@ -149,7 +149,16 @@ export function buildFacetGroups(data: CatalogData, rows: readonly CatalogTool[]
       key: 'status',
       label: 'Probe status',
       options: [...statusCounts.keys()].map((v) =>
-        opt(v, PROBE_STATUS[v as keyof typeof PROBE_STATUS]?.label ?? v, statusCounts.get(v)),
+        opt(
+          v,
+          // W0-P3e: the two states a probe report cannot express.
+          v === 'not_probed'
+            ? 'Not probed'
+            : v === 'unknown'
+              ? 'Status unknown'
+              : (PROBE_STATUS[v as keyof typeof PROBE_STATUS]?.label ?? v),
+          statusCounts.get(v),
+        ),
       ),
     },
     {

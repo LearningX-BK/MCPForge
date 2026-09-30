@@ -2,7 +2,8 @@
 // an alternate toggle, never the default.
 'use client';
 
-import { BindingChip, ChangeStateChip, ProbeStatusChip, VerbChip, WriteChip } from '@/components/chips';
+import { BindingChip, ChangeStateChip, VerbChip, WriteChip } from '@/components/chips';
+import { CatalogStatusChip } from './catalog-status-chip';
 import type { CatalogTool } from '../types';
 
 export interface CatalogCardsProps {
@@ -30,7 +31,7 @@ export function CatalogCards({ rows, onOpen }: CatalogCardsProps) {
             <VerbChip verb={row.manifest.verb} />
             {row.manifest.write ? <WriteChip /> : null}
             <BindingChip type={row.manifest.binding.type} />
-            <ProbeStatusChip status={row.probeStatus} owningTeam={row.manifest.governance.owner} />
+            <CatalogStatusChip status={row.probeStatus} owningTeam={row.manifest.governance.owner} />
             <ChangeStateChip state={row.changeState} />
           </div>
         </button>
