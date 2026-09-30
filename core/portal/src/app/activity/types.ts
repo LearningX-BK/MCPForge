@@ -90,6 +90,8 @@ export interface ActivityApprovalRefView {
   readonly href?: string | undefined;
   readonly state: 'pending' | 'approved' | 'rejected' | 'expired';
   readonly decidedBy?: string | undefined;
+  /** W0-P32 — decided by the requester themselves, as super admin. */
+  readonly selfApproved?: boolean | undefined;
 }
 
 /** The full record, as call detail renders it. Mirrors `AuditCallRecord`. */

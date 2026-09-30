@@ -125,6 +125,7 @@ export function toCallDetailView(c: CallDetail): ActivityCallDetail {
             href: `/approvals/${encodeURIComponent(c.approval.approvalId)}`,
             state: c.approval.status,
             decidedBy: opt(c.approval.approverSubject),
+            ...(c.approval.selfApproved ? { selfApproved: true } : {}),
           },
     reversalClass: opt(c.reversalClass),
     reversalToolId: opt(c.reversalToolId),

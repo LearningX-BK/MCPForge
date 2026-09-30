@@ -196,7 +196,10 @@ export function approvalGate(deps: ApprovalGateDeps): ApprovalGate {
       // expiry** so the refusal names the real problem: telling a requester
       // their own approval "expired" when it would have been refused anyway
       // teaches them to approve faster next time, which is the opposite lesson.
-      if (command.approverSubject === current.callerSubject) {
+      // W0-P32: only a super admin may decide their own request, and only
+      // because the caller said so explicitly. The row then records approver
+      // === requester, which is what "self-approved" means everywhere it shows.
+      if (command.approverSubject === current.callerSubject && command.allowSelfApproval !== true) {
         return selfApprovalRefusal(current);
       }
       if (current.status === 'expired' || isPastWindow(current, now)) {

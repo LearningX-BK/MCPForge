@@ -62,6 +62,7 @@ import { resolveGatewayKeys } from './identity/keys.js';
 import {
   identityAdminGroups,
   loadDeploymentGroupRoleMapping,
+  superAdminGroups,
 } from './identity/group-role-mapping.js';
 import type { LocalUserStore } from './identity/local/index.js';
 import type { UserAdminDeps } from './api/v1/user-admin.js';
@@ -401,6 +402,10 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       // W0-P28 — who may administer local users is git: `identityAdmins:` in
       // this deployment's group mapping, read once here like the grants.
       userAdmin: userAdminFor(repoRoot, deployment, users),
+      // W0-P32 — who may approve their own request (flagged): git, like the rest.
+      superAdminGroups: superAdminGroups(
+        loadDeploymentGroupRoleMapping(join(repoRoot, 'overlays'), deployment),
+      ),
     });
     const gateway = createGatewayHttpTransport({
       consumerAuth,

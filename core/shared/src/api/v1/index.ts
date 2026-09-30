@@ -183,6 +183,8 @@ export const callDetailSchema = callSummarySchema.extend({
       approvalId: z.string(),
       status: z.enum(['pending', 'approved', 'rejected', 'expired']),
       approverSubject: z.string().nullable(),
+      /** W0-P32 — the requester decided it themselves, as super admin. */
+      selfApproved: z.boolean(),
     })
     .nullable(),
 });
@@ -256,7 +258,21 @@ export const runtimeApprovalSchema = z.object({
   decidedAt: z.string().nullable(),
   createdAt: z.string(),
   expiresAt: z.string(),
+  /**
+   * W0-P32 — the requester decided their own request (only a super admin may,
+   * owner decision 30 Sep 2026). Derived from the row: approver === requester.
+   * Always shown wherever the approval is.
+   */
+  selfApproved: z.boolean(),
 });
+
+/** W0-P32 — the one definition of "self-approved" every surface uses. */
+export function isSelfApproved(a: {
+  readonly approverSubject: string | null;
+  readonly callerSubject: string;
+}): boolean {
+  return a.approverSubject !== null && a.approverSubject === a.callerSubject;
+}
 export type RuntimeApproval = z.infer<typeof runtimeApprovalSchema>;
 
 export const approvalsResponseSchema = z.object({

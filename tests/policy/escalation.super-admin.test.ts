@@ -10,7 +10,12 @@
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { enablementResponseSchema } from '../../core/shared/src/api/v1/index.js';
+import {
+  apiErrorSchema,
+  approvalDecisionResponseSchema,
+  approvalDetailResponseSchema,
+  enablementResponseSchema,
+} from '../../core/shared/src/api/v1/index.js';
 import { launchGateway, type LaunchedGateway } from '../../core/gateway/launch.js';
 import {
   launchRepo,
@@ -41,6 +46,9 @@ describe('W0-P31 — a super admin sees every tool, and only through a consumer 
   let narrowKeypair: TestKeypair;
   let base: string;
   let catalogue: string[];
+  let superSubject: string;
+  let clerkSubject: string;
+  let plan = 0;
 
   beforeAll(async () => {
     keypair = await generateTestConsumerKeypair();
@@ -114,24 +122,73 @@ describe('W0-P31 — a super admin sees every tool, and only through a consumer 
     });
     base = `http://127.0.0.1:${launched.gatewayPort}`;
     const users = localUserStore({ store: launched.store });
-    await users.createUser({
-      username: 'p31-super',
-      displayName: 'Super',
-      password: PASSWORD,
-      groups: [SUPER_GROUP],
-    });
-    await users.createUser({
-      username: 'p31-clerk',
-      displayName: 'Clerk',
-      password: PASSWORD,
-      groups: [TEST_GROUP],
-    });
+    superSubject = (
+      await users.createUser({
+        username: 'p31-super',
+        displayName: 'Super',
+        password: PASSWORD,
+        groups: [SUPER_GROUP],
+      })
+    ).subject;
+    clerkSubject = (
+      await users.createUser({
+        username: 'p31-clerk',
+        displayName: 'Clerk',
+        password: PASSWORD,
+        groups: [TEST_GROUP],
+      })
+    ).subject;
   }, 180_000);
 
   afterAll(async () => {
     await launched?.close();
     if (repo) removeLaunchRepo(repo);
   });
+
+  async function bearer(username: string): Promise<string> {
+    const res = await fetch(`${base}/auth/local/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username, password: PASSWORD }),
+    });
+    return ((await res.json()) as { accessToken: string }).accessToken;
+  }
+
+  async function pending(callerSubject: string): Promise<string> {
+    plan += 1;
+    const created = await launched.store.approvals.create({
+      planHash: `p32-plan-${plan}`,
+      argsCanonicalHash: `p32-args-${plan}`,
+      planSummary: `Create an AP voucher, plan ${plan}. This creates an OPEN PAYABLE in JD Edwards.`,
+      callerSubject,
+      consumerId: TEST_CONSUMER,
+      toolId: 'jde.ap.voucher.create',
+      toolVersion: '1.0.0',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    return created.id;
+  }
+
+  async function decide(
+    approvalId: string,
+    username: string,
+    body: unknown = { decision: 'approved' },
+  ): Promise<{ status: number; body: unknown }> {
+    const res = await fetch(`${base}/api/v1/approvals/${encodeURIComponent(approvalId)}/decision`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${await bearer(username)}`,
+        [MCPFORGE_CONSUMER_ASSERTION_HEADER]: await signTestAssertion({
+          consumerId: TEST_CONSUMER,
+          audience: AUDIENCE,
+          keypair,
+        }),
+      },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: (await res.json()) as unknown };
+  }
 
   async function visibleTools(username: string, consumer: 'test' | 'narrow'): Promise<string[]> {
     const token = await fetch(`${base}/auth/local/token`, {
@@ -193,5 +250,60 @@ describe('W0-P31 — a super admin sees every tool, and only through a consumer 
       }
     ).toolIds;
     expect(clerk).toEqual([...p2p].sort());
+  });
+
+  // --- W0-P32: "Their own too, flagged" ---------------------------------------
+
+  it('W0-P32: a super admin may approve their OWN request, and it is flagged everywhere', async () => {
+    const id = await pending(superSubject);
+    const r = await decide(id, 'p31-super');
+    expect(r.status).toBe(200);
+    const decided = approvalDecisionResponseSchema.parse(r.body);
+    expect(decided.approval.status).toBe('approved');
+    expect(decided.approval.selfApproved).toBe(true);
+    expect(decided.next).toContain('SELF-APPROVED');
+
+    // The audit row says so, in the hashed arguments and as an indexed key.
+    const rows = (await launched.store.audit.listByResultKey('approvalId', id)).filter(
+      (row) => row.phase === 'approve',
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.outcome).toBe('ok');
+    expect(rows[0]!.argsRedacted).toMatchObject({ selfApproved: true });
+    expect(rows[0]!.resultKeys).toContainEqual({ keyName: 'selfApproved', keyValue: 'true' });
+
+    // And reading the approval back shows it.
+    const read = await fetch(`${base}/api/v1/approvals/${encodeURIComponent(id)}`, {
+      headers: {
+        authorization: `Bearer ${await bearer('p31-super')}`,
+        [MCPFORGE_CONSUMER_ASSERTION_HEADER]: await signTestAssertion({
+          consumerId: TEST_CONSUMER,
+          audience: AUDIENCE,
+          keypair,
+        }),
+      },
+    });
+    expect(approvalDetailResponseSchema.parse(await read.json()).approval.selfApproved).toBe(true);
+  });
+
+  it('W0-P32: anyone else is still refused self-approval, with a next', async () => {
+    const id = await pending(clerkSubject);
+    const r = await decide(id, 'p31-clerk');
+    expect(r.status).toBe(403);
+    const e = apiErrorSchema.parse(r.body).error;
+    expect(e.code).toBe('POLICY_GUARDRAIL_BREACH');
+    expect(e.next.length).toBeGreaterThan(0);
+    expect((await launched.store.approvals.get(id))?.status).toBe('pending');
+  });
+
+  it('W0-P32: a super admin approving someone else is an ordinary, unflagged approval', async () => {
+    const id = await pending(clerkSubject);
+    const r = await decide(id, 'p31-super');
+    expect(r.status).toBe(200);
+    expect(approvalDecisionResponseSchema.parse(r.body).approval.selfApproved).toBe(false);
+    const rows = (await launched.store.audit.listByResultKey('approvalId', id)).filter(
+      (row) => row.phase === 'approve',
+    );
+    expect(rows[0]!.resultKeys).not.toContainEqual({ keyName: 'selfApproved', keyValue: 'true' });
   });
 });

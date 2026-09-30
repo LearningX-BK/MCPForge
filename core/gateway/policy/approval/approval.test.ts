@@ -597,6 +597,30 @@ describe('W0-F6 self-approval', () => {
     expect(stored?.approverSubject).toBeNull();
   });
 
+  it('W0-P32: allows it only when the caller says the approver is a super admin, and the row shows approver === requester', async () => {
+    const target = mockTarget();
+    const keys = watchedKeyring();
+    const approval = newApprovalGate(NOW, keys.keyring);
+    const decision = await runPolicyChain(
+      policyCall({ ...BUSINESS_ARGS, company: '00779' }),
+      ctxAs(REQUESTER, gateFor({ target, approval, keyring: keys.keyring })),
+    );
+    if (decision.outcome !== 'responded') throw new Error('unreachable');
+    const approvalId = String(decision.response['approvalId']);
+
+    const outcome = await approval.decide({
+      approvalId,
+      approverSubject: REQUESTER,
+      decision: 'approved',
+      allowSelfApproval: true,
+    });
+    expect(outcome.kind).toBe('approved');
+    const stored = await store.approvals.get(approvalId);
+    expect(stored?.status).toBe('approved');
+    expect(stored?.approverSubject).toBe(REQUESTER);
+    expect(stored?.callerSubject).toBe(REQUESTER);
+  });
+
   it('refuses a self-DECLINE too — a decision is a second person’s, either way', async () => {
     const target = mockTarget();
     const keys = watchedKeyring();

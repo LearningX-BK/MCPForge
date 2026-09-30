@@ -246,6 +246,13 @@ export function ApproverDecisionPanel({
               {approval.decidedBy ? personLabel(approval.decidedBy) : 'an approver'}
               {approval.decidedAt ? ` at ${new Date(approval.decidedAt).toISOString()}` : ''}.
               {approval.decisionReason ? ` Reason: ${approval.decisionReason}` : ''}
+              {approval.selfApproved === true ? (
+                <strong data-testid="approver-self-approved">
+                  {' '}
+                  Self-{approval.state === 'approved' ? 'approved' : 'declined'}: the requester
+                  decided their own request, as super admin.
+                </strong>
+              ) : null}
             </p>
           )}
         </div>

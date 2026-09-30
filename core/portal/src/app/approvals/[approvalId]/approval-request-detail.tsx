@@ -87,6 +87,14 @@ export function ApprovalRequestDetail({
             <dt className="text-text-2">Decided by</dt>
             <dd data-testid="approval-decided-by" className="text-text-1">
               {approval.decidedBy.subject} — {when(approval.decidedAt)}
+              {approval.selfApproved === true ? (
+                <span
+                  data-testid="approval-self-approved"
+                  className="ml-2 rounded-full border border-status-write-border bg-status-write-bg px-2 text-[11.5px] font-semibold text-status-write-strong"
+                >
+                  {approval.state === 'rejected' ? 'Self-declined' : 'Self-approved'} (super admin)
+                </span>
+              ) : null}
             </dd>
           </>
         ) : null}

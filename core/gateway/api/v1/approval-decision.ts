@@ -33,7 +33,11 @@
 // attempt names a pseudo tool id rather than the real one, because the row is
 // the actor's own and they may read it back.
 
-import { API_V1_PREFIX, approvalDecisionRequestSchema } from '@mcpforge/shared/api/v1';
+import {
+  API_V1_PREFIX,
+  approvalDecisionRequestSchema,
+  isSelfApproved,
+} from '@mcpforge/shared/api/v1';
 import type { ApprovalDecisionResponse, RuntimeApproval } from '@mcpforge/shared/api/v1';
 import type { EstablishedSession } from '../../assembly/session.js';
 import type { RuntimeCatalogue } from '../../assembly/catalogue.js';
@@ -84,6 +88,12 @@ export interface ApprovalDecisionDeps {
   readonly gate: ApprovalGate;
   readonly gatewayVersion: string;
   readonly now: () => Date;
+  /**
+   * W0-P32 — the `superAdmins:` groups of this deployment, from git. A member
+   * may decide their own request; the decision is flagged self-approved.
+   * Empty (the default) means nobody may.
+   */
+  readonly superAdminGroups?: readonly string[];
 }
 
 /** The audit rule each refused attempt is recorded under. */
@@ -212,6 +222,9 @@ export async function decideApproval(
       approvalId,
       approverSubject: actor.subject,
       decision: attempt.decision,
+      // W0-P32: only a super admin, and the gate still records approver ===
+      // requester, which is what flags it.
+      allowSelfApproval: isSuperAdminActor(deps, actor),
       ...(attempt.reason === undefined ? {} : { reason: attempt.reason }),
     });
     const written = await deps.store.audit.append(rowFor(deps, actor, attempt, current, decided));
@@ -220,6 +233,14 @@ export async function decideApproval(
 
   switch (outcome.kind) {
     case 'approved':
+      if (isSelfApproved(outcome.request)) {
+        return {
+          asOf: deps.now().toISOString(),
+          approval: toApproval(outcome.request),
+          auditCallId: row.id,
+          next: `Approved by you, on your own request, as super admin. It is recorded as SELF-APPROVED in the audit trail and wherever this approval is shown. Your agent collects the confirm token with forge.approval.status and calls ${outcome.request.toolId} again with the identical arguments before ${outcome.expiresAt}.`,
+        };
+      }
       return {
         asOf: deps.now().toISOString(),
         approval: toApproval(outcome.request),
@@ -245,6 +266,12 @@ export async function decideApproval(
   }
 }
 
+/** W0-P32 — the actor holds a `superAdmins:` group. Groups come from the verified principal. */
+function isSuperAdminActor(deps: ApprovalDecisionDeps, actor: DecisionActor): boolean {
+  const admins = deps.superAdminGroups ?? [];
+  return actor.session.principal.groups.some((g) => admins.includes(g));
+}
+
 // --- audit rows ------------------------------------------------------------------
 
 function rowFor(
@@ -256,15 +283,18 @@ function rowFor(
 ): AppendAuditCallInput {
   switch (outcome.kind) {
     case 'approved':
-      return {
+      return flagSelfApproval(outcome.request, {
         ...baseRow(deps, actor, attempt, outcome.request),
         outcome: 'ok',
         // The requester's token, hashed: the same hash the execute row that
         // spends it will carry. The token itself is never written.
         confirmTokenHash: confirmTokenHash(outcome.confirmToken),
-      };
+      });
     case 'rejected':
-      return { ...baseRow(deps, actor, attempt, outcome.request), outcome: 'ok' };
+      return flagSelfApproval(outcome.request, {
+        ...baseRow(deps, actor, attempt, outcome.request),
+        outcome: 'ok',
+      });
     case 'expired':
       return refusedRow(
         deps,
@@ -291,6 +321,24 @@ function rowFor(
         outcome.message,
       );
   }
+}
+
+/**
+ * W0-P32 — a decision the requester made on their own request (a super admin)
+ * says so in the row: `selfApproved: true` in the arguments, and an indexed
+ * result key, so "every self-approval" is one lookup. Both are hashed into
+ * the chain like every other column.
+ */
+function flagSelfApproval(
+  request: ApprovalRequest,
+  row: AppendAuditCallInput,
+): AppendAuditCallInput {
+  if (!isSelfApproved(request)) return row;
+  return {
+    ...row,
+    argsRedacted: { ...(row.argsRedacted as Record<string, unknown>), selfApproved: true },
+    resultKeys: [...(row.resultKeys ?? []), { keyName: 'selfApproved', keyValue: 'true' }],
+  };
 }
 
 function refusedRow(
@@ -392,5 +440,6 @@ function toApproval(a: ApprovalRequest): RuntimeApproval {
     decidedAt: a.decidedAt,
     createdAt: a.createdAt,
     expiresAt: a.expiresAt,
+    selfApproved: isSelfApproved(a),
   };
 }
