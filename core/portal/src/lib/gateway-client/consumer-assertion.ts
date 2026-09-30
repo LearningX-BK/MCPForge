@@ -24,7 +24,7 @@ import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { SignJWT, importJWK, type CryptoKey } from 'jose';
 import { z } from 'zod';
-import { resolveRepoRoot } from '../../app/build/_lib/repo-root';
+import { resolveRuntimeRoot } from '../../app/build/_lib/repo-root';
 
 /** The portal's registration id (`consumers/portal-local.consumer.yaml`). */
 export const PORTAL_CONSUMER_ID = 'portal-local';
@@ -95,7 +95,7 @@ export function portalConsumerKeyPath(options: ConsumerKeyOptions = {}): string 
     options.keyFile ?? env['MCPFORGE_PORTAL_CONSUMER_KEY_FILE'] ?? PORTAL_CONSUMER_KEY_FILE;
   return path.isAbsolute(configured)
     ? configured
-    : path.join(options.repoRoot ?? resolveRepoRoot(), configured);
+    : path.join(options.repoRoot ?? resolveRuntimeRoot(), configured);
 }
 
 const ISSUE_NEXT = `Run "forge consumer issue-credential ${PORTAL_CONSUMER_ID} --method private-key-jwt --key-file ${PORTAL_CONSUMER_KEY_FILE} --by <your subject>", then have the owner approve and merge the staged proposal that carries the public key.`;

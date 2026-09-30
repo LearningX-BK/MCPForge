@@ -86,7 +86,10 @@ import {
 } from './user-admin.js';
 
 export interface ReadApiOptions {
+  /** Install root: `.mcpforge/` (the probe report) lives here. */
   readonly repoRoot: string;
+  /** W0-P33a — where manifests live, for the catalogue digest. Default: `repoRoot`. */
+  readonly definitionsRoot?: string;
   readonly store: RuntimeStore;
   readonly catalogue: RuntimeCatalogue;
   readonly consumerAuth: ConsumerAuthGate;
@@ -134,7 +137,10 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
   const now = options.now ?? (() => new Date());
   const entries = options.catalogue.entries;
   const gatewayVersion = options.gatewayVersion ?? packageVersion();
-  const catalogueDigest = digestCatalogue(options.repoRoot, options.catalogue);
+  const catalogueDigest = digestCatalogue(
+    options.definitionsRoot ?? options.repoRoot,
+    options.catalogue,
+  );
   const loadProbe =
     options.loadProbe ??
     (() =>

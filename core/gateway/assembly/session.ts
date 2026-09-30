@@ -67,7 +67,13 @@ import { consumerSessionProvenance } from '../transport/consumer-auth/provenance
 import { loadDeploymentConfig, type DeploymentConfig } from './deployment.js';
 
 export interface SessionAssemblyOptions {
+  /** The DEFINITIONS root: overlays/, generated/roles, packages, consumers. */
   readonly repoRoot: string;
+  /**
+   * W0-P33a — the install root holding `.mcpforge/probe-report.json`, when
+   * the definitions live elsewhere (the VM's git clone). Default: `repoRoot`.
+   */
+  readonly runtimeRoot?: string;
   /** The overlay directory name under `overlays/`. */
   readonly deployment: string;
   readonly identity: IdentityProvider;
@@ -188,7 +194,7 @@ export function createSessionAssembly(options: SessionAssemblyOptions): SessionA
 
   let probe: ProbeStatusSource = noProbeReport();
   try {
-    probe = options.probe ?? defaultProbe(repoRoot);
+    probe = options.probe ?? defaultProbe(options.runtimeRoot ?? repoRoot);
   } catch (error) {
     problems.push(
       `.mcpforge/probe-report.json: ${error instanceof Error ? error.message : String(error)}`,

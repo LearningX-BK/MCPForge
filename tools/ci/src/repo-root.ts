@@ -23,3 +23,20 @@ export function findRepoRoot(startDir?: string): string {
     `Could not locate the MCPForge repo root (no pnpm-workspace.yaml found above ${startDir ?? dir}).`,
   );
 }
+
+/**
+ * W0-P33a — where the DEFINITIONS live (manifests/, generated/, roles/,
+ * consumers/, overlays/, approvals/). On the VM this is the git clone the
+ * portal merges into, named by `MCPFORGE_DEFINITIONS_ROOT`
+ * (docs/build-plan/w0-p33-portal-merge.md §2.1). Unset, it is the repo root,
+ * so nothing changes on a developer machine. Runtime state (`.mcpforge/`) is
+ * never located through this.
+ */
+export function findDefinitionsRoot(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  startDir?: string,
+): string {
+  const configured = env['MCPFORGE_DEFINITIONS_ROOT'];
+  if (configured !== undefined && configured.length > 0) return configured;
+  return findRepoRoot(startDir);
+}

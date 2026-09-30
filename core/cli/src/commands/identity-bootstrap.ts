@@ -28,6 +28,7 @@ import {
   identityAdminGroups,
   loadDeploymentGroupRoleMapping,
 } from '@mcpforge/gateway/identity/group-role-mapping';
+import { findDefinitionsRoot } from '@mcpforge/ci';
 import { readHiddenLine } from '../lib/hidden-input.js';
 
 export const BOOTSTRAP_TOOL_ID = 'forge.identity.bootstrap_admin';
@@ -82,7 +83,8 @@ export async function runBootstrapAdminCommand(
   }
 
   const deployment = opts.deployment?.trim() || env['MCPFORGE_DEPLOYMENT'] || 'local';
-  const root = opts.root ?? process.cwd();
+  // W0-P33a: the mapping is a definition.
+  const root = opts.root ?? findDefinitionsRoot(env);
   let admins: readonly string[];
   try {
     admins = identityAdminGroups(

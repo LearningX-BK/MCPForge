@@ -55,7 +55,7 @@ import {
   type SecretStore,
   type SecretsRotationReport,
 } from '@mcpforge/gateway/secrets/server';
-import { findRepoRoot } from '@mcpforge/ci';
+import { findDefinitionsRoot, findRepoRoot } from '@mcpforge/ci';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { readHiddenLine } from '../lib/hidden-input.js';
@@ -505,7 +505,12 @@ async function runPut(opts: SecretsOptions, deps: SecretsCommandDeps): Promise<n
 
   const repoRoot = resolveRoot(opts, deps);
   const deployment = opts.deployment?.trim() || env['MCPFORGE_DEPLOYMENT'] || 'local';
-  const namedIn = overlayFilesNaming(repoRoot, deployment, ref.uri);
+  // W0-P33a: overlays are definitions; the vault stays under the install root.
+  const namedIn = overlayFilesNaming(
+    deps.repoRoot ?? opts.root ?? findDefinitionsRoot(env),
+    deployment,
+    ref.uri,
+  );
   if (namedIn.length === 0) {
     return emitError(
       putRefusal(

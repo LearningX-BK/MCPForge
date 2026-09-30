@@ -129,8 +129,18 @@ export function parseGatewayMode(
 }
 
 export interface LaunchOptions {
-  /** Repo root: manifests, generated/, consumers/, overlays/ and `.mcpforge/`. */
+  /**
+   * Install root: the code, and `.mcpforge/` (runtime store, sealed secrets,
+   * probe report). Also the definitions root unless `definitionsRoot` is set.
+   */
   readonly repoRoot: string;
+  /**
+   * W0-P33a — where the DEFINITIONS live: manifests/, generated/, roles,
+   * consumers/, overlays/. On the VM this is the git clone the portal merges
+   * into (docs/build-plan/w0-p33-portal-merge.md §2.1). Defaults to
+   * `repoRoot`; the process entrypoint reads `MCPFORGE_DEFINITIONS_ROOT`.
+   */
+  readonly definitionsRoot?: string;
   /** Defaults to `parseGatewayMode()`. */
   readonly mode?: GatewayMode;
   /** Port the gateway's Streamable HTTP endpoint binds to. 0 = OS-assigned (tests). */
@@ -285,9 +295,11 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
   const mode = options.mode ?? parseGatewayMode();
   const audience = options.audience ?? DEFAULT_AUDIENCE;
   const repoRoot = options.repoRoot;
+  // W0-P33a: definitions (git) and runtime state (.mcpforge/) may live apart.
+  const defsRoot = options.definitionsRoot ?? repoRoot;
   const deployment = options.deployment ?? process.env['MCPFORGE_DEPLOYMENT'] ?? 'local';
 
-  const catalogue = await loadRuntimeCatalogue({ repoRoot });
+  const catalogue = await loadRuntimeCatalogue({ repoRoot: defsRoot });
   const store = await openRuntimeStore(
     options.storeConfig ?? { kind: 'sqlite', file: join(repoRoot, '.mcpforge', 'runtime.db') },
   );
@@ -320,9 +332,15 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     const flags = createPolledRuntimeFlagSource(store.runtimeFlags);
     await flags.refreshNow();
 
-    const sessions = createSessionAssembly({ repoRoot, deployment, identity, flags });
+    const sessions = createSessionAssembly({
+      repoRoot: defsRoot,
+      runtimeRoot: repoRoot,
+      deployment,
+      identity,
+      flags,
+    });
 
-    const capsLoaded = loadEffectiveCaps(join(repoRoot, 'overlays', deployment, 'caps.yaml'));
+    const capsLoaded = loadEffectiveCaps(join(defsRoot, 'overlays', deployment, 'caps.yaml'));
     if (!capsLoaded.ok) {
       throw new Error(
         `overlays/${deployment}/caps.yaml is invalid: ${JSON.stringify(capsLoaded.error)}`,
@@ -331,7 +349,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     const caps = capsLoaded.caps;
 
     const executor = createFunctionExecutor({
-      client: routedAisClient(repoRoot, deployment, catalogue, secretStore),
+      client: routedAisClient(defsRoot, deployment, catalogue, secretStore),
       grants: executionGrantCheck(keys.executionGrant),
     });
 
@@ -363,7 +381,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
 
     const calls = createCallExecution({ store, catalogue, executor, caps });
     const surface = createServedSurface({
-      repoRoot,
+      repoRoot: defsRoot,
       catalogue,
       runtime,
       execute: calls.execute,
@@ -382,7 +400,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     timer.unref();
     cleanups.push(() => clearInterval(timer));
 
-    const registry = loadConsumerRegistry(repoRoot);
+    const registry = loadConsumerRegistry(defsRoot);
     const authenticator = new ConsumerAuthenticator({ registry, audience });
     const consumerAuth = {
       authenticate: (headers: IncomingHttpHeaders, correlationId: string) =>
@@ -392,6 +410,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     // SAME session assembly as /mcp (W0-P2 §7, non-negotiable 6).
     const readApi = createReadApi({
       repoRoot,
+      definitionsRoot: defsRoot,
       store,
       catalogue,
       consumerAuth,
@@ -401,10 +420,10 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       approvals,
       // W0-P28 — who may administer local users is git: `identityAdmins:` in
       // this deployment's group mapping, read once here like the grants.
-      userAdmin: userAdminFor(repoRoot, deployment, users),
+      userAdmin: userAdminFor(defsRoot, deployment, users),
       // W0-P32 — who may approve their own request (flagged): git, like the rest.
       superAdminGroups: superAdminGroups(
-        loadDeploymentGroupRoleMapping(join(repoRoot, 'overlays'), deployment),
+        loadDeploymentGroupRoleMapping(join(defsRoot, 'overlays'), deployment),
       ),
     });
     const gateway = createGatewayHttpTransport({
@@ -470,7 +489,14 @@ if (isDirectlyExecuted()) {
   // stays private to the machine; the container image sets 0.0.0.0 so its
   // published port is reachable, with TLS in front of it (see DEPLOY.md).
   const host = process.env['MCPFORGE_GATEWAY_HOST'] ?? '127.0.0.1';
-  launchGateway({ repoRoot: process.cwd(), gatewayPort: port, gatewayHost: host })
+  // W0-P33a: on the VM the definitions are a git clone mounted beside the code.
+  const definitionsRoot = process.env['MCPFORGE_DEFINITIONS_ROOT'];
+  launchGateway({
+    repoRoot: process.cwd(),
+    ...(definitionsRoot === undefined || definitionsRoot === '' ? {} : { definitionsRoot }),
+    gatewayPort: port,
+    gatewayHost: host,
+  })
     .then((launched) => {
       console.log(
         `mcpforge gateway listening on ${host}:${launched.gatewayPort} (mode=${launched.mode}, portal=${launched.portal ? 'spawned' : 'not started'})`,
