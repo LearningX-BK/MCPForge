@@ -2,7 +2,8 @@
 // `/api/v1/approvals/{id}` as the signed-in viewer. A request outside the
 // viewer's read authority is a 404 at the gateway, identical to a missing
 // one, and renders the not-found notice (persona never hides a route, 03 §2).
-// Read-only: see `approval-request-detail.tsx` for why deciding is not wired.
+// A pending request can be decided here (W0-P25): the gateway decides, this
+// page forwards the verdict through `./actions.ts`.
 
 import * as React from 'react';
 
@@ -10,6 +11,7 @@ import { LiveStateNotice } from '@/components/live/live-state-notice';
 import { readApproval } from '@/lib/gateway-client/read-client';
 
 import { loadToolFacts, toRuntimeEntry } from '../live';
+import { decideApprovalAction } from './actions';
 import { ApprovalRequestDetail } from './approval-request-detail';
 
 export const dynamic = 'force-dynamic';
@@ -40,6 +42,7 @@ export default async function ApprovalDecisionPage({
       planText={a.planSummary}
       application={entry.application}
       sensitivity={entry.sensitivity}
+      decide={decideApprovalAction}
     />
   );
 }

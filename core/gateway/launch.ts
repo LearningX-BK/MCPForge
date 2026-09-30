@@ -309,6 +309,10 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       grants: executionGrantCheck(keys.executionGrant),
     });
 
+    // The ONE approval gate: stage 6g raises through it and the /api/v1
+    // decision path (W0-P25) decides through it. There is no second instance.
+    const approvals = approvalGate({ queue: store.approvals, keyring: keys.confirm });
+
     const scopeHoursFor = (toolId: string): number | undefined =>
       catalogue.tools.get(toolId)?.view.writeSafety?.idempotencyScopeHours ?? undefined;
     const runtime: PolicyRuntime = {
@@ -325,7 +329,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
           registry: validatePairEvidence(repoRoot),
         }),
         keyring: keys.confirm,
-        approval: approvalGate({ queue: store.approvals, keyring: keys.confirm }),
+        approval: approvals,
       }),
       idempotency: idempotencyGate({ store, scopeHoursFor }),
       executionGrantKeyring: keys.executionGrant,
@@ -368,6 +372,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       sessions,
       consumers: registry,
       identityProviderKind: 'local',
+      approvals,
     });
     const gateway = createGatewayHttpTransport({
       consumerAuth,
