@@ -1,5 +1,7 @@
 # Runtime state — SQLite store and build-lane state are never committed.
 .mcpforge/
+# W0-K4: the container's own runtime state (docker-compose.yml).
+.mcpforge-docker/
 .forge-build/
 
 # Dependencies and build output

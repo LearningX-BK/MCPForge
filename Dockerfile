@@ -68,6 +68,9 @@ FROM base AS runtime
 ENV NODE_ENV=production
 ENV MCPFORGE_MODE=full
 ENV MCPFORGE_GATEWAY_PORT=3939
+# W0-K4: the gateway binds loopback by default; inside the container it must
+# bind every interface or the published port is unreachable.
+ENV MCPFORGE_GATEWAY_HOST=0.0.0.0
 ENV PORT=3000
 
 COPY --from=build /app ./
@@ -83,4 +86,7 @@ EXPOSE 3939 3000
 # sibling `pnpm -C core/portal start` process (core/gateway/launch.ts).
 # `MCPFORGE_MODE=headless` (same image, one env var, 02 §6.5) starts the
 # gateway alone.
-CMD ["node", "core/gateway/dist/launch.js"]
+# W0-K4: run through tsx, exactly as the dev path does. Every workspace package
+# exports its TypeScript source (`exports: "./src/index.ts"`), so a plain
+# `node core/gateway/dist/launch.js` fails on its first workspace import.
+CMD ["node", "--import", "tsx", "core/gateway/launch.ts"]

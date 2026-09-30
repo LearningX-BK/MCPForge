@@ -384,7 +384,16 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     const { port } = await gateway.listen(options.gatewayPort ?? 0, options.gatewayHost);
     cleanups.unshift(() => gateway.close());
 
-    const gatewayUrl = `http://${options.gatewayHost ?? '127.0.0.1'}:${port}`;
+    // W0-K4: a wildcard bind (0.0.0.0 / ::, as in the container) is not an
+    // address to DIAL; the sibling portal on the same host reaches the gateway
+    // over loopback either way.
+    const dialHost =
+      options.gatewayHost === undefined ||
+      options.gatewayHost === '0.0.0.0' ||
+      options.gatewayHost === '::'
+        ? '127.0.0.1'
+        : options.gatewayHost;
+    const gatewayUrl = `http://${dialHost}:${port}`;
     const portal =
       mode === 'full' ? (options.spawnPortal ?? defaultSpawnPortal)(repoRoot, gatewayUrl) : null;
 
@@ -424,10 +433,14 @@ function isDirectlyExecuted(): boolean {
 
 if (isDirectlyExecuted()) {
   const port = Number(process.env['MCPFORGE_GATEWAY_PORT'] ?? 3939);
-  launchGateway({ repoRoot: process.cwd(), gatewayPort: port })
+  // W0-K4: loopback unless told otherwise. A developer's `npx tsx launch.ts`
+  // stays private to the machine; the container image sets 0.0.0.0 so its
+  // published port is reachable, with TLS in front of it (see DEPLOY.md).
+  const host = process.env['MCPFORGE_GATEWAY_HOST'] ?? '127.0.0.1';
+  launchGateway({ repoRoot: process.cwd(), gatewayPort: port, gatewayHost: host })
     .then((launched) => {
       console.log(
-        `mcpforge gateway listening on :${launched.gatewayPort} (mode=${launched.mode}, portal=${launched.portal ? 'spawned' : 'not started'})`,
+        `mcpforge gateway listening on ${host}:${launched.gatewayPort} (mode=${launched.mode}, portal=${launched.portal ? 'spawned' : 'not started'})`,
       );
     })
     .catch((err: unknown) => {
