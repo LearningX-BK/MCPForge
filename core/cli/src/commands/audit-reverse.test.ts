@@ -123,7 +123,11 @@ afterEach(() => {
 describe('forge audit reverse — the constructed call', () => {
   it('applies argMap to the recorded result keys and exits 0', async () => {
     const { out, code } = await capture(() =>
-      runAuditReverseCommand(writeCallId, { json: true }, { openStore: openIsolated, registry: REGISTRY }),
+      runAuditReverseCommand(
+        writeCallId,
+        { json: true },
+        { openStore: openIsolated, registry: REGISTRY },
+      ),
     );
     expect(code).toBe(0);
     const report = JSON.parse(out.trim());
@@ -140,7 +144,11 @@ describe('forge audit reverse — the constructed call', () => {
 
   it('the human rendering shows the result keys and says the reversal is itself a write', async () => {
     const { out } = await capture(() =>
-      runAuditReverseCommand(writeCallId, { json: false }, { openStore: openIsolated, registry: REGISTRY }),
+      runAuditReverseCommand(
+        writeCallId,
+        { json: false },
+        { openStore: openIsolated, registry: REGISTRY },
+      ),
     );
     expect(out).toContain('document_number=00123456');
     expect(out).toContain(CANCEL);
@@ -150,7 +158,11 @@ describe('forge audit reverse — the constructed call', () => {
 
   it('refuses a READ call with a next, and exits 1', async () => {
     const { out, code } = await capture(() =>
-      runAuditReverseCommand(readCallId, { json: true }, { openStore: openIsolated, registry: REGISTRY }),
+      runAuditReverseCommand(
+        readCallId,
+        { json: true },
+        { openStore: openIsolated, registry: REGISTRY },
+      ),
     );
     expect(code).toBe(1);
     const report = JSON.parse(out.trim());
@@ -161,7 +173,11 @@ describe('forge audit reverse — the constructed call', () => {
 
   it('refuses an unknown call id with a next, and exits 1', async () => {
     const { out, code } = await capture(() =>
-      runAuditReverseCommand('no-such-call', { json: true }, { openStore: openIsolated, registry: REGISTRY }),
+      runAuditReverseCommand(
+        'no-such-call',
+        { json: true },
+        { openStore: openIsolated, registry: REGISTRY },
+      ),
     );
     expect(code).toBe(1);
     expect(JSON.parse(out.trim()).refusal.reason).toBe('call_not_found');
@@ -187,25 +203,52 @@ describe('forge audit reverse — the constructed call', () => {
   });
 });
 
-describe('forge audit reverse — the real binary', () => {
-  // The registry here is the REAL one, read from this repo's `manifests/` —
-  // which holds no tool manifests at this point in the build. That makes this
-  // the FAIL-CLOSED case, and it is the more valuable one to pin: the row's
-  // frozen class and reversing tool are still read back and reported, but the
-  // `argMap` lives only in the manifest, so with no manifest the command
-  // refuses rather than guessing at which of the recorded business keys the
-  // cancel wants. A reversing call assembled from guesses is a write nobody
-  // authorised, so `no_arg_map` naming the manifest is the correct answer.
-  it('reports the frozen contract and refuses to guess an argMap the manifest does not supply', () => {
-    const { stdout, status } = forge(['audit', 'reverse', writeCallId, '--json']);
-    expect(status).toBe(1);
-    const report = JSON.parse(stdout.trim());
+describe('forge audit reverse — no argMap is never guessed', () => {
+  // W0-P20: this was the real binary's case while the repo held no manifests.
+  // It stays, against a registry whose contract has a reversing tool but NO
+  // argMap: the row's frozen class and tool are still read back and reported,
+  // but which recorded business keys the cancel wants lives only in the
+  // manifest, so the command refuses rather than guessing. A reversing call
+  // assembled from guesses is a write nobody authorised.
+  it('reports the frozen contract and refuses to guess an argMap the manifest does not supply', async () => {
+    const noArgMap = reversalRegistry({
+      [CREATE]: { class: 'compensating-tool', tool: CANCEL, windowHours: 720 },
+    });
+    const { out, code } = await capture(() =>
+      runAuditReverseCommand(
+        writeCallId,
+        { json: true },
+        { openStore: openIsolated, registry: noArgMap },
+      ),
+    );
+    expect(code).toBe(1);
+    const report = JSON.parse(out.trim());
     expect(report.reversalClass).toBe('compensating-tool');
     expect(report.reversingToolId).toBe(CANCEL);
     expect(report.resultKeys.document_number).toBe('00123456');
     expect(report.reversingCall).toBeNull();
     expect(report.refusal.reason).toBe('no_arg_map');
     expect(report.refusal.next).toMatch(/argMap/);
+  });
+});
+
+describe('forge audit reverse — the real binary', () => {
+  // The registry here is the REAL one, read from this repo's `manifests/`, and
+  // `jde.ap.voucher.create` declares its argMap there. So the real binary
+  // constructs the reversing call from the frozen business keys, and still
+  // executes nothing.
+  it('builds the reversing call from the committed manifest’s argMap, and executes nothing', () => {
+    const { stdout, status } = forge(['audit', 'reverse', writeCallId, '--json']);
+    expect(status).toBe(0);
+    const report = JSON.parse(stdout.trim());
+    expect(report.reversalClass).toBe('compensating-tool');
+    expect(report.reversingToolId).toBe(CANCEL);
+    expect(report.reversingCall).toEqual({
+      toolId: CANCEL,
+      args: { document_number: '00123456', document_type: 'PV', document_company: '00100' },
+    });
+    expect(report.executed).toBeNull();
+    expect(report.refusal).toBeNull();
   });
 
   it('exits 1 with an actionable refusal on a read call', () => {

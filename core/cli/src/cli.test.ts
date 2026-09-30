@@ -8,6 +8,16 @@ import { NOT_IMPLEMENTED_EXIT_CODE } from './lib/output.js';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const binPath = path.join(here, '..', 'bin', 'forge.js');
 
+const repoRoot = path.join(here, '..', '..', '..');
+
+/** `git status` of `generated/`: what differs from the committed tree, if anything. */
+function generatedDiff(): string {
+  return spawnSync('git', ['status', '--porcelain', '--', 'generated/'], {
+    encoding: 'utf-8',
+    cwd: repoRoot,
+  }).stdout;
+}
+
 function runForge(args: string[]): { stdout: string; stderr: string; status: number | null } {
   const result = spawnSync(process.execPath, [binPath, ...args], {
     encoding: 'utf-8',
@@ -112,7 +122,7 @@ describe('forge ci (real handler — see tools/ci for the pipeline-logic tests)'
 });
 
 describe('forge validate (real handler — see core/codegen/src/validate for the engine tests)', () => {
-  it('runs against the real repo and exits 0 with a parseable ok:true envelope (no manifests authored yet)', () => {
+  it('runs against the real repo and exits 0 with a parseable ok:true envelope', () => {
     const { stdout, status } = runForge(['validate', '--json']);
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
@@ -128,17 +138,33 @@ describe('forge validate (real handler — see core/codegen/src/validate for the
 });
 
 describe('forge codegen (real handler — see core/codegen/src/emit for the engine tests)', () => {
-  it('runs against the real repo and exits 0 with a parseable ok:true envelope (no manifests authored yet)', () => {
+  it('runs against the real repo, processes every committed tool manifest, and changes no committed byte', () => {
+    // W0-P20: this was written when the repo had no manifests and asserted
+    // `manifestsProcessed: 0`. It now asserts the real counts, and keeps what
+    // it guarded, more strongly: a codegen run over the committed manifests
+    // reproduces the committed `generated/` tree exactly (the CI regen-diff
+    // property, 02 §2.3), so the run leaves the working tree unchanged.
+    const toolManifests = spawnSync('git', ['ls-files', 'manifests/**/*.tool.yaml'], {
+      encoding: 'utf-8',
+      cwd: repoRoot,
+    })
+      .stdout.split('\n')
+      .filter((line) => line.trim().length > 0);
+    const before = generatedDiff();
+
     const { stdout, status } = runForge(['codegen', '--json']);
     expect(status).toBe(0);
     const parsed = JSON.parse(stdout.trim());
     expect(parsed.ok).toBe(true);
-    expect(parsed.manifestsProcessed).toBe(0);
-    // W0-G1: `forge codegen` writes generated/index/catalogue-index.json
-    // unconditionally, even with zero tool manifests — it is not a per-tool
-    // artefact, so "no manifests authored yet" no longer means "nothing
-    // written".
-    expect(parsed.filesWritten).toEqual(['generated/index/catalogue-index.json']);
+    expect(parsed.manifestsProcessed).toBe(toolManifests.length);
+    expect(toolManifests.length).toBeGreaterThan(0);
+    // `generated/index/catalogue-index.json` is written on every run (W0-G1),
+    // as is one card per tool.
+    expect(parsed.filesWritten).toContain('generated/index/catalogue-index.json');
+    expect(parsed.filesWritten).toContain('generated/cards/jde.ap.voucher.create.json');
+    expect(parsed.contractDrift).toEqual([]);
+
+    expect(generatedDiff(), 'forge codegen changed committed generated/ bytes').toBe(before);
   });
 
   it('non-JSON mode prints a human-readable OK line', () => {

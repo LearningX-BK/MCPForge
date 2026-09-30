@@ -43,6 +43,30 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..',
 const RECORD_PATH = consumerRecordPath(PORTAL_LOCAL_CONSUMER_ID);
 const VERIFIER_FILE = join('.mcpforge', 'consumer-credential-verifiers.json');
 
+/**
+ * W0-P20 — what this suite could write into the REAL repository, snapshotted
+ * when the module loads, before any test runs. `consumers/portal-local.consumer.yaml`
+ * is a committed record now, so "it does not exist" stopped being the right
+ * check; "this suite left it, and everything beside it, exactly as it was" is.
+ */
+function realRepoSnapshot(): string {
+  const read = (rel: string): string => {
+    const abs = join(repoRoot, ...rel.split('/'));
+    return existsSync(abs) ? readFileSync(abs, 'utf8') : '<absent>';
+  };
+  const list = (rel: string): string => {
+    const abs = join(repoRoot, rel);
+    return existsSync(abs) ? readdirSync(abs).sort().join(',') : '<absent>';
+  };
+  return JSON.stringify({
+    record: read(RECORD_PATH),
+    consumers: list('consumers'),
+    approvals: list('approvals'),
+    verifiers: read(VERIFIER_FILE.split('\\').join('/')),
+  });
+}
+const REAL_REPO_BEFORE = realRepoSnapshot();
+
 function tempRepo(): string {
   const root = mkdtempSync(join(tmpdir(), 'forge-dev-cli-'));
   mkdirSync(join(root, 'consumers'), { recursive: true });
@@ -310,6 +334,8 @@ describe('the command surface', () => {
   });
 
   it('this suite never writes into the real repository', () => {
-    expect(existsSync(join(repoRoot, ...RECORD_PATH.split('/')))).toBe(false);
+    // The committed record, the consumers/ and approvals/ listings and the
+    // verifier file are byte-for-byte what they were before the suite ran.
+    expect(realRepoSnapshot()).toBe(REAL_REPO_BEFORE);
   });
 });
