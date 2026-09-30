@@ -144,7 +144,7 @@ describe('local sign-in', () => {
     expect(await code(service.refresh(grant.refreshToken, 'c14'))).toBe('AUTH_REQUIRED');
   });
 
-  it('disabling the account stops renewal at the next refresh, and ends the session', async () => {
+  it('disabling the account ends its sessions at once, so the refresh token no longer renews', async () => {
     const other = await users.createUser({
       username: 'arjun',
       displayName: 'Arjun Mehta',
@@ -152,9 +152,34 @@ describe('local sign-in', () => {
     });
     const grant = await service.signIn({ username: 'arjun', password: PASSWORD }, 'c15');
     await users.deactivateUser(other.subject);
-    expect(await code(service.refresh(grant.refreshToken, 'c16'))).toBe('IDENTITY_UNRESOLVED');
+    // W0-P29: ended by the disable itself, not at the next renewal.
     const found = await store.authSessions.findByTokenHash(hashRefreshToken(grant.refreshToken));
     expect(found?.session.revokedReason).toBe('account_unavailable');
+    expect(await code(service.refresh(grant.refreshToken, 'c16'))).toBe('AUTH_REQUIRED');
+  });
+
+  it('a password reset ends every session the account holds (W0-P29)', async () => {
+    const reset = await users.createUser({
+      username: 'lena',
+      displayName: 'Lena Ortiz',
+      password: PASSWORD,
+    });
+    const first = await service.signIn({ username: 'lena', password: PASSWORD }, 'c30');
+    const second = await service.signIn({ username: 'lena', password: PASSWORD }, 'c31');
+    await users.setPassword(reset.subject, 'an-entirely-new-passphrase-29');
+    for (const grant of [first, second]) {
+      const found = await store.authSessions.findByTokenHash(hashRefreshToken(grant.refreshToken));
+      expect(found?.session.revokedReason).toBe('credential_reset');
+      expect(await code(service.refresh(grant.refreshToken, 'c32'))).toBe('AUTH_REQUIRED');
+    }
+    // The new password starts a fresh, renewable session.
+    const fresh = await service.signIn(
+      { username: 'lena', password: 'an-entirely-new-passphrase-29' },
+      'c33',
+    );
+    expect((await service.refresh(fresh.refreshToken, 'c34')).refreshToken).not.toBe(
+      fresh.refreshToken,
+    );
   });
 
   it('signs out: the refresh token no longer renews; unknown tokens sign out silently', async () => {

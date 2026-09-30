@@ -479,7 +479,7 @@ export function changeNext(
         `Created ${username}. Give them the password through a channel other than this one; they sign in to the portal with it. Their roles come from their groups through the git mapping.`,
       );
     case 'disable':
-      return `Disabled ${username}. Their next request is refused and their session stops renewing; the account and its audit history stay. Enable it again here if this was a mistake.`;
+      return `Disabled ${username}. Their next request is refused and every session they held has ended; the account and its audit history stay. Enable it again here if this was a mistake.`;
     case 'enable':
       return `Enabled ${username}. They can sign in again with their existing password.`;
     case 'set_groups':
@@ -489,7 +489,7 @@ export function changeNext(
         `Groups for ${username} are now: ${userGroups.length === 0 ? 'none' : userGroups.join(', ')}. Their roles follow on their next request.`,
       );
     case 'reset_password':
-      return `Reset the password for ${username}. Give them the new one through a channel other than this one. A session they already hold is not ended by a reset; disable the account if it must stop now.`;
+      return `Reset the password for ${username}. Give them the new one through a channel other than this one. Every session they held has ended, so they sign in again with the new password.`;
   }
 }
 

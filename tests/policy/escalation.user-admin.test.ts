@@ -391,6 +391,34 @@ describe('W0-P28 — local user administration fails closed', () => {
     expect(rows.filter((r) => r.deniedByRule === 'identity.last_admin').length).toBe(2);
   });
 
+  it('a reset through the API ends the account’s live session: its refresh token is refused (W0-P29)', async () => {
+    const users = localUserStore({ store: launched.store });
+    const victim = await users.createUser({
+      username: 'p29-victim',
+      displayName: 'Victim',
+      password: PASSWORD,
+      groups: [TEST_GROUP],
+    });
+    const signIn = await fetch(`${base}/auth/local/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'p29-victim', password: PASSWORD }),
+    });
+    const { refreshToken } = (await signIn.json()) as { refreshToken: string };
+
+    const reset = await call(`/${encodeURIComponent(victim.subject)}`, {
+      body: { action: 'reset_password', password: NEW_PASSWORD },
+    });
+    expect(reset.status).toBe(200);
+
+    const renewed = await fetch(`${base}/auth/local/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    expect(renewed.status).not.toBe(200);
+  }, 60_000);
+
   it('refuses an unknown subject with NOT_FOUND', async () => {
     const r = await call('/local%3Anobody', { body: { action: 'disable' } });
     expect(r.status).toBe(404);

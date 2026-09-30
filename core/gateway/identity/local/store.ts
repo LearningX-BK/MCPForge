@@ -255,20 +255,37 @@ export function localUserStore(options: LocalUserStoreOptions): LocalUserStore {
       }
     },
 
+    /**
+     * W0-P29: a reset ends every session the account holds, in the same
+     * transaction. A reset is usually because the old password leaked, and a
+     * refresh token minted with it would otherwise renew for hours.
+     */
     async setPassword(subject: string, password: string): Promise<LocalUserRecord> {
       await requireUser(subject);
       assertPasswordAcceptable(password);
-      return users.setPassword({
-        subject,
-        passwordHash: await hashPassword(password),
-        passwordAlgorithm: PASSWORD_ALGORITHM,
-        now: now().toISOString(),
+      const passwordHash = await hashPassword(password);
+      return options.store.transaction(async () => {
+        const at = now().toISOString();
+        const updated = await users.setPassword({
+          subject,
+          passwordHash,
+          passwordAlgorithm: PASSWORD_ALGORITHM,
+          now: at,
+        });
+        await options.store.authSessions.revokeAllForSubject(subject, 'credential_reset', at);
+        return updated;
       });
     },
 
+    /** W0-P29: disabling ends every session too, rather than at its next renewal. */
     async deactivateUser(subject: string): Promise<LocalUserRecord> {
       await requireUser(subject);
-      return users.setActive(subject, false, now().toISOString());
+      return options.store.transaction(async () => {
+        const at = now().toISOString();
+        const updated = await users.setActive(subject, false, at);
+        await options.store.authSessions.revokeAllForSubject(subject, 'account_unavailable', at);
+        return updated;
+      });
     },
 
     async reactivateUser(subject: string): Promise<LocalUserRecord> {

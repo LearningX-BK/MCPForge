@@ -769,7 +769,8 @@ export const LOCAL_USER_GROUP: TableSpec = {
  *
  * `subject` is `Principal.subject`, the only identity value written (CLAUDE.md
  * §3). `revoked_reason` is a closed vocabulary: `signed_out`, `refresh_reuse`,
- * `idle_expired`, `absolute_expired`, `account_unavailable`.
+ * `idle_expired`, `absolute_expired`, `account_unavailable`, and
+ * `credential_reset` (W0-P29).
  */
 export const AUTH_SESSION: TableSpec = {
   name: 'auth_session',
