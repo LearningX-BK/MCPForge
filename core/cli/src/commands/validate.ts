@@ -1,4 +1,4 @@
-import { findRepoRoot } from '@mcpforge/ci';
+import { findDefinitionsRoot } from '@mcpforge/ci';
 import { validateRepo, type ValidationReport } from '@mcpforge/codegen/validate';
 
 /** Human-readable rendering: one line per failure, naming rule id, file, path and fix. */
@@ -36,7 +36,8 @@ export function formatValidationReportHuman(report: ValidationReport): string {
  * by default. One command, one report, one exit code.
  */
 export function runValidateCommand(opts: { readonly json: boolean }): number {
-  const repoRoot = findRepoRoot();
+  // W0-P33a: validate/generate the definitions, wherever they live.
+  const repoRoot = findDefinitionsRoot();
   const report = validateRepo(repoRoot);
   if (opts.json) {
     process.stdout.write(`${JSON.stringify(report)}\n`);

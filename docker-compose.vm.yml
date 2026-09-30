@@ -1,0 +1,23 @@
+# MCPForge — W0-P33a, the VM override: definitions from a git clone.
+#
+# Owner decision, 30 Sep 2026 (docs/build-plan/w0-p33-portal-merge.md §2.1):
+# on the VM the tool definitions (manifests/, generated/, roles/, consumers/,
+# overlays/, approvals/ …) live in a git clone, not in the image, so the
+# portal can merge into real git. The image keeps the code; `.mcpforge-docker`
+# keeps the runtime state; this file adds the clone.
+#
+# Use it on top of the base file:
+#   docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d
+#
+# Without this override nothing changes: the gateway, portal and `forge` read
+# the definitions baked into the image, exactly as before.
+
+services:
+  mcpforge-core:
+    environment:
+      # Read by the gateway entrypoint, the portal and `forge validate/codegen`.
+      MCPFORGE_DEFINITIONS_ROOT: /defs
+    volumes:
+      # Read-write: the portal will commit and merge here (W0-P33b). Back it
+      # up — it is now the system of record for definitions.
+      - ${MCPFORGE_DEFINITIONS_HOST_DIR:-/opt/mcpforge/defs}:/defs

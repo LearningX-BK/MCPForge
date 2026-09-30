@@ -1,4 +1,4 @@
-import { findRepoRoot } from '@mcpforge/ci';
+import { findDefinitionsRoot } from '@mcpforge/ci';
 import {
   acceptContract,
   findToolManifest,
@@ -63,7 +63,8 @@ export async function runCodegenCommand(opts: {
   readonly json: boolean;
   readonly acceptContract?: string;
 }): Promise<number> {
-  const repoRoot = findRepoRoot();
+  // W0-P33a: validate/generate the definitions, wherever they live.
+  const repoRoot = findDefinitionsRoot();
 
   if (opts.acceptContract !== undefined) {
     const toolId = opts.acceptContract;

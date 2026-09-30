@@ -50,7 +50,7 @@ import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
-import { resolveRepoRoot } from '../../app/build/_lib/repo-root';
+import { resolveRepoRoot, resolveRuntimeRoot } from '../../app/build/_lib/repo-root';
 import { gateDiscard, gateSaveOrPropose, type GateResult } from '../viewer/gates';
 import { getViewer } from '../viewer/session';
 import { LocalGit } from './local-git';
@@ -131,9 +131,10 @@ async function ensureHost(): Promise<LocalGit> {
   if (cachedHost !== undefined) return cachedHost;
   if (hostPromise === undefined) {
     hostPromise = (async () => {
-      const repoRoot = resolveRepoRoot();
-      const sandbox = path.join(repoRoot, SANDBOX_RELATIVE);
-      if (!existsSync(path.join(sandbox, '.git'))) seedSandbox(sandbox, repoRoot);
+      // W0-P33a: the sandbox is runtime state (under the install root's
+      // .mcpforge/); it is seeded FROM the definitions root.
+      const sandbox = path.join(resolveRuntimeRoot(), SANDBOX_RELATIVE);
+      if (!existsSync(path.join(sandbox, '.git'))) seedSandbox(sandbox, resolveRepoRoot());
       const host = new LocalGit({ repoRoot: sandbox });
       cachedHost = host;
       return host;

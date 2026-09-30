@@ -1614,7 +1614,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Owner decision, 30 Sep 2026: **"Full path in the portal (Recommended)"**: "Draft, propose, super admin reviews and approves, the portal merges to git and runs codegen and validate, then the gateway reloads. The tool reads 'Not probed' until a probe runs, which the portal could also trigger." Today `ChangeHost` has saveDraft, propose, discard, list, diff and readFile, and no approve or merge. Blast radius: the portal would write the main branch, run codegen and make the gateway reload its catalogue.
   - done: a design note the owner reviews before any code, settling: who may approve and merge (super admin; self-approval flagged per W0-P32); how the approval record is written; where codegen and validate run and what happens when either fails; how the gateway picks up a new catalogue (restart or hot reload) without dropping the write path's guarantees; whether the portal may trigger `forge probe`; and what the VM deployment needs (git identity, a remote or none).
 
-- [ ] **W0-P33a** — Definitions root: the git clone on the VM that the gateway, portal and CLI all read
+- [x] **W0-P33a** — Definitions root: the git clone on the VM that the gateway, portal and CLI all read
   - model: opus
   - deps: W0-P33
   - wave: 0
@@ -1622,6 +1622,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: core/gateway/launch.ts, core/gateway/assembly/**, core/portal/src/app/build/_lib/repo-root.ts, core/cli/src/**, docker-compose.yml, DEPLOY.md
   - context: Design note approved 30 Sep 2026, decision A: "Git clone on the VM (Recommended)".
   - done: one `MCPFORGE_DEFINITIONS_ROOT` (default: the repo root, so nothing changes locally) is where the gateway loads its catalogue, mapping and consumers, where the portal reads definitions, and where `forge` validates and generates; compose bind-mounts `/opt/mcpforge/defs`; DEPLOY.md sets the clone up; `rm -rf .mcpforge/` still leaves a working system (W0-C6).
+  - result (30 Sep 2026): gateway `LaunchOptions.definitionsRoot` (catalogue, served surface, session assembly, caps, AIS targets, consumers, mapping, catalogue digest) apart from `repoRoot` (store, sealed secrets, probe report, portal cwd); only the process entrypoint reads `MCPFORGE_DEFINITIONS_ROOT`, so tests cannot be redirected by a stray variable. Portal: `resolveRepoRoot()` follows the variable; new `resolveRuntimeRoot()` for the consumer key and the change-host sandbox (seeded from the definitions). CLI: `findDefinitionsRoot()` (in `@mcpforge/ci`) for validate, codegen, bootstrap-admin and the `secrets put` overlay check; the vault stays in `.mcpforge/`. `docker-compose.vm.yml` mounts `/opt/mcpforge/defs` at `/defs`; DEPLOY.md makes the clone (no remote). Tests: launch from a separate definitions root with runtime state only under the install root, refusal on missing definitions, and both root helpers. Carried forward: the image has no `git` (W0-P33b must add it); `forge probe` still reads definitions and the vault from one root (W0-P33d must split it).
 
 - [ ] **W0-P33b** — Approve and Merge in the portal: `ChangeHost.approve/merge` on the definitions clone, gated by validate and codegen
   - model: opus
@@ -1630,7 +1631,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - reads: docs/build-plan/w0-p33-portal-merge.md §2.2, §2.3
   - touches: core/portal/src/lib/change-host/**, core/portal/src/components/change/**, core/portal/src/app/build/**
   - context: Remote: "Local only for now (Recommended)".
-  - done: LocalGit runs on the definitions clone (the sandbox remains for tests); Approve writes an `approvals/` record (approver and requester as subjects, `selfApproved` when they match, super admin only for grant-widening changes); Merge is super-admin only, runs `forge validate` and `forge codegen` on the branch, commits the generated diff, refuses with the rule's `next` on any failure, and merges `--no-ff` only when all pass; the UI says "local only — no remote configured"; tests cover each refusal.
+  - done: the image installs `git` (W0-P33a carried this forward); LocalGit runs on the definitions clone (the sandbox remains for tests); Approve writes an `approvals/` record (approver and requester as subjects, `selfApproved` when they match, super admin only for grant-widening changes); Merge is super-admin only, runs `forge validate` and `forge codegen` on the branch, commits the generated diff, refuses with the rule's `next` on any failure, and merges `--no-ff` only when all pass; the UI says "local only — no remote configured"; tests cover each refusal.
 
 - [ ] **W0-P33c** — Gateway catalogue reload: swap in a new catalogue only if it loads cleanly
   - model: opus
@@ -1648,7 +1649,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - reads: docs/build-plan/w0-p33-portal-merge.md §2.5; 02#4.5
   - touches: core/probe/**, core/portal/src/app/environments/**, core/gateway/api/v1/**
   - context: Decision D: "Local and dev only (Recommended)".
-  - done: a super admin can start a probe from the portal when the deployment's environment class is `local` or `dev`; it is refused (with a `next` naming the CLI) for `staging` and `prod`; the report updates enablement; the run is audited.
+  - done: `forge probe` reads manifests and overlays from the definitions root and writes its report and reads the vault under the install root (W0-P33a carried this forward); a super admin can start a probe from the portal when the deployment's environment class is `local` or `dev`; it is refused (with a `next` naming the CLI) for `staging` and `prod`; the report updates enablement; the run is audited.
 
 - [x] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
   - model: opus

@@ -35,6 +35,26 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
    docker compose build
    ```
 
+   **Then make the definitions clone (W0-P33a).** Tool definitions live in a
+   separate git clone that the portal will merge into, so adding a tool never
+   needs an image rebuild. Clone it from the checkout you just built, with no
+   remote (local only, by owner decision):
+   ```sh
+   sudo git clone --no-hardlinks "$PWD" /opt/mcpforge/defs
+   sudo git -C /opt/mcpforge/defs remote remove origin
+   sudo git -C /opt/mcpforge/defs config user.name  "MCPForge Portal"
+   sudo git -C /opt/mcpforge/defs config user.email "portal@mcpforge.local"
+   ```
+   Start with the VM override on top of the base file (every later
+   `docker compose` command takes the same two `-f` flags):
+   ```sh
+   docker compose -f docker-compose.yml -f docker-compose.vm.yml up -d
+   ```
+   The gateway, the portal and `forge validate`/`forge codegen` then read the
+   definitions from `/defs`. Runtime state stays in `./.mcpforge-docker`. Back
+   up `/opt/mcpforge/defs`: it is now the system of record for definitions.
+   On SELinux-enforcing Oracle Linux, add `:z` to that volume line.
+
 3. **Choose the SecretStore key.** A container has no OS keychain, so the store
    is sealed with `MCPFORGE_SECRETS_KEY` (05 §4.3.1's env-var path). Use a long
    random passphrase, keep it in the VM's secret manager or an OCI Vault secret,

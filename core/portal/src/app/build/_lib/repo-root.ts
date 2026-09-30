@@ -27,6 +27,22 @@ import { dirname, join } from 'node:path';
 export function resolveRepoRoot(startDir: string = process.cwd()): string {
   const override = process.env['MCPFORGE_PORTAL_REPO_ROOT'];
   if (override !== undefined && override.length > 0) return override;
+  // W0-P33a — the DEFINITIONS root. On the VM the definitions are a git clone
+  // mounted beside the code (docs/build-plan/w0-p33-portal-merge.md §2.1);
+  // every caller of this function reads definitions, so it follows them.
+  const definitions = process.env['MCPFORGE_DEFINITIONS_ROOT'];
+  if (definitions !== undefined && definitions.length > 0) return definitions;
+  return resolveRuntimeRoot(startDir);
+}
+
+/**
+ * W0-P33a — the INSTALL root: the code, and `.mcpforge/` (the portal's consumer
+ * key, the change-host sandbox). Never moved by `MCPFORGE_DEFINITIONS_ROOT`,
+ * because runtime state is not a definition and must not land in the clone.
+ */
+export function resolveRuntimeRoot(startDir: string = process.cwd()): string {
+  const override = process.env['MCPFORGE_PORTAL_REPO_ROOT'];
+  if (override !== undefined && override.length > 0) return override;
   let dir = startDir;
   for (let i = 0; i < 8; i++) {
     if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir;

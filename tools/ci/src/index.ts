@@ -1,7 +1,7 @@
 import { findRepoRoot } from './repo-root.js';
 import { STAGES, type StageStatus } from './stages.js';
 
-export { findRepoRoot } from './repo-root.js';
+export { findDefinitionsRoot, findRepoRoot } from './repo-root.js';
 export { runPnpmScript, tail } from './run-pnpm-script.js';
 export { STAGES, type StageDefinition, type StageOutcome, type StageStatus } from './stages.js';
 export {
