@@ -43,6 +43,11 @@ function byRule(list: readonly ValidationFailure[], ruleId: string): ValidationF
   return list.filter((f) => f.ruleId === ruleId);
 }
 
+/** W0-P31: roles/super-admin.yaml grants the same pair, so the counts are per role file. */
+function inFile(list: readonly ValidationFailure[], file: string): ValidationFailure[] {
+  return list.filter((f) => f.file === file);
+}
+
 describe('W0-I5 DONE (design time): the real PO create/approve pair trips SoD detection', () => {
   it('both manifests are in the catalogue and validate', () => {
     const report = validateRepo(REPO_ROOT);
@@ -61,7 +66,10 @@ describe('W0-I5 DONE (design time): the real PO create/approve pair trips SoD de
   it('roles/p2p.yaml compilation reports sod.implicit-create-approve as a WARNING', () => {
     const report = validateRepo(REPO_ROOT);
 
-    const implicit = byRule(report.warnings, 'sod.implicit-create-approve');
+    const implicit = inFile(
+      byRule(report.warnings, 'sod.implicit-create-approve'),
+      'roles/p2p.yaml',
+    );
     expect(implicit).toHaveLength(1);
     expect(implicit[0]!.file).toBe('roles/p2p.yaml');
     expect(implicit[0]!.severity).toBe('warning');
@@ -81,7 +89,7 @@ describe('W0-I5 DONE (design time): the real PO create/approve pair trips SoD de
     // a warning too — the one that names the required exception record.
     const report = validateRepo(REPO_ROOT);
 
-    const declared = byRule(report.warnings, 'sod.declared-conflict');
+    const declared = inFile(byRule(report.warnings, 'sod.declared-conflict'), 'roles/p2p.yaml');
     expect(declared).toHaveLength(1);
     expect(declared[0]!.file).toBe('roles/p2p.yaml');
     expect(declared[0]!.message).toContain(PO_CREATE);
@@ -91,7 +99,17 @@ describe('W0-I5 DONE (design time): the real PO create/approve pair trips SoD de
     // The implicit rule reports the pattern EVEN THOUGH it is declared, so a
     // steward cannot hide it from the report by declaring it with a soft
     // disposition (W0-B8).
-    const implicit = byRule(report.warnings, 'sod.implicit-create-approve');
+    const implicit = inFile(
+      byRule(report.warnings, 'sod.implicit-create-approve'),
+      'roles/p2p.yaml',
+    );
     expect(implicit[0]!.message).toContain('also declared');
+  });
+
+  it('W0-P31: the super-admin role reports the same pair, declared and implicit, never hidden', () => {
+    const report = validateRepo(REPO_ROOT);
+    const file = 'roles/super-admin.yaml';
+    expect(inFile(byRule(report.warnings, 'sod.implicit-create-approve'), file)).toHaveLength(1);
+    expect(inFile(byRule(report.warnings, 'sod.declared-conflict'), file)).toHaveLength(1);
   });
 });

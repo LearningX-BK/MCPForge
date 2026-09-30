@@ -22,6 +22,13 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
 
 1. **Install Docker** on the VM (Docker Engine + Compose plugin). Open only the
    ports your TLS proxy needs (443); do NOT expose 3939 or 3000 publicly.
+   On **Oracle Linux 8/9** the default container tool is Podman; this stack was
+   verified with Docker, so install Docker CE from Docker's RHEL repository
+   (`dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo`,
+   then `dnf install docker-ce docker-ce-cli containerd.io docker-compose-plugin`,
+   `systemctl enable --now docker`). Open 443 with `firewall-cmd` and in the
+   OCI security list. If SELinux is enforcing, the bind mounts need the `:z`
+   suffix in `docker-compose.yml`.
 
 2. **Clone the repo** at the commit you want to run and build:
    ```sh
@@ -70,10 +77,12 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
    (`-it`), or pipe it on stdin (`-T`). Never pass it as an argument:
    ```sh
    docker compose exec -it mcpforge-core node core/cli/bin/forge.js \
-     identity bootstrap-admin --username <name> --display-name "<Full Name>"
+     identity bootstrap-admin --username <name> --display-name "<Full Name>"      --group mcpforge-superadmins
    ```
-   It joins the first group listed under `identityAdmins:` in
-   `overlays/local/mappings/groups-to-roles.yaml` (`mcpforge-admins`). It refuses
+   `--group mcpforge-superadmins` makes that first account the **super admin**
+   (W0-P31): every tool through `roles/super-admin.yaml`, identity admin, and
+   every portal persona. Leave `--group` off for an ordinary identity admin
+   (`mcpforge-admins`). It refuses
    once any active admin exists, and when `CI=true`. After that, sign in to the
    portal as that admin and create, disable, enable, regroup and reset accounts
    under **Governance → Users**. Every change is an `identity` audit row. Groups
@@ -104,7 +113,7 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
 ## Not possible yet (and which task owns it)
 
 - **A real JD Edwards target:** the real token-provider protocol is an open human decision (W0-P14 note).
-- **Anyone approving anything:** no local group maps to the real role `p2p` (owner fix to the mapping).
-- **External agents (Claude Desktop etc.):** no supported way to issue a key to a new consumer; W0-P19, W0-Q12.
+- **Ordinary approvers:** only the super admin (`mcpforge-superadmins`, W0-P31) holds a real role today. The other local groups still map to role ids that do not exist (`p2p-ap-clerk`, …), so they grant nothing until the mapping is fixed (owner). A super admin approving their OWN request is W0-P32.
+- **External agents (Claude Desktop, any MCP client): optional**, by owner decision (30 Sep 2026). Nothing in this deployment depends on one. Issuing a key to a new consumer is still unbuilt (W0-P19, W0-Q12, both optional).
 - **Production secrets:** `OciVaultStore` is the named production target and is not built in Wave 0.
 - **More than one instance:** SQLite is single-instance; multi-replica needs the Postgres store (built and tested, not wired for this image).

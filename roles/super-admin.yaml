@@ -1,0 +1,38 @@
+apiVersion: mcpforge/v1
+kind: Role
+id: super-admin
+label: Super admin
+description: Every tool in the catalogue, for the deployment's super admin. Still intersected with the consumer, and every call is audited.
+# W0-P31, owner decision 30 Sep 2026: "Everything, inside the rules". This is
+# a grant like any other: it compiles to an explicit tool-id list in
+# generated/roles/super-admin.scope.json, so every tool it gains shows up as a
+# diff. It is not a bypass. The consumer's own authorizations still intersect
+# with it (non-negotiable 6), and an elevated binding still needs the named,
+# expiring grant below (non-negotiable 7).
+excludes: []
+sensitivityCeiling: personal
+writeAllowed: true
+coreTools: # the resident set. Counts against budgetTokens.
+  - jde.scm.purchase_order.create
+  - jde.scm.purchase_order.approve
+  - jde.ap.voucher.create
+  - jde.fin.journal.create
+  - jde.fin.journal.submit
+  - jde.ap.voucher.search
+budgetTokens: 1300 # CI-enforced ceiling on the resident set (§5.6)
+segregationOfDuties:
+  - conflict: [jde.scm.purchase_order.create, jde.scm.purchase_order.approve]
+    disposition: warn-and-require-exception
+mutuallyExclusiveWith: []
+bindingGrants:
+  - bindingType: function
+    names: [AP_VOUCHER, GL_JOURNAL, PO_ORCHESTRATION]
+    approvalRef: approvals/2026-09-30-super-admin-function-grant.yaml
+    approver: Admin
+    expiresAt: '2027-03-29'
+    standingAuthorization: 2026-09-30-super-admin-function-standing
+# `includes` stays the LAST field (see roles/p2p.yaml for why). `*.**` is
+# every four-segment tool id, of every application: the glob is segment-wise,
+# so it matches exactly the catalogue and nothing else (compile/glob.ts).
+includes:
+  - '*.**'

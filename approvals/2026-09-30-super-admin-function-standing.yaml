@@ -1,0 +1,22 @@
+# MCPForge approval record — the standing authorization for super-admin ×
+# function (W0-P31; 02 §11.4.4 / 05 §3.3.4, CLAUDE.md non-negotiable 7).
+# Without it every write the super admin makes needs a per-call human
+# approval. It removes nothing else: plan -> confirm, guardrails, SoD and the
+# identity requirement all still run on every call.
+apiVersion: mcpforge/v1
+kind: Approval
+id: 2026-09-30-super-admin-function-standing
+status: approved
+decision: approved
+subject:
+  kind: BindingGrant
+  role: super-admin
+  bindingType: function
+action: standing-authorization
+summary: "Grant role super-admin a standing authorization to execute function-binding writes through the ordinary plan -> confirm path without a per-call human approval."
+requestedBy: pattnaikbikash@gmail.com
+requestedAt: 2026-09-30T00:00:00.000Z
+approver: Admin
+approvedAt: 2026-09-30
+expiresAt: 2027-03-29
+note: "Provisional approval on the owner's decision of 2026-09-30 (W0-P31). Re-review once real stewards/approvers are named. Expiry is the 180-day default (02 §11.4)."

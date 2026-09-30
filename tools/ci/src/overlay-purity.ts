@@ -127,6 +127,7 @@ function checkDeclaredKeys(doc: Record<string, unknown>): string | null {
       'subjectOverrides',
       'personas',
       'identityAdmins',
+      'superAdmins',
     ]);
     for (const key of Object.keys(doc)) {
       if (!allowedTop.has(key))
