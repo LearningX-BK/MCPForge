@@ -65,8 +65,12 @@ export interface RecordUsageCallInput {
   readonly toolId: string;
   readonly bindingType: string | null;
   readonly isWrite: boolean;
-  /** 02 §4.6 — `plan | execute | reject | reverse`. */
-  readonly phase: 'plan' | 'execute' | 'reject' | 'reverse';
+  /**
+   * 02 §4.6 — `plan | execute | reject | reverse`, plus W0-P25's `approve`. An
+   * `approve` row counts as one call of its consumer and as nothing else: it is
+   * not a write, a plan or a confirmation.
+   */
+  readonly phase: 'plan' | 'execute' | 'reject' | 'reverse' | 'approve';
   /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
   readonly outcome: 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';
   readonly errorCode?: string | null;

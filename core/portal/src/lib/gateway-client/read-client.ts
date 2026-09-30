@@ -14,10 +14,16 @@
 // W0-P2 §4(c): gateway-down must never look like empty. So a read never
 // throws to a page and never returns `[]` for a failure. It returns one of
 // five states, and the page renders each one distinctly.
+//
+// W0-P25 (owner decision, 30 Sep 2026): the gateway's ONE write under
+// `/api/v1`, deciding a runtime approval, goes through this same module and
+// the same two-halves request, so there is still exactly one file that knows a
+// gateway URL. The approver is never sent: the gateway takes it from the token.
 
 import {
   API_V1_PATHS,
   apiErrorSchema,
+  approvalDecisionResponseSchema,
   approvalDetailResponseSchema,
   approvalsResponseSchema,
   auditVerifyResponseSchema,
@@ -26,6 +32,8 @@ import {
   consumerUsageResponseSchema,
   deploymentResponseSchema,
   enablementResponseSchema,
+  type ApprovalDecisionRequest,
+  type ApprovalDecisionResponse,
   type ApprovalDetailResponse,
   type ApprovalsResponse,
   type AuditVerifyResponse,
@@ -85,7 +93,16 @@ async function sessionAccessToken(): Promise<string | null> {
   return session?.grant.accessToken ?? null;
 }
 
-async function read<T>(path: string, schema: ZodType<T>, deps: ReadDeps): Promise<ReadResult<T>> {
+function read<T>(path: string, schema: ZodType<T>, deps: ReadDeps): Promise<ReadResult<T>> {
+  return request(path, schema, deps, undefined);
+}
+
+async function request<T>(
+  path: string,
+  schema: ZodType<T>,
+  deps: ReadDeps,
+  post: { readonly body: unknown } | undefined,
+): Promise<ReadResult<T>> {
   const token = await (deps.accessToken ?? sessionAccessToken)();
   if (token === null) {
     return {
@@ -108,11 +125,18 @@ async function read<T>(path: string, schema: ZodType<T>, deps: ReadDeps): Promis
   const endpoint = `${base}${path}`;
   let res: Response;
   try {
-    res = await (deps.fetch ?? ((input, init) => fetch(input, init)))(endpoint, {
-      method: 'GET',
-      headers: { ...consumer, authorization: `Bearer ${token}`, accept: 'application/json' },
-      cache: 'no-store',
-    });
+    const headers = { ...consumer, authorization: `Bearer ${token}`, accept: 'application/json' };
+    res = await (deps.fetch ?? ((input, init) => fetch(input, init)))(
+      endpoint,
+      post === undefined
+        ? { method: 'GET', headers, cache: 'no-store' }
+        : {
+            method: 'POST',
+            headers: { ...headers, 'content-type': 'application/json' },
+            body: JSON.stringify(post.body),
+            cache: 'no-store',
+          },
+    );
   } catch {
     return {
       kind: 'gateway-down',
@@ -218,4 +242,22 @@ export function readEnablement(deps: ReadDeps = {}): Promise<ReadResult<Enableme
 
 export function readDeployment(deps: ReadDeps = {}): Promise<ReadResult<DeploymentResponse>> {
   return read(API_V1_PATHS.deployment, deploymentResponseSchema, deps);
+}
+
+// --- the one write (W0-P25) ------------------------------------------------------
+
+/**
+ * Decide a runtime approval as the signed-in viewer. The gateway checks that
+ * the viewer is not the requester and that the tool is within their own
+ * grants, records an audit row either way, and never returns the confirm
+ * token (it belongs to the requester).
+ */
+export function decideApproval(
+  approvalId: string,
+  decision: ApprovalDecisionRequest,
+  deps: ReadDeps = {},
+): Promise<ReadResult<ApprovalDecisionResponse>> {
+  return request(API_V1_PATHS.approvalDecision(approvalId), approvalDecisionResponseSchema, deps, {
+    body: decision,
+  });
 }

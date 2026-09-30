@@ -67,8 +67,8 @@ describe('status.ts — one vocabulary, two products (03 §13.5)', () => {
     assertWellFormed(BINDING_TYPE);
   });
 
-  it('CALL_PHASE covers all 4 audit phases (02 §4.6): plan | execute | reject | reverse', () => {
-    expect(CALL_PHASES).toHaveLength(4);
+  it('CALL_PHASE covers all 5 audit phases (02 §4.6 + W0-P25): plan | execute | reject | reverse | approve', () => {
+    expect(CALL_PHASES).toHaveLength(5);
     expect(Object.keys(CALL_PHASE).sort()).toEqual([...CALL_PHASES].sort());
     assertWellFormed(CALL_PHASE);
   });

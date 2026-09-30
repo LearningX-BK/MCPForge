@@ -26,8 +26,13 @@ export interface AuditCredentialRef {
   readonly version: string | null;
 }
 
-/** 02 §4.6 — `plan | execute | reject | reverse`. */
-export type AuditPhase = 'plan' | 'execute' | 'reject' | 'reverse';
+/**
+ * 02 §4.6 — `plan | execute | reject | reverse`, plus `approve` (W0-P25, owner
+ * decision 30 Sep 2026): a human deciding a runtime approval request, or a
+ * refused attempt to. The column is free text in both dialects, so no
+ * migration is needed; the value is covered by the row hash like any other.
+ */
+export type AuditPhase = 'plan' | 'execute' | 'reject' | 'reverse' | 'approve';
 
 /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
 export type AuditOutcome = 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';

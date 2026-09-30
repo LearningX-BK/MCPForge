@@ -12,6 +12,13 @@
 // every response it sends through these schemas in its tests; the portal
 // parses every response it receives through them at runtime.
 //
+// W0-P25 (owner decision, 30 Sep 2026, option (a)) adds exactly ONE write:
+// `POST /api/v1/approvals/{id}/decision`, a human deciding a runtime approval
+// request. It decides through the gateway's approval gate and nothing else, it
+// never returns the confirm token (that belongs to the requester), and every
+// decision and every refused attempt is a hash-chained `approve` audit row.
+// Every other path under the prefix stays GET-only.
+//
 // Every call needs BOTH a registered consumer (`mcpforge-consumer-assertion`)
 // AND a signed-in human (`Authorization: Bearer`), exactly as `/mcp` does
 // (non-negotiable 6). What a response contains is filtered by the READ
@@ -25,13 +32,16 @@ import { z } from 'zod';
 
 export const API_V1_PREFIX = '/api/v1';
 
-/** The eight approved paths. Nothing else under the prefix exists. */
+/** The eight approved reads and the one decision write. Nothing else under the prefix exists. */
 export const API_V1_PATHS = {
   calls: '/api/v1/calls',
   call: (callId: string) => `/api/v1/calls/${encodeURIComponent(callId)}`,
   auditVerify: '/api/v1/audit/verify',
   approvals: '/api/v1/approvals',
   approval: (approvalId: string) => `/api/v1/approvals/${encodeURIComponent(approvalId)}`,
+  /** W0-P25 — `POST` only. The single write under the prefix. */
+  approvalDecision: (approvalId: string) =>
+    `/api/v1/approvals/${encodeURIComponent(approvalId)}/decision`,
   consumerUsage: '/api/v1/consumers/usage',
   enablement: '/api/v1/enablement',
   deployment: '/api/v1/deployment',
@@ -56,7 +66,8 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 
 // --- calls -------------------------------------------------------------------
 
-export const AUDIT_PHASES = ['plan', 'execute', 'reject', 'reverse'] as const;
+/** `approve` (W0-P25): a human deciding a runtime approval request, or a refused attempt to. */
+export const AUDIT_PHASES = ['plan', 'execute', 'reject', 'reverse', 'approve'] as const;
 export const AUDIT_OUTCOMES = [
   'ok',
   'business_error',
@@ -238,6 +249,42 @@ export const approvalDetailResponseSchema = z.object({
   approval: runtimeApprovalSchema,
 });
 export type ApprovalDetailResponse = z.infer<typeof approvalDetailResponseSchema>;
+
+// --- approval decision (W0-P25, the one write) ----------------------------------
+
+/** Longest decline reason accepted. It is returned to the requester's agent as its `next`. */
+export const APPROVAL_REASON_MAX = 2000;
+
+/**
+ * The request body. The approver is NEVER in it: the gateway takes the approver
+ * from the signed-in human, so a body cannot name someone else as approver.
+ * A decline needs a reason, because 03 §7.4 returns it to the agent as its `next`.
+ */
+export const approvalDecisionRequestSchema = z
+  .object({
+    decision: z.enum(['approved', 'rejected']),
+    reason: z.string().trim().min(1).max(APPROVAL_REASON_MAX).optional(),
+  })
+  .strict()
+  .refine((body) => body.decision !== 'rejected' || body.reason !== undefined, {
+    message: 'A decline needs a reason.',
+    path: ['reason'],
+  });
+export type ApprovalDecisionRequest = z.infer<typeof approvalDecisionRequestSchema>;
+
+/**
+ * The response to a decision that was recorded. It carries NO confirm token:
+ * the token belongs to the requester, who collects it with
+ * `forge.approval.status` (03 §7.4, the approver never executes).
+ */
+export const approvalDecisionResponseSchema = z.object({
+  asOf: z.string(),
+  approval: runtimeApprovalSchema,
+  /** The hash-chained `approve` audit row this decision wrote. */
+  auditCallId: z.string(),
+  next: z.string().min(1),
+});
+export type ApprovalDecisionResponse = z.infer<typeof approvalDecisionResponseSchema>;
 
 // --- consumer usage ----------------------------------------------------------
 

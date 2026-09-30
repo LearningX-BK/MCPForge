@@ -228,10 +228,11 @@ export const BINDING_TYPE: Readonly<Record<BindingType, StatusEntry>> = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// CALL_PHASE — 02 §4.6's audit `phase` column: plan | execute | reject | reverse.
+// CALL_PHASE — 02 §4.6's audit `phase` column: plan | execute | reject | reverse,
+// plus `approve` (W0-P25, owner decision 30 Sep 2026).
 // ---------------------------------------------------------------------------
 
-export const CALL_PHASES = ['plan', 'execute', 'reject', 'reverse'] as const;
+export const CALL_PHASES = ['plan', 'execute', 'reject', 'reverse', 'approve'] as const;
 export type CallPhase = (typeof CALL_PHASES)[number];
 
 export const CALL_PHASE: Readonly<Record<CallPhase, StatusEntry>> = {
@@ -258,6 +259,13 @@ export const CALL_PHASE: Readonly<Record<CallPhase, StatusEntry>> = {
     label: 'Reverse',
     srLabel: 'Call phase: reverse. This call reverses an earlier execute.',
     icon: 'Undo2',
+  },
+  approve: {
+    token: 'status-neutral',
+    label: 'Approve',
+    srLabel:
+      'Call phase: approve. A person decided a runtime approval request, or was refused; nothing reached the target system.',
+    icon: 'BadgeCheck',
   },
 } as const;
 

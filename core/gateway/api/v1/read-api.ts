@@ -5,8 +5,11 @@
 // (`@mcpforge/shared/api/v1`) and the row filter. This module serves exactly
 // that and nothing more:
 //
-//  - GET only. Any other method is 405 with a `next`; there is no write path
-//    here and none may be added without a fresh decision (W0-P2 §7 item 1).
+//  - GET only, with ONE exception. Any other method is 405 with a `next`.
+//    The exception is W0-P25's `POST /api/v1/approvals/{id}/decision` (owner
+//    decision, 30 Sep 2026), served by ./approval-decision.ts behind the same
+//    front door. No other write may be added without a fresh decision (W0-P2
+//    §7 item 1).
 //  - No tool discovery and no invocation: nothing here reads a tool's
 //    description, schema or card, and nothing calls the policy chain's
 //    execute path. Agents reach tools through `/mcp` only.
@@ -62,17 +65,13 @@ import type { ApprovalRequest } from '../../store/runtime/types.js';
 import type { ConsumerUsageBucket } from '../../store/usage/types.js';
 import type { ConsumerAuthGate } from '../../transport/http.js';
 import { identityRequestFrom } from '../../transport/session-binding.js';
-
-/** Status per refusal code, matching `/mcp`'s front door (`transport/http.ts`). */
-const STATUS_BY_CODE: Readonly<Record<string, number>> = {
-  CONSUMER_UNREGISTERED: 401,
-  CONSUMER_SUSPENDED: 403,
-  AUTH_REQUIRED: 401,
-  IDENTITY_UNRESOLVED: 403,
-  NOT_FOUND: 404,
-  METHOD_NOT_ALLOWED: 405,
-  INPUT_INVALID: 400,
-};
+import type { ApprovalGate } from '../../policy/approval/index.js';
+import {
+  DECISION_BODY_MAX_BYTES,
+  decideApproval,
+  decisionPathApprovalId,
+} from './approval-decision.js';
+import { ApiRefusal, STATUS_BY_CODE } from './refusal.js';
 
 export interface ReadApiOptions {
   readonly repoRoot: string;
@@ -86,22 +85,18 @@ export interface ReadApiOptions {
   /** Defaults to `.mcpforge/probe-report.json` when present. */
   readonly loadProbe?: () => ProbeReport | null;
   readonly now?: () => Date;
+  /**
+   * W0-P25 — the gateway's ONE approval gate, the same instance stage 6g
+   * raises through. Absent, the decision path is refused like any other
+   * write method: nothing here can decide without the gate.
+   */
+  readonly approvals?: ApprovalGate;
 }
 
 export interface ReadApi {
   /** True for any path under `/api/v1`. The transport routes those here and nowhere else. */
   handles(pathname: string): boolean;
   handle(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void>;
-}
-
-class ApiRefusal extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly next: string,
-  ) {
-    super(message);
-  }
 }
 
 interface Viewer {
@@ -385,7 +380,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     throw new ApiRefusal(
       'NOT_FOUND',
       `${url.pathname} is not an /api/v1 endpoint.`,
-      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment. Agents reach tools through /mcp only.',
+      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, and POST /approvals/{id}/decision. Agents reach tools through /mcp only.',
     );
   }
 
@@ -397,12 +392,27 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     async handle(req, res, url) {
       const correlationId = randomUUID();
       try {
+        const decisionFor = decisionPathApprovalId(url.pathname);
+        const gate = options.approvals;
+        if (decisionFor !== undefined && gate !== undefined && req.method === 'POST') {
+          // The front door runs before the body is even read.
+          const viewer = await authenticate(req, correlationId);
+          const body = await readBoundedJson(req);
+          const decided = await decideApproval(
+            { store: options.store, catalogue: options.catalogue, gate, gatewayVersion, now },
+            viewer,
+            decisionFor,
+            body,
+          );
+          send(res, 200, decided);
+          return;
+        }
         if (req.method !== 'GET') {
-          res.setHeader('allow', 'GET');
+          res.setHeader('allow', decisionFor !== undefined && gate !== undefined ? 'POST' : 'GET');
           throw new ApiRefusal(
             'METHOD_NOT_ALLOWED',
             `${req.method ?? 'This method'} is not served: /api/v1 is read-only.`,
-            'Runtime writes go through /mcp and the write path (plan, confirm, execute); definitional changes go through a git change proposal. Use GET here.',
+            'Runtime writes go through /mcp and the write path (plan, confirm, execute); definitional changes go through a git change proposal. Use GET here. The one exception is deciding a runtime approval: POST /api/v1/approvals/{id}/decision.',
           );
         }
         // The front door runs BEFORE routing, so an unauthenticated caller
@@ -584,6 +594,39 @@ function pageLimit(url: URL): number {
     );
   }
   return Math.min(n, API_V1_PAGE_MAX);
+}
+
+/**
+ * The decision body, parsed. Bounded: a verdict and a reason never need more
+ * than `DECISION_BODY_MAX_BYTES`, and a larger body is refused unread rather
+ * than buffered. Malformed JSON is `INPUT_INVALID`, never a 500.
+ */
+async function readBoundedJson(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buf = typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer);
+    size += buf.length;
+    if (size > DECISION_BODY_MAX_BYTES) {
+      throw new ApiRefusal(
+        'INPUT_INVALID',
+        `The decision body is larger than ${DECISION_BODY_MAX_BYTES} bytes.`,
+        'Send only {"decision":"approved"} or {"decision":"rejected","reason":"<why>"}, with a reason of at most 2000 characters.',
+      );
+    }
+    chunks.push(buf);
+  }
+  const text = Buffer.concat(chunks).toString('utf8');
+  if (text.trim().length === 0) return undefined;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new ApiRefusal(
+      'INPUT_INVALID',
+      'The decision body is not JSON.',
+      'Send a JSON body: {"decision":"approved"} or {"decision":"rejected","reason":"<why>"}, with content-type application/json.',
+    );
+  }
 }
 
 function send(res: ServerResponse, status: number, body: unknown): void {

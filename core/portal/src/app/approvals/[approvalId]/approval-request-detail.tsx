@@ -7,12 +7,10 @@
 // shown. `ApproverDecisionPanel` needs all three and returns when a real
 // source for them exists (W0-P3d).
 //
-// DECIDING IS NOT WIRED. The gateway's approval gate can decide
-// (`policy/approval/gate.ts`), but no transport exposes a decision to a
-// human: `/mcp` serves tools, and `/api/v1` is read-only by decision
-// (W0-P2 §7). A decision endpoint is a new write path and needs the owner's
-// decision first. This component says so rather than offering a button that
-// would record nothing.
+// DECIDING (W0-P25, owner decision 30 Sep 2026): a pending request carries
+// `DecideForm`, which posts through a server action to the gateway's
+// `POST /api/v1/approvals/{id}/decision`. Every rule about who may decide is
+// the gateway's; this page only forwards the verdict and shows the answer.
 
 import * as React from 'react';
 
@@ -20,6 +18,8 @@ import { PlanSentence } from '@/components/write-path';
 import type { ApprovalView } from '@/components/write-path';
 
 import { RuntimeStateChip } from '../runtime-state-chip';
+import type { DecisionState } from './actions';
+import { DecideForm } from './decide-form';
 
 export interface ApprovalRequestDetailProps {
   readonly approval: ApprovalView;
@@ -27,6 +27,8 @@ export interface ApprovalRequestDetailProps {
   readonly planText: string | null;
   readonly application: string;
   readonly sensitivity: string;
+  /** The decision server action (`./actions.ts`). Absent, no form is offered. */
+  readonly decide?: (prev: DecisionState, form: FormData) => Promise<DecisionState>;
 }
 
 function when(iso: string | undefined): string {
@@ -38,6 +40,7 @@ export function ApprovalRequestDetail({
   planText,
   application,
   sensitivity,
+  decide,
 }: ApprovalRequestDetailProps) {
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-6">
@@ -95,20 +98,12 @@ export function ApprovalRequestDetail({
         ) : null}
       </dl>
 
-      {approval.state === 'pending' ? (
-        <section
-          role="status"
-          data-testid="approval-decision-not-wired"
-          className="rounded-lg border border-status-write-border bg-status-write-bg p-3 text-[13px] text-status-write-strong"
-        >
-          <p className="font-semibold">Deciding from the portal is not available yet.</p>
-          <p className="mt-1">
-            The gateway can hold and check an approval, but it does not yet accept a human decision
-            over any of its interfaces, so a button here would record nothing. Next: the owner
-            decides whether the gateway gains a decision path (it would be a write path, which the
-            read API does not allow).
-          </p>
-        </section>
+      {approval.state === 'pending' && decide !== undefined ? (
+        <DecideForm
+          approvalId={approval.approvalId}
+          requester={approval.requester.subject}
+          action={decide}
+        />
       ) : null}
     </main>
   );
