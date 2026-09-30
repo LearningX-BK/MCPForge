@@ -50,7 +50,7 @@ import { shortHash } from './locked-args';
 import { PlanSentence } from './plan-sentence';
 import { ReversalContract } from './reversal-contract';
 import { WarningList } from './warning-list';
-import { personLabel } from './approval-gate-card';
+import { personLabel } from './approval-labels';
 import type {
   ApprovalView,
   GuardrailResultView,
@@ -64,8 +64,12 @@ export interface ApproverDecisionPanelProps {
   plan: PlanBodyView;
   /** Every guardrail, passed and failed — the same array the requester saw. */
   guardrails?: readonly GuardrailResultView[] | undefined;
-  /** Probe-sourced identity of the REQUESTER, who will execute. */
-  identity: ProbeIdentityView;
+  /**
+   * Probe-sourced identity of the REQUESTER, who will execute. W0-P3f: absent
+   * when no probe report covers this tool, and then the panel SAYS so. It never
+   * renders an identity block it cannot source (CLAUDE.md #2).
+   */
+  identity?: ProbeIdentityView | undefined;
   /** `Approve`, and `Approve with note` when a note has been written. */
   onApprove?: ((note?: string) => void) | undefined;
   /** Never called with a blank reason. */
@@ -151,7 +155,14 @@ export function ApproverDecisionPanel({
       <WarningList warnings={plan.warnings} />
       <GuardrailResultList results={guardrails} />
       {irreversible ? null : <ReversalContract reversal={plan.reversal} />}
-      <IdentityBlock identity={identity} />
+      {identity !== undefined ? (
+        <IdentityBlock identity={identity} />
+      ) : (
+        <p data-testid="approver-identity-unprobed" className="text-[12.5px]/[1.5] text-text-2">
+          No probe report covers this tool, so whether the requester&apos;s identity carries into
+          the target is not asserted here.
+        </p>
+      )}
 
       {decidable ? (
         <div data-testid="approver-actions" className="flex flex-col gap-3 border-t border-line pt-3">

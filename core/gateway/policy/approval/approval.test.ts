@@ -45,6 +45,7 @@ import type { PolicyCall, PolicyContext } from '../types.js';
 import { confirmWriteGate, type DryRunner, type WriteSafetyView } from '../confirm/gate.js';
 import { argsCanonicalHash, planCanonicalHash } from '../confirm/hash.js';
 import { buildPlanBody } from '../confirm/plan.js';
+import { verifiedPlanBody } from '../../api/v1/plan-body.js';
 import {
   CONFIRM_TOKEN_PREFIX,
   generateConfirmSigningKey,
@@ -233,6 +234,38 @@ function newApprovalGate(now: Date = NOW, keyring = singleKeyKeyring(generateCon
 // --- 1 + 2: the plan phase raises, and mints NOTHING ------------------------
 
 describe('W0-F6 plan phase — humanApprovalRequired', () => {
+  it('W0-P3f: stores the exact plan body, which re-hashes to the approved planHash after the SQLite round trip', async () => {
+    const keys = watchedKeyring();
+    const decision = await runPolicyChain(
+      policyCall({ ...BUSINESS_ARGS }),
+      ctxAs(
+        REQUESTER,
+        gateFor({
+          target: mockTarget(),
+          approval: newApprovalGate(NOW, keys.keyring),
+          keyring: keys.keyring,
+        }),
+      ),
+    );
+    if (decision.outcome !== 'responded') throw new Error('expected a plan response');
+    const stored = await store.approvals.get(String(decision.response['approvalId']));
+    expect(stored?.planHash).toBe(expectedPlanHash());
+    const checked = verifiedPlanBody(stored!);
+    expect(checked.status).toBe('verified');
+    if (checked.status !== 'verified') throw new Error('unreachable');
+    expect(checked.body.plan).toBe(stored!.planSummary);
+    expect(checked.body.warnings).toEqual(['PO 0000451 is only 60% receipted.']);
+    // Owner decision: no argument VALUES beyond what the plan already says.
+    // The body has exactly the plan's five keys and no `args`.
+    expect(Object.keys(stored!.planBody as object).sort()).toEqual([
+      'effects',
+      'plan',
+      'reversal',
+      'status',
+      'warnings',
+    ]);
+  });
+
   it('returns awaiting_human_approval with approvalId, approvalUrl and an actionable next', async () => {
     const target = mockTarget();
     const keys = watchedKeyring();
@@ -305,10 +338,7 @@ describe('W0-F6 plan phase — humanApprovalRequired', () => {
       keyring: keys.keyring,
       now: () => NOW,
     });
-    const decision = await runPolicyChain(
-      policyCall({ ...BUSINESS_ARGS }),
-      ctxAs(REQUESTER, gate),
-    );
+    const decision = await runPolicyChain(policyCall({ ...BUSINESS_ARGS }), ctxAs(REQUESTER, gate));
     expect(decision.outcome).toBe('refused');
     if (decision.outcome !== 'refused') throw new Error('unreachable');
     expect(decision.error.code).toBe('APPROVAL_REQUIRED');
@@ -525,7 +555,10 @@ describe('W0-F6 approval mints the token, and the requester executes', () => {
     // spendable nonce, one execution.
     expect(mine.confirmToken).toBe(
       mintApprovedToken(
-        (await store.approvals.get(approvalId)) ?? (() => { throw new Error('gone'); })(),
+        (await store.approvals.get(approvalId)) ??
+          (() => {
+            throw new Error('gone');
+          })(),
         keys.keyring,
       ),
     );
@@ -596,7 +629,10 @@ describe('W0-F6 expiry', () => {
       ctxAs(REQUESTER, gateFor({ target, approval, keyring: keys.keyring })),
     );
     if (decision.outcome !== 'responded') throw new Error('unreachable');
-    return { id: String(decision.response['approvalId']), late: newApprovalGate(now, keys.keyring) };
+    return {
+      id: String(decision.response['approvalId']),
+      late: newApprovalGate(now, keys.keyring),
+    };
   }
 
   it('reports an expired approval as EXPIRED on a status poll, not as absent', async () => {

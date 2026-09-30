@@ -278,6 +278,9 @@ export function confirmWriteGate(deps: ConfirmGateDeps): WriteGate {
       argsCanonicalHash: argsCanonicalHash(call.args),
       planHash: planCanonicalHash(body),
       planSummary: body.plan,
+      // W0-P3f: the exact object `planHash` was computed over, so the reader
+      // can re-hash it and refuse a stored body that is not the approved plan.
+      planBody: body,
       tokenTtlSeconds: ttlSeconds(view),
     });
 

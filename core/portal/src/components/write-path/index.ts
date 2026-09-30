@@ -1,5 +1,5 @@
 // MCPForge — W0-J7: the Plan Review card family barrel (03 §7.6).
-// W0-J8 (`ConfirmAction`, `RefusalBanner`, `ApprovalGateCard`,
+// W0-J8 (`ConfirmAction`, `RefusalBanner`,
 // `ApproverDecisionPanel`) and W0-J9 (`ResultCard`, …)
 // extend this barrel; they are not part of this task.
 export { PlanReviewCard, type PlanReviewCardProps } from './plan-review-card';
@@ -34,14 +34,12 @@ export {
   type ConfirmVariant,
 } from './confirm-action';
 export { RefusalBanner, type RefusalBannerProps } from './refusal-banner';
-export { RefusedPlanCard, type RefusedPlanCardProps } from './refused-plan-card';
-export {
-  ApprovalGateCard,
-  approvalStateSentence,
-  personLabel,
-  timeOfDay,
-  type ApprovalGateCardProps,
-} from './approval-gate-card';
+// W0-P3f deleted `RefusedPlanCard` and `ApprovalGateCard` (owner decision, 30
+// Sep 2026): both render the full argument list, and the approval queue stores
+// only the arguments' hash, never their values. The portal has no surface for
+// either: the requester's card lives in the agent's chat client, where the
+// plan response carries everything it needs.
+export { personLabel, timeOfDay } from './approval-labels';
 export {
   ApproverDecisionPanel,
   type ApproverDecisionPanelProps,

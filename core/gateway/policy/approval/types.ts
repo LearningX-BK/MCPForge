@@ -42,6 +42,7 @@ export interface ApprovalQueue {
     readonly planHash: string;
     readonly argsCanonicalHash: string;
     readonly planSummary?: string;
+    readonly planBody?: unknown;
     readonly callerSubject: string;
     readonly consumerId?: string;
     readonly toolId: string;
@@ -100,6 +101,12 @@ export interface RaiseApprovalInput {
   readonly planHash: string;
   /** The rendered plan sentence the approver will read. */
   readonly planSummary: string;
+  /**
+   * W0-P3f — the whole plan body `planHash` is the canonical hash of, stored
+   * so the approver sees everything the requester saw (03 §7.4). It carries no
+   * argument values beyond what the plan sentence and effects already say.
+   */
+  readonly planBody: unknown;
   /** The tool's own `writeSafety.confirm.tokenTtlSeconds`, for the post-approval window. */
   readonly tokenTtlSeconds: number;
 }

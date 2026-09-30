@@ -3,11 +3,9 @@
 // `ApprovalStateView` (`pending`/`approved`/`rejected`/`expired`) is W0-J8's
 // vocabulary (write-path/types.ts) — this file adds no new state, only a
 // `StatusEntry` mapping for it so the queue row can use the same
-// `StatusChip` primitive `ChangeStateChip` and every other chip use. The
-// four entries mirror `approval-gate-card.tsx`'s own `STATE_CHIP` table
-// (same tokens, same icons, same srLabel wording) rather than diverging —
-// duplicated here because that table is module-private to a file outside
-// this task's `touches: core/portal/src/app/approvals/**`.
+// `StatusChip` primitive `ChangeStateChip` and every other chip use. It was a
+// copy of the deleted `ApprovalGateCard`'s table (W0-P3f removed that card) and
+// is now the only one.
 import type { StatusEntry } from '@mcpforge/shared';
 import type { ApprovalStateView } from '@/components/write-path';
 import { StatusChip, type ChipTreatment } from '@/components/chips';

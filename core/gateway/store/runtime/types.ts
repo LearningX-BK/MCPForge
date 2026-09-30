@@ -263,6 +263,14 @@ export interface ApprovalRequest {
   readonly planHash: string;
   readonly argsCanonicalHash: string;
   readonly planSummary: string | null;
+  /**
+   * W0-P3f — the plan body as stored, parsed from JSON, UNVERIFIED. `null` on
+   * rows raised before the column existed. The store does not check it: the
+   * reader must re-hash it against `planHash` before showing it to anyone
+   * (`api/v1/read-api.ts`). A stored value that is not valid JSON comes back
+   * as its raw string, so the check fails rather than the read.
+   */
+  readonly planBody: unknown;
   readonly callerSubject: string;
   readonly consumerId: string | null;
   readonly toolId: string;
@@ -280,6 +288,8 @@ export interface CreateApprovalInput {
   readonly argsCanonicalHash: string;
   /** The exact `plan` string shown to the approver. */
   readonly planSummary?: string;
+  /** W0-P3f — the whole plan body `planHash` hashes. Stored as JSON. */
+  readonly planBody?: unknown;
   readonly callerSubject: string;
   readonly consumerId?: string;
   readonly toolId: string;

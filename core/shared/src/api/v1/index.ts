@@ -251,9 +251,45 @@ export const approvalsResponseSchema = z.object({
 });
 export type ApprovalsResponse = z.infer<typeof approvalsResponseSchema>;
 
+/**
+ * W0-P3f — the plan body the requester was shown, as stored with the approval
+ * request. Field names are the gateway's `PlanBody` (02 §3.1.1).
+ */
+export const planBodySchema = z.object({
+  status: z.literal('confirm_required'),
+  plan: z.string(),
+  effects: z.array(
+    z.object({
+      system: z.string(),
+      object: z.string(),
+      action: z.string(),
+      reversible: z.boolean(),
+    }),
+  ),
+  warnings: z.array(z.string()),
+  reversal: z.object({
+    class: z.enum(['native-reverse', 'compensating-tool', 'transactional', 'irreversible']),
+    tool: z.string().optional(),
+    windowHours: z.number().optional(),
+    preconditions: z.string().optional(),
+  }),
+});
+export type PlanBody = z.infer<typeof planBodySchema>;
+
+/**
+ * `verified`: the stored body re-hashes to the approval's `planHash`, so it IS
+ * the plan being approved. `absent`: the request predates stored bodies.
+ * `mismatch`: the stored body does not hash to `planHash`; it is withheld
+ * (`planBody: null`) and the request cannot be decided.
+ */
+export const PLAN_BODY_STATUSES = ['verified', 'absent', 'mismatch'] as const;
+
 export const approvalDetailResponseSchema = z.object({
   asOf: z.string(),
   approval: runtimeApprovalSchema,
+  /** Present only when `planBodyStatus` is `verified`. */
+  planBody: planBodySchema.nullable(),
+  planBodyStatus: z.enum(PLAN_BODY_STATUSES),
 });
 export type ApprovalDetailResponse = z.infer<typeof approvalDetailResponseSchema>;
 

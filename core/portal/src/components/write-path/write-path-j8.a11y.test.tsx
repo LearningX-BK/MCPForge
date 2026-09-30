@@ -15,15 +15,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 afterEach(cleanup);
 
 import {
-  ApprovalGateCard,
   ApproverDecisionPanel,
   ConfirmAction,
   RefusalBanner,
-  RefusedPlanCard,
 } from './index';
 import type {
   ApprovalView,
-  LockedArgsView,
   PlanBodyView,
   ProbeIdentityView,
 } from './types';
@@ -42,11 +39,6 @@ const IDENTITY: ProbeIdentityView = {
   carries: 'no',
   probeRef: 'probe/jde-fin/2026-08-20',
   compensatingControl: 'Wrapper schema records p_requested_by.',
-};
-
-const LOCKED: LockedArgsView = {
-  args: { supplier: '4242', amount: 18400 },
-  argsCanonicalHash: 'aaaabbbbccccdddd',
 };
 
 const APPROVAL: ApprovalView = {
@@ -129,27 +121,6 @@ describe('W0-J8 — axe (03 §12.7)', () => {
       expect(screen.getByTestId('refusal-banner').getAttribute('role')).toBe('alert');
       expect(await serious(container)).toEqual([]);
     }
-  });
-
-  it('the refused plan card is clean', async () => {
-    const { container } = render(
-      <RefusedPlanCard
-        refusal={{ code: 'PLAN_EXPIRED', next: 'Plan again.' }}
-        plan={PLAN}
-        identity={IDENTITY}
-        locked={LOCKED}
-        expiresAt={new Date(Date.now() - 1000).toISOString()}
-        onPlanAgain={() => {}}
-      />,
-    );
-    expect(await serious(container)).toEqual([]);
-  });
-
-  it('the approval gate card is clean', async () => {
-    const { container } = render(
-      <ApprovalGateCard approval={APPROVAL} plan={PLAN} identity={IDENTITY} locked={LOCKED} />,
-    );
-    expect(await serious(container)).toEqual([]);
   });
 
   it('the approver decision panel is clean, pending and expired', async () => {

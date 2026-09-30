@@ -20,7 +20,7 @@
 import { RotateCcw } from 'lucide-react';
 import { cn } from 'cn';
 
-import { timeOfDay } from './approval-gate-card';
+import { timeOfDay } from './approval-labels';
 import type { ReplayView } from './types';
 
 /** 03 §7.5's own words, verbatim. Never templated beyond the time. */
