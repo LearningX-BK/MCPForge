@@ -11,6 +11,7 @@ import { readApproval, readCall } from '@/lib/gateway-client/read-client';
 
 import { toCallDetailView } from '../../live';
 import { CallDetailView } from './call-detail-view';
+import { reversalContractFor } from './reversal-facts';
 
 export const dynamic = 'force-dynamic';
 
@@ -42,5 +43,9 @@ export default async function ActivityCallDetailPage({
   const planAsShown =
     approval?.kind === 'ok' ? (approval.data.approval.planSummary ?? undefined) : undefined;
 
-  return <CallDetailView detail={{ ...detail, planAsShown }} />;
+  // W0-P3d: the reversal contract from the audit row plus the committed
+  // manifest at the call's own version (see ./reversal-facts.ts).
+  const reversal = reversalContractFor(detail);
+
+  return <CallDetailView detail={{ ...detail, planAsShown, reversal }} />;
 }

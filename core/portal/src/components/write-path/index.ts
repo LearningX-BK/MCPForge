@@ -1,6 +1,6 @@
 // MCPForge — W0-J7: the Plan Review card family barrel (03 §7.6).
 // W0-J8 (`ConfirmAction`, `RefusalBanner`, `ApprovalGateCard`,
-// `ApproverDecisionPanel`) and W0-J9 (`ExecutionProgress`, `ResultCard`, …)
+// `ApproverDecisionPanel`) and W0-J9 (`ResultCard`, …)
 // extend this barrel; they are not part of this task.
 export { PlanReviewCard, type PlanReviewCardProps } from './plan-review-card';
 export { PlanSentence, type PlanSentenceProps } from './plan-sentence';
@@ -57,12 +57,9 @@ export type {
 } from './types';
 
 // --- W0-J9 (03 §7.5, §7.6) -------------------------------------------------
-export {
-  ExecutionProgress,
-  EXECUTING_HEADING,
-  CORRELATION_ID_LABEL,
-  type ExecutionProgressProps,
-} from './execution-progress';
+// `ExecutionProgress` was deleted in W0-P3d: the portal never executes a
+// runtime write (the requester's agent does, through /mcp; the approver never
+// executes, 03 §7.4), so an in-flight execute has no portal surface to show.
 export {
   ResultCard,
   identityEchoMismatched,
@@ -97,7 +94,6 @@ export { formatWindowEnd } from './reversal-contract';
 export { WRITE_PATH_STEPS } from './types';
 export type {
   CallLinksView,
-  ExecutionView,
   IdentityEchoView,
   LatencyView,
   ReplayView,

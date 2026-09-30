@@ -155,6 +155,13 @@ export const callDetailSchema = callSummarySchema.extend({
   rowHash: z.string(),
   /** References only — `secretRef://…` and a version. Never a value (non-negotiable 8). */
   credentialRefs: z.array(z.object({ secretRef: z.string(), version: z.string().nullable() })),
+  /**
+   * W0-P3d — set on a replayed call (`replayed: true`): the original execution
+   * it returned the result of, from the idempotency record. `null` when this is
+   * not a replay, or when the record has expired and the original can no
+   * longer be named. Never guessed.
+   */
+  replayOf: z.object({ callId: z.string(), ts: z.string() }).nullable(),
   /** The runtime approval this call went through, if any, and its current state. */
   approval: z
     .object({

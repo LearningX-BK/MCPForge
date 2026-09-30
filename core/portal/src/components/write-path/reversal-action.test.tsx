@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 afterEach(cleanup);
 
 import {
-  ExecutionProgress,
   ResultCard,
   ReversalAction,
   WritePathStepper,
@@ -310,7 +309,6 @@ describe('no animation anywhere in the W0-J9 family (03 §4.7, §12)', () => {
   // be a violation in another. Test files themselves assert ON these strings,
   // so only the components are scanned.
   const FILES = [
-    'execution-progress.tsx',
     'result-card.tsx',
     'result-key-chip.tsx',
     'replay-notice.tsx',
@@ -365,7 +363,6 @@ describe('no animation anywhere in the W0-J9 family (03 §4.7, §12)', () => {
 
   it('the other W0-J9 components render no animation class at all', () => {
     const rendered = [
-      render(<ExecutionProgress execution={{ correlationId: 'c1', toolId: 'a.b.c.create' }} />),
       render(
         <ResultCard
           result={{

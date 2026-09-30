@@ -445,6 +445,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
   async function toDetail(r: AuditCallRecord): Promise<CallDetail> {
     const approval =
       r.planHash === null ? undefined : await findApprovalForPlan(r.planHash, r.toolId);
+    const replayOf = r.replayed === true ? await findReplayOriginal(r) : null;
     return {
       ...toSummary(r),
       correlationId: r.correlationId,
@@ -492,6 +493,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
       prevHash: r.prevHash,
       rowHash: r.rowHash,
       credentialRefs: r.credentialRefs.map((c) => ({ secretRef: c.secretRef, version: c.version })),
+      replayOf,
       approval:
         approval === undefined
           ? null
@@ -501,6 +503,30 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
               approverSubject: approval.approverSubject,
             },
     };
+  }
+
+  /**
+   * W0-P3d — the execution a replayed call returned the result of. The
+   * idempotency record for the replay's key names the original call id (02
+   * §3.1.2). The original is the same caller's call to the same tool, so it
+   * is inside whatever authority let this replay be read; it is checked
+   * anyway, and a missing record, a missing row or a mismatch is `null`.
+   */
+  async function findReplayOriginal(
+    r: AuditCallRecord,
+  ): Promise<{ callId: string; ts: string } | null> {
+    if (r.idempotencyKey === null) return null;
+    const record = await options.store.idempotency.get(r.idempotencyKey);
+    if (record?.callId == null || record.callId === r.id) return null;
+    const original = await options.store.audit.get(record.callId);
+    if (
+      original === undefined ||
+      original.toolId !== r.toolId ||
+      original.callerSubject !== r.callerSubject
+    ) {
+      return null;
+    }
+    return { callId: original.id, ts: original.ts };
   }
 
   /**

@@ -25,7 +25,7 @@ test('a write tool is completable plan -> confirm -> execute without a mouse', a
   await page.keyboard.press('Enter');
 
   // Execute: a second explicit step in the sandbox (mirrors the real
-  // ExecutionProgress -> ResultCard transition).
+  // plan -> confirm -> ResultCard sequence).
   await page.getByTestId('sandbox-execute-button').focus();
   await page.keyboard.press('Enter');
   await expect(page.getByTestId('sandbox-status')).toContainText(/executed/i);
