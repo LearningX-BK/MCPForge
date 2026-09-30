@@ -28,7 +28,7 @@
 // mean the chain's order is only asserted once every task is done, which is
 // precisely the mistake this task exists to avoid.
 
-import type { ErrorCode, Guardrail } from '@mcpforge/shared';
+import type { CredentialClass, ErrorCode, Guardrail } from '@mcpforge/shared';
 import type { ReversalContract, ResultKeySpec } from '../reversal/types.js';
 import type { ScopeCatalogueEntry, ScopeContext, ToolId } from '../scope/index.js';
 import type { ExecutionGrantKeyring } from './execution-grant/grant.js';
@@ -81,6 +81,13 @@ export interface PolicyCatalogueEntry extends ScopeCatalogueEntry {
    */
   readonly resultKeys?: readonly ResultKeySpec[];
   readonly toolVersion: string;
+  /**
+   * W0-P12 — the manifest's `binding.credentialClass` (02 §11.5.1), verbatim.
+   * Stage 6e′ refuses every `module-scoped-stored` call at Wave 0, because no
+   * executor this gateway builds can present a stored credential (owner
+   * decision, 30 Sep 2026: fail closed until built).
+   */
+  readonly credentialClass?: CredentialClass;
 }
 
 /** One call, as the chain sees it. */

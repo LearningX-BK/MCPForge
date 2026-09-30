@@ -86,13 +86,34 @@ export type BindingAuthorization =
        * the two apart matters to the agent: one is fixed by an approver issuing
        * a grant, the other cannot be fixed from this client at all.
        */
-      readonly code: 'ELEVATED_GRANT_REQUIRED' | 'CONSUMER_NOT_AUTHORIZED';
+      readonly code: 'ELEVATED_GRANT_REQUIRED' | 'CONSUMER_NOT_AUTHORIZED' | 'TOOL_DISABLED';
       readonly reason: string;
       readonly next: string;
     };
 
 export function authorizeBinding(input: BindingAuthorizationInput): BindingAuthorization {
   const { entry, now } = input;
+
+  // W0-P12, CLAUDE.md #8 / 02 §11.5.1 (owner decision, 30 Sep 2026: fail closed
+  // until built). A stored module credential is legitimate only when all four
+  // parts of the test hold, and two of them (probe-reported non-carriage, the
+  // compensating control echoed into audit) can only be proven at call time by
+  // an executor that presents the credential. This gateway builds no such
+  // executor: `function` exchanges a PER-USER token and never a stored one. So
+  // no call to a `module-scoped-stored` binding can be shown legitimate here,
+  // and every one is refused, FIRST, before any grant is consulted. A grant
+  // cannot admit what the four-part test cannot prove. The four-part runtime
+  // evaluation lands with the first stored-credential executor (W0-P27).
+  if (entry.credentialClass === 'module-scoped-stored') {
+    return {
+      authorized: false,
+      posture: 'elevated',
+      code: 'TOOL_DISABLED',
+      reason: `${entry.toolId} declares binding.credentialClass: module-scoped-stored, and this gateway has no executor that can present a stored credential while proving the four-part test (probe-reported non-carriage, a resolved per-user identity, a compensating control echoed into audit, and a credential scoped to one module and environment). An unprovable stored credential is a service-account fallback, which is forbidden.`,
+      next: `Do not retry ${entry.toolId}; it cannot run in this deployment. Tell the human it is unavailable and name its owner. Its steward must either rebind it with binding.credentialClass: per-user-exchanged, or wait for a stored-credential executor that enforces the four-part test at call time.`,
+    };
+  }
+
   const posture = bindingPosture(entry);
 
   if (posture.posture === 'standard') {
