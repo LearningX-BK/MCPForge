@@ -117,6 +117,15 @@ export const reviewRecordSchema = z.object({
   /** The proposal title — the human-readable "what and why". */
   scope: z.string().min(1),
   files: z.array(z.string()),
+  /**
+   * W0-P33b — set by Approve: the approver's `Principal.subject` (never a
+   * display label, W0-P22), when, and whether the approver is also the author
+   * (allowed for an admin, owner decisions W0-P4 §9-3 and W0-P32, and always
+   * recorded).
+   */
+  approver: z.string().min(1).optional(),
+  approvedAt: z.string().min(1).optional(),
+  selfApproved: z.boolean().optional(),
 });
 export type ReviewRecord = z.infer<typeof reviewRecordSchema>;
 
@@ -177,6 +186,41 @@ export interface AuthoredProposeInput extends ProposeInput {
   readonly author: string;
 }
 
+/** W0-P33b — Approve, as the git layer receives it: the approver is the session. */
+export interface AuthoredApproveInput {
+  readonly id: string;
+  readonly approver: string;
+  readonly selfApproved: boolean;
+}
+
+/**
+ * W0-P33b — the checks a merge must pass, run against the branch's working
+ * tree: `forge codegen`, then `forge validate`. The git layer never decides
+ * what "valid" means; it is handed this.
+ */
+export type MergeCheck = (
+  workingTree: string,
+) => Promise<
+  { readonly ok: true } | { readonly ok: false; readonly message: string; readonly next: string }
+>;
+
+/** W0-P33b — Merge, as the git layer receives it. */
+export interface AuthoredMergeInput {
+  readonly id: string;
+  readonly mergedBy: string;
+  readonly check: MergeCheck;
+}
+
+/** W0-P33b — what a merge produced. Merged is not deployed (03 §6.1). */
+export const mergeResultSchema = z.object({
+  proposal: changeProposalSchema,
+  mergeCommit: z.string().min(1),
+  /** True when codegen changed `generated/` and that diff was committed on the branch. */
+  generatedCommitted: z.boolean(),
+  next: z.string().min(1),
+});
+export type MergeResult = z.infer<typeof mergeResultSchema>;
+
 /** The closed failure vocabulary for this seam (CLAUDE.md §5: no bare Errors). */
 export const changeHostErrorCodes = [
   'CHANGE_NOT_FOUND',
@@ -187,6 +231,10 @@ export const changeHostErrorCodes = [
   // W0-P5b — the portal's action gates (W0-P4 §3).
   'CHANGE_SIGN_IN_REQUIRED',
   'CHANGE_NOT_PERMITTED',
+  // W0-P33b — Approve and Merge.
+  'CHANGE_NOT_APPROVED',
+  'CHANGE_CHECKS_FAILED',
+  'CHANGE_MERGE_CONFLICT',
 ] as const;
 export type ChangeHostErrorCode = (typeof changeHostErrorCodes)[number];
 
@@ -229,6 +277,16 @@ export interface ChangeHost {
    * readable; anything else is refused with `CHANGE_NOT_PERMITTED`.
    */
   readFile(id: string, path: string): Promise<string | undefined>;
+  /**
+   * W0-P33b — Approve: records the approver on the review record. The
+   * approver is the session, never an argument.
+   */
+  approve(id: string): Promise<ChangeProposal>;
+  /**
+   * W0-P33b — Merge an approved change into the base branch, after
+   * `forge codegen` and `forge validate` pass on it. Merged is not deployed.
+   */
+  merge(id: string): Promise<MergeResult>;
 }
 
 /**
@@ -262,7 +320,12 @@ export function isDefinitionalPath(path: string): boolean {
  * the committer. Only the server actions construct these inputs, from the
  * session (W0-P5b).
  */
-export interface GitChangeHost extends Omit<ChangeHost, 'saveDraft' | 'propose'> {
+export interface GitChangeHost extends Omit<
+  ChangeHost,
+  'saveDraft' | 'propose' | 'approve' | 'merge'
+> {
   saveDraft(input: AuthoredSaveDraftInput): Promise<ChangeProposal>;
   propose(input: AuthoredProposeInput): Promise<ChangeProposal>;
+  approve(input: AuthoredApproveInput): Promise<ChangeProposal>;
+  merge(input: AuthoredMergeInput): Promise<MergeResult>;
 }

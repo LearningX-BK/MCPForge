@@ -10,6 +10,7 @@ import {
   gateApproveDefinitional,
   gateDiscard,
   gateKill,
+  gateMerge,
   gateSaveOrPropose,
   issueCredentialNext,
   type GateViewer,
@@ -72,6 +73,18 @@ describe('Approve a definitional change', () => {
   it('a non-admin who did not propose is refused too, naming who can', () => {
     const result = gateApproveDefinitional(viewer('local:arjun', ['business']), 'local:priya');
     expect(result).toMatchObject({ allowed: false, next: expect.stringMatching(/admin/) });
+  });
+});
+
+describe('Merge (W0-P33b)', () => {
+  it('a super admin only, decided by the caller from git — never from a persona', () => {
+    expect(gateMerge(viewer('local:super', []), true)).toEqual({ allowed: true });
+    const refused = gateMerge(viewer('local:meera', ['admin', 'developer', 'business']), false);
+    expect(refused.allowed).toBe(false);
+    if (refused.allowed) return;
+    expect(refused.message).toContain('super admin');
+    expect(refused.next.length).toBeGreaterThan(0);
+    expect(gateMerge(null, true).allowed).toBe(false);
   });
 });
 

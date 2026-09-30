@@ -19,7 +19,7 @@ import { PreviewPane } from './preview-pane';
 import { ChecksPane } from './checks-pane';
 import { SandboxRun } from './sandbox-run';
 import { Button } from '@/components/ui/button';
-import { ProposeButton } from '@/components/change';
+import { ProposeButton, ReviewActions } from '@/components/change';
 import { useOptionalChangeHost, type ChangeHost, type ChangeProposal } from '@/lib/change-host';
 import { buildPreviews } from '../_lib/representations';
 import type { BuildDraft } from '../types';
@@ -162,6 +162,13 @@ export function DraftEditor({ draft, host }: DraftEditorProps): React.ReactEleme
             onProposed={setProposal}
           />
         )}
+        {proposal === undefined ? null : (
+          <ReviewActions
+            proposal={proposal}
+            {...(host === undefined ? {} : { host })}
+            onChanged={setProposal}
+          />
+        )}
         <p className="max-w-[60ch] text-[12px] text-text-2">
           Nothing here is written to the running gateway. Save draft records the manifest on a
           branch (<code>{liveManifestPath}</code>); Propose opens the change for review.
@@ -183,7 +190,7 @@ export function DraftEditor({ draft, host }: DraftEditorProps): React.ReactEleme
         <p role="status" aria-live="polite" data-testid="draft-editor-status" className="text-[12px] text-text-2">
           {proposal.state === 'draft'
             ? `Draft saved on ${proposal.branch}.`
-            : `Proposed — this change is now ${proposal.state.replace(/_/g, ' ')}.`}
+            : `This change is now ${proposal.state.replace(/_/g, ' ')}.`}
         </p>
       )}
     </div>

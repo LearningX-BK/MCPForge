@@ -93,6 +93,22 @@ export function gateApproveDefinitional(
 }
 
 /**
+ * W0-P33b — Merge an approved definitional change into the definitions the
+ * gateway reads: a SUPER ADMIN only (owner decision, 30 Sep 2026, docs/
+ * build-plan/w0-p33-portal-merge.md §2.2). `isSuperAdmin` is decided from the
+ * viewer's gateway-verified groups against the git-held `superAdmins:` list,
+ * never from a persona.
+ */
+export function gateMerge(viewer: GateViewer | null, isSuperAdmin: boolean): GateResult {
+  if (viewer === null) return NOT_SIGNED_IN;
+  if (isSuperAdmin) return ALLOWED;
+  return refuse(
+    'Merging a change into the definitions needs a super admin.',
+    'Ask a super admin (a member of a superAdmins group in the git mapping) to merge it; the approved change stays open.',
+  );
+}
+
+/**
  * Kill switches, all five granularities. W0-P4 §9 decision 4: the portal shows
  * the `forge kill` command now; a real write path is a later task. So
  * "allowed" means "show the command", and a refusal says who can run it.

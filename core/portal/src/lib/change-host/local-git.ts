@@ -38,6 +38,7 @@
 //    falls to `other` so the three headline diffs stay exactly three.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -51,10 +52,14 @@ import {
   type ChangeState,
   type DiffFile,
   type DiffFileStatus,
+  type AuthoredApproveInput,
+  type AuthoredMergeInput,
   type AuthoredProposeInput,
+  type MergeResult,
   type RemoteInfo,
   type ReviewRecord,
   type RoleScopeDelta,
+  reviewRecordSchema,
   type AuthoredSaveDraftInput,
 } from './types';
 
@@ -81,6 +86,14 @@ export interface LocalGitOptions {
   branchPrefix?: string;
   /** Override for tests / unusual installs. Default `git`. */
   gitBinary?: string;
+  /**
+   * W0-P33b — the working tree that holds the BASE branch and that the
+   * gateway reads (the VM's definitions clone). When set, `repoRoot` is a
+   * linked worktree of it where drafts are checked out, the base branch is
+   * never checked out in `repoRoot`, and Merge runs here. Unset (the
+   * sandbox, tests), everything happens in `repoRoot`.
+   */
+  integrationRoot?: string;
 }
 
 /** `forge/W0-J12-slug` -> `forge-W0-J12-slug`; ids are stable per branch. */
@@ -115,7 +128,50 @@ export function serialiseReviewRecord(record: ReviewRecord): string {
   ];
   for (const file of record.files) lines.push(`  - ${yamlString(file)}`);
   if (record.files.length === 0) lines[lines.length - 1] = 'files: []';
+  // W0-P33b — written by Approve.
+  if (record.approver !== undefined) lines.push(`approver: ${yamlString(record.approver)}`);
+  if (record.approvedAt !== undefined) lines.push(`approvedAt: ${yamlString(record.approvedAt)}`);
+  if (record.selfApproved !== undefined) lines.push(`selfApproved: ${record.selfApproved}`);
   return `${lines.join('\n')}\n`;
+}
+
+/**
+ * W0-P33b — read back exactly what `serialiseReviewRecord` writes: one
+ * `key: <JSON>` per line, and `files` as a list of JSON strings. Anything it
+ * cannot read is `undefined`, never a guess.
+ */
+export function parseReviewRecord(text: string): ReviewRecord | undefined {
+  const values: Record<string, unknown> = {};
+  const files: string[] = [];
+  let inFiles = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith('#') || line.trim().length === 0) continue;
+    const item = /^ {2}- (.+)$/.exec(line);
+    if (inFiles && item !== null) {
+      try {
+        files.push(String(JSON.parse(item[1] ?? '')));
+      } catch {
+        return undefined;
+      }
+      continue;
+    }
+    inFiles = false;
+    const kv = /^([A-Za-z]+): ?(.*)$/.exec(line);
+    if (kv === null) return undefined;
+    const key = kv[1] ?? '';
+    const raw = kv[2] ?? '';
+    if (key === 'files') {
+      inFiles = raw.length === 0;
+      continue;
+    }
+    try {
+      values[key] = JSON.parse(raw);
+    } catch {
+      return undefined;
+    }
+  }
+  const parsed = reviewRecordSchema.safeParse({ ...values, files });
+  return parsed.success ? parsed.data : undefined;
 }
 
 function bucketFor(filePath: string): 'manifest' | 'generated' | 'other' {
@@ -172,18 +228,20 @@ export class LocalGit implements GitChangeHost {
   readonly #baseBranch: string;
   readonly #branchPrefix: string;
   readonly #git: string;
+  readonly #integrationRoot: string | undefined;
 
   constructor(options: LocalGitOptions) {
     this.#repoRoot = options.repoRoot;
     this.#baseBranch = options.baseBranch ?? 'main';
     this.#branchPrefix = options.branchPrefix ?? 'forge/';
     this.#git = options.gitBinary ?? 'git';
+    this.#integrationRoot = options.integrationRoot;
   }
 
-  async #git_(args: readonly string[]): Promise<string> {
+  async #git_(args: readonly string[], cwd: string = this.#repoRoot): Promise<string> {
     try {
       const { stdout } = await run(this.#git, [...args], {
-        cwd: this.#repoRoot,
+        cwd,
         maxBuffer: 64 * 1024 * 1024,
       });
       return stdout;
@@ -331,8 +389,176 @@ export class LocalGit implements GitChangeHost {
       );
     }
     const current = await this.currentBranch();
-    if (current === proposal.branch) await this.#git_(['checkout', this.#baseBranch]);
+    if (current === proposal.branch) await this.#leaveBranch();
     await this.#git_(['branch', '-D', proposal.branch]);
+  }
+
+  /**
+   * Step off a branch. In a linked worktree the base branch is checked out in
+   * the integration tree and cannot be checked out twice, so detach instead.
+   */
+  async #leaveBranch(): Promise<void> {
+    if (this.#integrationRoot === undefined) await this.#git_(['checkout', this.#baseBranch]);
+    else await this.#git_(['checkout', '--detach', this.#baseBranch]);
+  }
+
+  async #readRecord(branch: string): Promise<ReviewRecord | undefined> {
+    const recordPath = reviewRecordPathFor(proposalIdForBranch(branch));
+    const raw = await this.#tryGit(['show', `${branch}:${recordPath}`]);
+    return raw === undefined ? undefined : parseReviewRecord(raw);
+  }
+
+  async #commitAs(who: string, message: string, cwd: string = this.#repoRoot): Promise<void> {
+    await this.#git_(
+      ['-c', `user.name=${who}`, '-c', `user.email=${who}@mcpforge.local`, 'commit', '-m', message],
+      cwd,
+    );
+  }
+
+  /**
+   * W0-P33b — Approve. Only a proposal `in_review` can be approved; the
+   * approver and whether they are also the author are recorded on the review
+   * record, on the branch, as governance evidence. WHO may approve is the
+   * caller's gate (`gateApproveDefinitional`), never decided here.
+   */
+  async approve(input: AuthoredApproveInput): Promise<ChangeProposal> {
+    const proposal = await this.getProposal(input.id);
+    if (proposal === undefined) {
+      throw new ChangeHostError(
+        'CHANGE_NOT_FOUND',
+        `No change proposal ${input.id}.`,
+        'Pick the change from the change tray.',
+      );
+    }
+    if (proposal.state !== 'in_review') {
+      throw new ChangeHostError(
+        'CHANGE_NOT_PERMITTED',
+        `Change ${input.id} is ${proposal.state}; only a proposed change can be approved.`,
+        proposal.state === 'draft'
+          ? 'Ask the author to Propose it first; approval is of a proposal, never of a draft.'
+          : 'Nothing to approve. Open the change to see its state.',
+      );
+    }
+    const record = await this.#readRecord(proposal.branch);
+    if (record === undefined) {
+      throw new ChangeHostError(
+        'CHANGE_NOT_FOUND',
+        `Change ${input.id} has no readable review record.`,
+        'Ask the author to Propose it again, which rewrites the review record.',
+      );
+    }
+    await this.#git_(['checkout', proposal.branch]);
+    const approved: ReviewRecord = {
+      ...record,
+      decision: 'approved',
+      approver: input.approver,
+      approvedAt: new Date().toISOString(),
+      selfApproved: input.selfApproved,
+    };
+    const relative = reviewRecordPathFor(input.id);
+    await writeFile(path.join(this.#repoRoot, relative), serialiseReviewRecord(approved), 'utf8');
+    await this.#git_(['add', '--', relative]);
+    await this.#commitAs(input.approver, `Approve: ${proposal.title}`);
+    const after = await this.getProposal(input.id);
+    if (after === undefined) {
+      throw new ChangeHostError(
+        'CHANGE_NOT_FOUND',
+        `Change ${input.id} was approved but could not be read back.`,
+        'Refresh the change tray.',
+      );
+    }
+    return after;
+  }
+
+  /**
+   * W0-P33b — Merge an APPROVED change. The integration tree must be clean
+   * and on the base branch. `check` (`forge codegen` then `forge validate`)
+   * runs on the branch; a codegen diff is committed on the branch so the
+   * blast radius is visible; any failure refuses with its own `next` and
+   * nothing is merged. The merge itself is one `merge --no-ff`, aborted on
+   * conflict. Merged is not deployed: the gateway picks it up on reload.
+   */
+  async merge(input: AuthoredMergeInput): Promise<MergeResult> {
+    const proposal = await this.getProposal(input.id);
+    if (proposal === undefined) {
+      throw new ChangeHostError(
+        'CHANGE_NOT_FOUND',
+        `No change proposal ${input.id}.`,
+        'Pick the change from the change tray.',
+      );
+    }
+    if (proposal.state !== 'approved') {
+      throw new ChangeHostError(
+        'CHANGE_NOT_APPROVED',
+        `Change ${input.id} is ${proposal.state}; only an approved change can be merged.`,
+        proposal.state === 'merged'
+          ? 'It is already merged; nothing to do.'
+          : 'Have an admin Approve it first, then Merge.',
+      );
+    }
+    const target = this.#integrationRoot ?? this.#repoRoot;
+    if (this.#integrationRoot !== undefined) {
+      const head = (await this.#git_(['rev-parse', '--abbrev-ref', 'HEAD'], target)).trim();
+      const dirty = (await this.#git_(['status', '--porcelain'], target)).trim();
+      if (head !== this.#baseBranch || dirty.length > 0) {
+        throw new ChangeHostError(
+          'CHANGE_HOST_UNAVAILABLE',
+          `The definitions clone is ${head !== this.#baseBranch ? `on ${head}, not ${this.#baseBranch}` : 'not clean'}, so nothing can be merged into it safely.`,
+          `On the VM, run "git -C <definitions clone> status" and return it to a clean ${this.#baseBranch}, then Merge again. The portal never edits that tree except to merge.`,
+        );
+      }
+    }
+
+    await this.#git_(['checkout', proposal.branch]);
+    const checked = await input.check(this.#repoRoot);
+    if (!checked.ok) {
+      await this.#tryGit(['checkout', '--', '.']);
+      throw new ChangeHostError('CHANGE_CHECKS_FAILED', checked.message, checked.next);
+    }
+    if (existsSync(path.join(this.#repoRoot, 'generated'))) {
+      await this.#git_(['add', '-A', '--', 'generated']);
+    }
+    const staged = (await this.#git_(['diff', '--cached', '--name-only'])).trim();
+    const generatedCommitted = staged.length > 0;
+    if (generatedCommitted) await this.#commitAs(input.mergedBy, `Codegen: ${proposal.title}`);
+
+    if (this.#integrationRoot === undefined) await this.#git_(['checkout', this.#baseBranch]);
+    try {
+      await this.#git_(
+        [
+          '-c',
+          `user.name=${input.mergedBy}`,
+          '-c',
+          `user.email=${input.mergedBy}@mcpforge.local`,
+          'merge',
+          '--no-ff',
+          '-m',
+          `Merge ${proposal.branch}: ${proposal.title}`,
+          proposal.branch,
+        ],
+        target,
+      );
+    } catch {
+      await this.#tryGit(['merge', '--abort']);
+      if (this.#integrationRoot !== undefined) {
+        await this.#git_(['merge', '--abort'], target).catch(() => undefined);
+      }
+      throw new ChangeHostError(
+        'CHANGE_MERGE_CONFLICT',
+        `${proposal.branch} does not merge cleanly into ${this.#baseBranch}; nothing was merged.`,
+        'Ask the author to recreate the change on the current definitions, Propose it again, and have it re-approved.',
+      );
+    }
+    const mergeCommit = (await this.#git_(['rev-parse', 'HEAD'], target)).trim();
+    if (this.#integrationRoot !== undefined) await this.#leaveBranch();
+
+    const merged = await this.getProposal(input.id);
+    return {
+      proposal: merged ?? { ...proposal, state: 'merged' },
+      mergeCommit,
+      generatedCommitted,
+      next: 'Merged into the definitions. It is not deployed yet: the gateway serves it after its next catalogue reload, and a new tool reads "Not probed" until a probe enables it.',
+    };
   }
 
   async #branches(): Promise<string[]> {
@@ -365,12 +591,25 @@ export class LocalGit implements GitChangeHost {
     const recordPath = reviewRecordPathFor(id);
     const hasRecord =
       (await this.#tryGit(['cat-file', '-e', `${branch}:${recordPath}`])) !== undefined;
+    const record = hasRecord ? await this.#readRecord(branch) : undefined;
 
-    // Only the three states git can honestly know. Never `deployed`.
-    const state: ChangeState = merged.has(branch) ? 'merged' : hasRecord ? 'in_review' : 'draft';
+    // Only the states git can honestly know. Never `deployed`. W0-P33b adds
+    // `approved`: an approval committed on the review record is a git fact.
+    const state: ChangeState = merged.has(branch)
+      ? 'merged'
+      : record?.decision === 'approved'
+        ? 'approved'
+        : hasRecord
+          ? 'in_review'
+          : 'draft';
 
+    // The author is the review record's requester when there is one: later
+    // commits on the branch may be an approver's or codegen's (W0-P33b).
     const log = (await this.#git_(['log', '-1', '--format=%s%x00%an%x00%aI', branch])).trim();
-    const [subject = branch, author = 'unknown', createdAt = ''] = log.split('\0');
+    const [lastSubject = branch, lastAuthor = 'unknown', createdAt = ''] = log.split('\0');
+    const author = record?.requestedBy ?? lastAuthor;
+    const subject =
+      record !== undefined && state !== 'in_review' ? `Propose: ${record.scope}` : lastSubject;
 
     return {
       id,

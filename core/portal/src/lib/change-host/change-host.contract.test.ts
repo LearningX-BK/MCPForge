@@ -302,6 +302,11 @@ describe('HostedGit — a stub that fails loudly, never quietly (CLAUDE.md §3.1
     ['getProposal', () => host.getProposal('i')],
     ['diff', () => host.diff('i')],
     ['readFile', () => host.readFile('i', 'manifests/x.tool.yaml')],
+    ['approve', () => host.approve({ id: 'i', approver: 'a', selfApproved: false })],
+    [
+      'merge',
+      () => host.merge({ id: 'i', mergedBy: 'a', check: () => Promise.resolve({ ok: true }) }),
+    ],
   ];
 
   for (const [name, call] of calls) {

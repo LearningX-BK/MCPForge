@@ -41,6 +41,11 @@
 # (`MCPFORGE_GATEWAY_PORT`), portal port 3000 matches Next's default.
 
 FROM node:22-slim AS base
+# W0-P33b: the portal commits, approves and merges definitional changes in the
+# VM's definitions clone, so git must be in the image. Nothing else is added.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 WORKDIR /app
 
