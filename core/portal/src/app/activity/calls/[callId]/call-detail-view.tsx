@@ -4,12 +4,27 @@
 // their sha256[:12]), the confirm-token binding, the approval record if
 // any, the identity-honesty block, the result keys, the reversal state, and
 // the hash-chain position. **The reversal action lives here.**"
+//
+// W0-P3d mounts four more of the write-path family here, each fed only by
+// what `/api/v1` and the committed manifest actually hold: `PlanSentence`
+// (the plan text as shown, from the approval), `LockedArgs` (a write's
+// arguments with the hash its confirm token was bound to), `ReversalContract`
+// (class and tool from the audit row, window from the manifest at the call's
+// own version) and `ReplayNotice` (a replay names the execution it returned).
 import { StatusChip } from '../../../../components/chips';
-import { IdentityBlock, ResultKeyChip, ReversalAction } from '../../../../components/write-path';
+import {
+  IdentityBlock,
+  LockedArgs,
+  PlanSentence,
+  ReplayNotice,
+  ResultKeyChip,
+  ReversalAction,
+  ReversalContract,
+} from '../../../../components/write-path';
 import type { ProbeIdentityView, ReversalPlanView } from '../../../../components/write-path';
 import { CALL_OUTCOME, CALL_PHASE } from '@mcpforge/shared';
 
-import { RedactedArg } from '../../redacted-arg';
+import { RedactedArg, redactedAnnouncement } from '../../redacted-arg';
 import type { ActivityCallDetail } from '../../types';
 
 function shortHash(hash: string | undefined): string {
@@ -87,34 +102,60 @@ export function CallDetailView({ detail }: { readonly detail: ActivityCallDetail
         </p>
       </div>
 
+      {/* A replay returned an earlier execution's result; it made no second change. */}
+      {d.replayed === true && d.replayOf !== undefined ? (
+        <ReplayNotice
+          replay={{
+            originalExecutedAt: d.replayOf.ts,
+            originalCallId: d.replayOf.callId,
+            originalCallHref: `/activity/calls/${encodeURIComponent(d.replayOf.callId)}`,
+          }}
+        />
+      ) : null}
+
       {/* Plan as shown — never re-derived. */}
       {d.planAsShown ? (
         <section data-testid="plan-as-shown" aria-label="Plan, as shown">
           <h2 className="mb-1 text-[11px]/[1.4] font-semibold tracking-[0.5px] text-text-2 uppercase">
             Plan — as shown
           </h2>
-          <p className="rounded-md bg-inset px-3 py-2 text-[13.5px]/[1.55] text-text-1">
-            {d.planAsShown}
-          </p>
+          <PlanSentence plan={d.planAsShown} className="rounded-md bg-inset px-3 py-2" />
         </section>
       ) : null}
 
-      {/* Args, with redaction. */}
-      <section data-testid="call-args" aria-label="Arguments">
-        <h2 className="mb-1 text-[11px]/[1.4] font-semibold tracking-[0.5px] text-text-2 uppercase">
-          Arguments
-        </h2>
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 rounded-md bg-inset px-3 py-2 text-[12.5px]/[1.5]">
-          {d.args.map((arg) => (
-            <div key={arg.field} className="contents">
-              <dt className="font-mono text-[11.5px]/[1.45] text-text-2">{arg.field}</dt>
-              <dd>
-                <RedactedArg entry={arg} />
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
+      {/* A write's arguments are the ones its confirm token was bound to:
+          locked, beside their hash. A redacted value is shown as the same
+          announcement the plain list uses, never as a bare hash. Anything
+          without a bound hash (a read) keeps the plain list. */}
+      {d.isWrite && d.argsHash ? (
+        <LockedArgs
+          locked={{
+            argsCanonicalHash: d.argsHash,
+            args: Object.fromEntries(
+              d.args.map((arg) => [
+                arg.field,
+                arg.redacted ? redactedAnnouncement(arg.hash ?? '') : (arg.value ?? null),
+              ]),
+            ),
+          }}
+        />
+      ) : (
+        <section data-testid="call-args" aria-label="Arguments">
+          <h2 className="mb-1 text-[11px]/[1.4] font-semibold tracking-[0.5px] text-text-2 uppercase">
+            Arguments
+          </h2>
+          <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 rounded-md bg-inset px-3 py-2 text-[12.5px]/[1.5]">
+            {d.args.map((arg) => (
+              <div key={arg.field} className="contents">
+                <dt className="font-mono text-[11.5px]/[1.45] text-text-2">{arg.field}</dt>
+                <dd>
+                  <RedactedArg entry={arg} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       {/* Confirm-token binding. */}
       <section data-testid="confirm-token-binding" aria-label="Confirm-token binding">
@@ -209,18 +250,20 @@ export function CallDetailView({ detail }: { readonly detail: ActivityCallDetail
         </dl>
       </section>
 
-      {/* The reversal action, on the call it applies to. */}
-      {d.phase === 'execute' ? (
+      {/* The reversal contract and action, on the call they apply to. Only
+          when the page could state the contract (reversal-facts.ts): an
+          assumed class or window would be a claim about what can be undone. */}
+      {d.reversal !== undefined ? <ReversalContract reversal={d.reversal} /> : null}
+      {d.phase === 'execute' && d.isWrite && d.reversal === undefined ? (
+        <p data-testid="reversal-unknown" className="text-[12.5px]/[1.5] text-text-2">
+          This call records no reversal class, so what can undo it is not stated here. Check the
+          tool&apos;s manifest (writeSafety.reversal) before acting on it.
+        </p>
+      ) : null}
+      {d.reversal !== undefined ? (
         <ReversalAction
           originalCallId={d.id}
-          reversal={{
-            class: (d.reversalClass ?? 'irreversible') as never,
-            tool: d.reversalToolId,
-            windowHours: 720,
-            windowEndsAt: new Date(
-              new Date(d.ts).getTime() + 30 * 24 * 60 * 60 * 1000,
-            ).toISOString(),
-          }}
+          reversal={d.reversal}
           reversalPlan={reversalPlan}
           links={{
             reversesCallId: d.reversesCallId,

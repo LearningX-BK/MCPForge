@@ -50,11 +50,57 @@ describe('Activity call detail', () => {
     );
   });
 
-  it('renders redacted arguments with the hash announcement', async () => {
+  it('renders a write’s arguments as LockedArgs, with the redaction announcement, never a bare hash', async () => {
     await renderCall('call_a1f9e0');
-    expect(screen.getByTestId('arg-value-redacted').textContent).toBe(
-      'Redacted value, hash b6f2e19a7c31',
+    const locked = screen.getByTestId('locked-args');
+    expect(locked.textContent).toContain('Redacted value, hash b6f2e19a7c31');
+    expect(screen.queryByTestId('call-args')).toBeNull();
+  });
+
+  it('keeps the plain argument list, with redaction, for a read', async () => {
+    await renderCall('call_rd8b41');
+    expect(screen.getByTestId('call-args')).not.toBeNull();
+    expect(screen.queryByTestId('locked-args')).toBeNull();
+  });
+
+  it('renders the plan through PlanSentence', async () => {
+    await renderCall('call_a1f9e0');
+    expect(screen.getByTestId('plan-sentence').textContent).toContain('OPEN PAYABLE');
+  });
+
+  it('renders the reversal contract with the manifest window, not an assumed one', async () => {
+    await renderCall('call_ex4402');
+    expect(screen.getByTestId('reversal-contract').getAttribute('data-irreversible')).toBe('false');
+    expect(screen.getByTestId('reversal-window').textContent).toMatch(/^720 hours — until /);
+  });
+
+  it('states that no reversal is known, and offers no Reverse, when the row records no class', async () => {
+    const detail = getActivityCall('call_ex4402')!;
+    render(
+      <CallDetailView detail={{ ...detail, reversalClass: undefined, reversal: undefined }} />,
     );
+    expect(screen.getByTestId('reversal-unknown')).not.toBeNull();
+    expect(screen.queryByTestId('reversal-action')).toBeNull();
+    expect(screen.queryByTestId('reversal-contract')).toBeNull();
+  });
+
+  it('marks a replay with ReplayNotice, linking the original execution', async () => {
+    const detail = getActivityCall('call_ex4402')!;
+    render(
+      <CallDetailView
+        detail={{
+          ...detail,
+          replayed: true,
+          replayOf: { callId: 'call_a1f9e0', ts: '2026-09-13T12:00:00.000Z' },
+        }}
+      />,
+    );
+    expect(screen.getByTestId('replay-notice').textContent).toContain('call_a1f9e0');
+  });
+
+  it('shows no ReplayNotice for a call that is not a replay', async () => {
+    await renderCall('call_ex4402');
+    expect(screen.queryByTestId('replay-notice')).toBeNull();
   });
 
   it('identity-honesty block never asserts verified without a probe reference', async () => {

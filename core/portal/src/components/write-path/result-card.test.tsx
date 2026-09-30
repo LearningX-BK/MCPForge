@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(cleanup);
 
-import { ExecutionProgress, ReplayNotice, ResultCard, ResultKeyChip } from './index';
+import { ReplayNotice, ResultCard, ResultKeyChip } from './index';
 import type { ResultView } from './types';
 
 const KEYS = [
@@ -26,31 +26,6 @@ const RESULT: ResultView = {
   latency: { totalMs: 812, gatewayMs: 41, targetMs: 771 },
   identityEcho: { expected: 'p.rao@ltm.example', observed: 'p.rao@ltm.example' },
 };
-
-describe('ExecutionProgress — the correlation id exists before any result', () => {
-  it('renders the correlation id on first paint, with no result prop at all', () => {
-    render(
-      <ExecutionProgress
-        execution={{ correlationId: 'corr_01J9ZZZ', toolId: 'jde.ap.voucher.create' }}
-      />,
-    );
-    expect(screen.getByTestId('execution-correlation-id').textContent).toBe('corr_01J9ZZZ');
-    // It is in the document, not merely in the tree behind a disclosure.
-    expect(screen.getByText('corr_01J9ZZZ')).toBeTruthy();
-    // And nothing on this component claims a result.
-    expect(screen.queryByTestId('result-card')).toBeNull();
-  });
-
-  it('is not a spinner: no animated element anywhere in it', () => {
-    const { container } = render(
-      <ExecutionProgress
-        execution={{ correlationId: 'corr_1', toolId: 't.a.b.create', phaseLabel: 'Calling JDE' }}
-      />,
-    );
-    expect(container.querySelector('[class*="animate-"]')).toBeNull();
-    expect(container.querySelector('[class*="transition-"]')).toBeNull();
-  });
-});
 
 describe('ResultKeyChip — first-class, click-to-copy, linked', () => {
   it('renders every key as a first-class chip, not inside a details expander', () => {

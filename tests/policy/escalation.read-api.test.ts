@@ -283,6 +283,46 @@ describe('W0-P3a — /api/v1 fails closed', () => {
     expect(callDetailResponseSchema.parse(visible.body).call.id).toBe(ids['inScopeOther']);
   });
 
+  it('names the original execution on a replay (W0-P3d replayOf), and nothing on a fresh call', async () => {
+    const begun = await launched.store.idempotency.begin({
+      callerSubject: CLERK.subject,
+      toolId: IN_SCOPE_TOOL,
+      toolVersion: '1.0.0',
+      argsCanonicalHash: 'p3d-args',
+      confirmToken: 'p3d-confirm-token',
+    });
+    const row = (replayed: boolean) =>
+      launched.store.audit.append({
+        callerSubject: CLERK.subject,
+        consumerId: TEST_CONSUMER,
+        humanInTheLoop: true,
+        toolId: IN_SCOPE_TOOL,
+        isWrite: true,
+        deploymentId: 'local',
+        phase: 'execute',
+        outcome: 'ok',
+        idempotencyKey: begun.idempotencyKey,
+        replayed,
+      });
+    const original = await row(false);
+    await launched.store.idempotency.complete({
+      idempotencyKey: begun.idempotencyKey,
+      result: { ok: true },
+      callId: original.id,
+    });
+    const replay = await row(true);
+
+    const token = await bearer(CLERK.username);
+    const replayDetail = callDetailResponseSchema.parse(
+      (await get(`/api/v1/calls/${replay.id}`, { token })).body,
+    );
+    expect(replayDetail.call.replayOf).toEqual({ callId: original.id, ts: original.ts });
+    const originalDetail = callDetailResponseSchema.parse(
+      (await get(`/api/v1/calls/${original.id}`, { token: await bearer(CLERK.username) })).body,
+    );
+    expect(originalDetail.call.replayOf).toBeNull();
+  });
+
   it('pages without leaking: every page is authority-filtered and the cursor moves strictly older', async () => {
     const token = await bearer(CLERK.username);
     const first = callsPageSchema.parse((await get('/api/v1/calls?limit=1', { token })).body);

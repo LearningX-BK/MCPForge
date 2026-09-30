@@ -269,9 +269,6 @@ export type ApprovalStateView = 'pending' | 'approved' | 'rejected' | 'expired';
 //                         `resultKeys` map on `ReversalReport` — the recorded
 //                         business keys, which ARE the reversal handle and the
 //                         audit handle (02 §2.2).
-//   ExecutionView       ← the correlation id the gateway assigns at dispatch,
-//                         carried from the first moment so a failure is
-//                         traceable even if the browser is closed.
 //   ReplayView          ← core/gateway/policy/idempotency/types.ts
 //                         `WriteDispatchOutcome` (`kind: 'replayed'`, whose
 //                         response carries `replayed: true`).
@@ -359,17 +356,6 @@ export interface ResultView {
   /** Present ONLY when the gateway reported `replayed: true`. */
   readonly replay?: ReplayView | undefined;
   readonly links?: CallLinksView | undefined;
-}
-
-/** Execution in flight. The correlation id exists before any result does. */
-export interface ExecutionView {
-  /** Assigned at dispatch. Visible from the first moment (03 §7.5). */
-  readonly correlationId: string;
-  readonly toolId: string;
-  /** Optional human phase label, e.g. "Calling JD Edwards". Never a promise. */
-  readonly phaseLabel?: string | undefined;
-  /** ISO-8601 instant the execute was dispatched. */
-  readonly startedAt?: string | undefined;
 }
 
 /**

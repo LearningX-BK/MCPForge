@@ -26,6 +26,7 @@ import type {
   AuditResultKey,
   CompensatingControl,
 } from '@mcpforge/gateway/store';
+import type { PlanReversalView } from '../../components/write-path/types';
 
 export type { AuditChainVerification, AuditChainStatus };
 export type { AuditOutcome, AuditPhase, AuditResultKey, AuditCredentialRef, CompensatingControl };
@@ -135,6 +136,16 @@ export interface ActivityCallDetail extends ActivityCallSummary {
 
   readonly reversalClass?: string | undefined;
   readonly reversalToolId?: string | undefined;
+  /**
+   * W0-P3d — the reversal contract as the page can honestly state it: class
+   * and reversing tool from the audit row (frozen at execute), window and
+   * preconditions from the committed manifest ONLY when its version is the
+   * call's version. Absent when the page has not resolved one.
+   */
+  readonly reversal?: PlanReversalView | undefined;
+
+  /** W0-P3d — on a replay, the original execution it returned (from `/api/v1`). */
+  readonly replayOf?: { readonly callId: string; readonly ts: string } | undefined;
 
   // -- hash-chain position
   readonly prevHash: string;

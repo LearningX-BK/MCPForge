@@ -128,6 +128,7 @@ export function toCallDetailView(c: CallDetail): ActivityCallDetail {
           },
     reversalClass: opt(c.reversalClass),
     reversalToolId: opt(c.reversalToolId),
+    replayOf: opt(c.replayOf),
     prevHash: c.prevHash,
     rowHash: c.rowHash,
     chainPosition: undefined,

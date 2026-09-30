@@ -9,13 +9,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(cleanup);
 
-import {
-  ExecutionProgress,
-  ReplayNotice,
-  ResultCard,
-  ReversalAction,
-  WritePathStepper,
-} from './index';
+import { ReplayNotice, ResultCard, ReversalAction, WritePathStepper } from './index';
 import type { ResultView, ReversalPlanView } from './types';
 
 const RESULT: ResultView = {
@@ -58,15 +52,6 @@ async function serious(container: HTMLElement) {
 }
 
 describe('W0-J9 — axe (03 §12.7)', () => {
-  it('ExecutionProgress is clean', async () => {
-    const { container } = render(
-      <ExecutionProgress
-        execution={{ correlationId: 'corr_1', toolId: 'jde.ap.voucher.create' }}
-      />,
-    );
-    expect(await serious(container)).toEqual([]);
-  });
-
   it('ResultCard is clean, fresh / replayed / identity-mismatch', async () => {
     const variants: ResultView[] = [
       RESULT,

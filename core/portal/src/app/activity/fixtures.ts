@@ -44,7 +44,7 @@ function iso(msAgo: number, from: number = NOW): string {
 
 /** The full detail records. Summaries are derived from these — one source of truth. */
 export function loadActivityCallDetails(now: number = NOW): readonly ActivityCallDetail[] {
-  return [
+  const details: readonly ActivityCallDetail[] = [
     {
       id: 'call_a1f9e0',
       ts: iso(2 * DAY, now),
@@ -303,6 +303,30 @@ export function loadActivityCallDetails(now: number = NOW): readonly ActivityCal
       credentialRefs: [],
     },
   ];
+  return details.map(withFixtureReversal);
+}
+
+/**
+ * W0-P3d: the page resolves `reversal` from the audit row plus the committed
+ * manifest (`calls/[callId]/reversal-facts.ts`). These fixtures mirror that
+ * result for `jde.ap.voucher.create` 1.0.0 (720 h, and its preconditions), so
+ * the view tests render what the live page would.
+ */
+function withFixtureReversal(detail: ActivityCallDetail): ActivityCallDetail {
+  if (detail.phase !== 'execute' || !detail.isWrite || detail.reversalClass !== 'compensating-tool') {
+    return detail;
+  }
+  return {
+    ...detail,
+    reversal: {
+      class: 'compensating-tool',
+      tool: detail.reversalToolId,
+      toolHref: `/catalog/${detail.reversalToolId ?? ''}`,
+      windowHours: 720,
+      windowEndsAt: new Date(Date.parse(detail.ts) + 720 * HOUR).toISOString(),
+      preconditions: 'Voucher must be unpaid and not yet posted to a closed period.',
+    },
+  };
 }
 
 function toSummary(detail: ActivityCallDetail): ActivityCallSummary {
