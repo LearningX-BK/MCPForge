@@ -1605,7 +1605,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - done: a super admin can approve a runtime request they raised; the approval row, the `approve` audit row and the `/api/v1` response carry `selfApproved: true`, and the portal shows it; a non-super-admin is still refused self-approval with a `next`; W0-P22's change-proposal rule accepts `selfApproved: true` from a super admin as a warning; policy tests cover both.
   - result (30 Sep 2026): the approval gate's `decide` takes an explicit `allowSelfApproval`, set by `/api/v1/approvals/{id}/decision` only when the verified principal holds a `superAdmins:` group (passed from the git mapping at launch). "Self-approved" is DERIVED, never stored separately: approver === requester on the row (`isSelfApproved` in the shared contract, the one definition), so no migration and it cannot disagree with the facts. The `approve` audit row carries `selfApproved: true` in its hashed arguments plus an indexed `selfApproved` result key; `RuntimeApproval` and the call detail's approval carry `selfApproved`; the portal marks it on the approval page, the decision panel and the call detail. A self-DECLINE by a super admin is allowed and flagged the same way. Tests: gate unit, 3 policy cases (own request approved and flagged everywhere; a non-super-admin still refused with a next; a super admin approving someone else is unflagged), a portal render test. The W0-P22 half is NOT built here: W0-P22 is still open, and its `done:` now names the super-admin group as the only self-approval exception.
 
-- [ ] **W0-P33** — Add a tool end to end from the portal: draft, propose, approve, merge, codegen, reload — design note first
+- [x] **W0-P33** — Add a tool end to end from the portal: draft, propose, approve, merge, codegen, reload — design note first
   - model: opus
   - deps: W0-P31, W0-P32
   - wave: 0
@@ -1613,6 +1613,42 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: docs/build-plan/w0-p33-portal-merge.md (first), then core/portal/src/app/build/**, core/portal/src/lib/change-host/**, core/gateway/**
   - context: Owner decision, 30 Sep 2026: **"Full path in the portal (Recommended)"**: "Draft, propose, super admin reviews and approves, the portal merges to git and runs codegen and validate, then the gateway reloads. The tool reads 'Not probed' until a probe runs, which the portal could also trigger." Today `ChangeHost` has saveDraft, propose, discard, list, diff and readFile, and no approve or merge. Blast radius: the portal would write the main branch, run codegen and make the gateway reload its catalogue.
   - done: a design note the owner reviews before any code, settling: who may approve and merge (super admin; self-approval flagged per W0-P32); how the approval record is written; where codegen and validate run and what happens when either fails; how the gateway picks up a new catalogue (restart or hot reload) without dropping the write path's guarantees; whether the portal may trigger `forge probe`; and what the VM deployment needs (git identity, a remote or none).
+
+- [ ] **W0-P33a** — Definitions root: the git clone on the VM that the gateway, portal and CLI all read
+  - model: opus
+  - deps: W0-P33
+  - wave: 0
+  - reads: docs/build-plan/w0-p33-portal-merge.md §2.1, §3
+  - touches: core/gateway/launch.ts, core/gateway/assembly/**, core/portal/src/app/build/_lib/repo-root.ts, core/cli/src/**, docker-compose.yml, DEPLOY.md
+  - context: Design note approved 30 Sep 2026, decision A: "Git clone on the VM (Recommended)".
+  - done: one `MCPFORGE_DEFINITIONS_ROOT` (default: the repo root, so nothing changes locally) is where the gateway loads its catalogue, mapping and consumers, where the portal reads definitions, and where `forge` validates and generates; compose bind-mounts `/opt/mcpforge/defs`; DEPLOY.md sets the clone up; `rm -rf .mcpforge/` still leaves a working system (W0-C6).
+
+- [ ] **W0-P33b** — Approve and Merge in the portal: `ChangeHost.approve/merge` on the definitions clone, gated by validate and codegen
+  - model: opus
+  - deps: W0-P33a, W0-P32
+  - wave: 0
+  - reads: docs/build-plan/w0-p33-portal-merge.md §2.2, §2.3
+  - touches: core/portal/src/lib/change-host/**, core/portal/src/components/change/**, core/portal/src/app/build/**
+  - context: Remote: "Local only for now (Recommended)".
+  - done: LocalGit runs on the definitions clone (the sandbox remains for tests); Approve writes an `approvals/` record (approver and requester as subjects, `selfApproved` when they match, super admin only for grant-widening changes); Merge is super-admin only, runs `forge validate` and `forge codegen` on the branch, commits the generated diff, refuses with the rule's `next` on any failure, and merges `--no-ff` only when all pass; the UI says "local only — no remote configured"; tests cover each refusal.
+
+- [ ] **W0-P33c** — Gateway catalogue reload: swap in a new catalogue only if it loads cleanly
+  - model: opus
+  - deps: W0-P33a
+  - wave: 0
+  - reads: docs/build-plan/w0-p33-portal-merge.md §2.4
+  - touches: core/gateway/launch.ts, core/gateway/assembly/**, core/gateway/api/v1/**, tests/policy/**
+  - context: Decision C: "Reload endpoint (Recommended)". On the security spine: the served surface, scope and the policy chain all read the catalogue.
+  - done: a super-admin-only reload (behind the consumer ∩ human front door, audited) re-runs `loadRuntimeCatalogue` on the definitions root and swaps it in atomically only on a clean load, else keeps the old one and returns why with a `next`; live sessions get `tools/list_changed`; a plan minted before a change to its tool cannot be confirmed after it; policy tests.
+
+- [ ] **W0-P33d** — Run the capability probe from the portal, for local and dev only
+  - model: opus
+  - deps: W0-P33c
+  - wave: 0
+  - reads: docs/build-plan/w0-p33-portal-merge.md §2.5; 02#4.5
+  - touches: core/probe/**, core/portal/src/app/environments/**, core/gateway/api/v1/**
+  - context: Decision D: "Local and dev only (Recommended)".
+  - done: a super admin can start a probe from the portal when the deployment's environment class is `local` or `dev`; it is refused (with a `next` naming the CLI) for `staging` and `prod`; the report updates enablement; the run is audited.
 
 - [x] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
   - model: opus
