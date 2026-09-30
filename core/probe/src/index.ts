@@ -91,4 +91,16 @@ export { reconcileBindingGrants, reconciliationDetail } from './reconcile/bindin
 export type { CompiledBindingGrant, DatabaseGrantSource } from './reconcile/binding-grants.js';
 
 export { probeInputsFromCatalogue, UnknownBindingType } from './catalogue.js';
+// W0-P21 — the `function` executor wired per module server from the AIS overlay.
+export { wireFunctionProbe } from './run/function-wiring.js';
+export type {
+  FunctionProbeTool,
+  FunctionProbeWiring,
+  FunctionProbeWiringProblem,
+  WireFunctionProbeInput,
+} from './run/function-wiring.js';
+// Re-exported so `forge probe` reads the same overlay the gateway routes by,
+// without the CLI depending on the adapter package directly.
+export { loadAisTargetsOverlay, AisTargetsOverlayInvalid } from '@mcpforge/adapter-function';
+export type { AisTargetsOverlay, ClientCredentialSource } from '@mcpforge/adapter-function';
 export type { ProbeToolDetail } from './catalogue.js';

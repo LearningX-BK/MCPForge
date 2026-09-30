@@ -118,12 +118,21 @@ export function createFunctionProbeExecutor(options: FunctionProbeOptions): Prob
     const name = ctx.check.name;
 
     if (name === 'auth_token_for_test_identity') {
-      const token = options.acquireToken ? await options.acquireToken() : null;
+      // W0-P21: a failed exchange is a FAILED check whose detail says why (a
+      // missing client credential and an unknown user need different fixes),
+      // never an exception that aborts the run and never an assumed pass.
+      let token: string | null = null;
+      let reason = '';
+      try {
+        token = options.acquireToken ? await options.acquireToken() : null;
+      } catch (err) {
+        reason = `: ${err instanceof Error ? err.message : String(err)}`;
+      }
       return token === null || token.length === 0
         ? {
             name,
             result: 'fail',
-            detail: `no token could be acquired for the designated probe test identity "${options.testIdentity}"`,
+            detail: `no token could be acquired for the designated probe test identity "${options.testIdentity}"${reason}`,
           }
         : {
             name,

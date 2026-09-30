@@ -14,7 +14,7 @@
 // is printed, never a value.
 
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
@@ -62,7 +62,29 @@ if (generated > 0) {
 }
 const clients = Object.fromEntries(clientIds.map((id) => [id, secrets[id]!]));
 
-const jde = await startMockJde({ users, clients }, { port, host: '127.0.0.1' });
+// W0-P21: a JDE instance has its orchestrations at SOME version, and the
+// probe's version check asks for it. This mock has the ones the committed
+// manifests pin (`binding.ref` at `binding.refVersion`), as the gateway's e2e
+// test configures it. Without this, every version check reports "no version".
+function manifestVersions(dir: string, out: Record<string, string> = {}): Record<string, string> {
+  if (!existsSync(dir)) return out;
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) manifestVersions(full, out);
+    else if (entry.endsWith('.tool.yaml')) {
+      const doc = parseYaml(readFileSync(full, 'utf8')) as {
+        binding?: { ref?: unknown; refVersion?: unknown };
+      } | null;
+      const ref = doc?.binding?.ref;
+      const version = doc?.binding?.refVersion;
+      if (typeof ref === 'string' && typeof version === 'string') out[ref] = version;
+    }
+  }
+  return out;
+}
+const versions = manifestVersions(join(REPO_ROOT, 'manifests'));
+
+const jde = await startMockJde({ users, clients, versions }, { port, host: '127.0.0.1' });
 console.log(
   JSON.stringify({
     ok: true,
@@ -71,6 +93,7 @@ console.log(
     tokenUrl: jde.tokenUrl,
     users: users.length,
     clients: clientIds,
+    orchestrationVersions: Object.keys(versions).length,
     clientSecretsFile: clientsFile,
     generatedSecrets: generated,
   }),

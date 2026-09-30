@@ -19,6 +19,11 @@ targets:
   jde-local-mock:
     baseUrl: http://127.0.0.1:4545/jderest
     tokenUrl: http://127.0.0.1:4545/jderest/mcpforge/token
+    # W0-P21 (owner decision, 30 Sep 2026): the designated test user
+    # `forge probe` authenticates as on this JDE instance (02 §4.5). A subject,
+    # not a credential, and never defaulted: without it the probe refuses.
+    # It must be a user the target knows (tests/mocks/fixtures/mock-jde/local.yaml).
+    probeIdentity: mcpforge-probe@ltm.example
 
 servers:
   jde-fin-ap:
