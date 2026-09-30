@@ -1527,7 +1527,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Owner decision of 25 Sep 2026 (see `W0-P11`). Each `generated/tools/<id>/handler.generated.ts` contains an inline confirm-token mint and audit calls written before Track C existed (*"Track C stub — core/gateway/store/audit is not built yet"*), and 4 of the 6 write tools' `binding.custom.ts` are `NOT_IMPLEMENTED`. The served path does not use any of it. Left in place, it is a second implementation of 6g and [9] waiting to be wired by mistake.
   - done: the codegen templates stop emitting a confirm mint or audit call in handlers; what a generated handler is FOR is stated in its template header, or the artefact is removed if nothing needs it; `forge codegen` is byte-identical on a second run; the regen diff across all 11 tools is committed as one reviewable change; contract re-acceptance for any custom binding whose contract hash changes is a deliberate `--accept-contract`, recorded; `pnpm test` and `forge ci` stage 3 green.
 
-- [ ] **W0-P19** — How a human gets a token for an external agent (local provider) — design note first
+- [ ] **W0-P19** — How a human gets a token for an external agent (local provider) — design note first — OPTIONAL (owner, 30 Sep 2026)
   - model: opus
   - deps: none
   - wave: 0
@@ -1535,6 +1535,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: docs/build-plan/w0-p19-local-token-issuance.md
   - context: Found 25 Sep 2026 while surveying `W0-P11`. The local `IdentityProvider` has a token issuer (`identity/jwt.ts`, `localTokenIssuer`) and a user store with Argon2id and optional TOTP (W0-D2), but nothing lets a human **obtain** a token for an external MCP client: no authorize or token endpoint, and no CLI. The OIDC path relies on an external IdP (Keycloak, contract-tested). Without this, `W0-Q12`'s live external-agent demo cannot run on the local provider.
   - done: a design note, reviewed by the owner before any code, choosing between a CLI (`forge identity token`, password + TOTP → short-lived JWT, printed once, refused when `CI=true`), local OAuth authorize/token endpoints on the gateway, or requiring the Keycloak docker profile for external agents at Wave 0; stating the token TTL, what is logged (never the token), and how it composes with the consumer's private-key JWT (both are required, non-negotiable #6).
+  - **Owner decision, 30 Sep 2026:** "I dont want any dependency on external agents like CLaude Desktop, this will be deployed on a OCI Oracle Linux VM." Then, asked what that means: "I am not very clear on the usage of Claude Desktop or External Agent, if it is show the usage, I am fine with it.. may be just keep an external agent as an option only." So this task and W0-Q12 are OPTIONAL: nothing in the OCI deployment may depend on them.
   - **Note, 27 Sep 2026:** W0-P5a built `POST /auth/local/token` (and `/refresh`, `/signout`) on the gateway, which is this task's option 2 in substance. It is human-only, by owner decision. What is still open here is the external-agent half: whether an agent's human uses that endpoint directly, a CLI that prints a token once and is refused when `CI=true`, or both.
 
 - [x] **W0-P21** — `forge probe` registers no executor: a real probe report disables every tool
@@ -1583,6 +1584,34 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Found in W0-P28, 30 Sep 2026. `runOverlayPurityCheck` on main fails on `consumers/portal-local.consumer.yaml`: the Ed25519 public key `x` under `publicKeys` is a 43-character high-entropy string. A public key is not a secret, and registration requires it. So `forge ci`'s overlay-purity stage cannot pass on this repo. The secret scanner needs to recognise a JWK public-key member under `publicKeys` without opening a hole for private members (`d`) or anything else.
   - done: `runOverlayPurityCheck` is ok on this repo; a `publicKeys[].x` is accepted; a `d` member or a high-entropy string anywhere else is still refused; tests prove all three.
   - result (30 Sep 2026): the content scan parses each YAML file under `consumers/` and exempts exactly the public JWK members (`x`, `y`, `n`, `e`) of a `publicKeys` entry that declares a `kty`, matched by member name AND exact value; a private member (`d`, `p`, `q`, `dp`, `dq`, `qi`, `k`) in such an entry is a violation whatever its entropy; the same shape outside `consumers/` is not exempt. `runOverlayPurityCheck` is OK on this repo (28 files). 5 new tests in `tools/ci/src/overlay-purity.test.ts`, one of them running the job against the real repository.
+
+- [x] **W0-P31** — A super admin: one git-held role that grants every tool, plus identity administration, inside the rules
+  - model: opus
+  - deps: W0-P28
+  - wave: 0
+  - reads: CLAUDE.md §2 items 6 and 7; 02#4.4; roles/p2p.yaml
+  - touches: roles/super-admin.yaml, generated/roles/**, approvals/**, overlays/local/mappings/groups-to-roles.yaml, core/gateway/identity/group-role-mapping.ts
+  - context: Owner request, 30 Sep 2026, verbatim: "I need a super Admin, who must have access to everything and can approve any request and add tools too from frontend." Owner decision on scope (asked with a recommendation): **"Everything, inside the rules (Recommended)"**: a git-held super-admin role that grants every tool, plus identity admin and the admin persona; still intersected with the consumer; still audited; an elevated tool still needs a named, expiring binding grant.
+  - done: `roles/super-admin.yaml` includes every tool (the compiled scope lists all of them), carries a function bindingGrant with its approval record, and fits the role budget; a local group `mcpforge-superadmins` maps to it, is an `identityAdmins` group and holds every persona; the mapping names super-admin groups under a new `superAdmins:` list (read by the gateway for W0-P32); `forge validate` and `forge codegen` are clean; a policy test proves a super admin sees every tool through a consumer that allows it, and still does not through one that does not.
+  - result (30 Sep 2026): `roles/super-admin.yaml` (`includes: ['*.**']`, compiled to all 11 tools; same six core tools as p2p; SoD pair declared and reported; `sensitivityCeiling: personal`), with a function bindingGrant and a standing authorization, both provisional approval records on the owner's decision (the W0-HG8 precedent), expiring 2027-03-29 (180 days). Mapping: group `mcpforge-superadmins` → `super-admin`, in `identityAdmins`, every persona, and a new `superAdmins:` list (parsed by the one mapping reader, kept on remap, accepted by overlay-purity). `tests/policy/escalation.super-admin.test.ts`: every tool through the test consumer; through a consumer capped at `internal`, only the one `internal` tool (the consumer's ceiling decides, not the role); a p2p holder is not widened. `sod.repo.test.ts` now counts per role file and asserts the super-admin role reports the pair too. DEPLOY.md: bootstrap with `--group mcpforge-superadmins`, an Oracle Linux note, external agents optional.
+
+- [ ] **W0-P32** — The super admin may approve their own requests, and every such approval is flagged
+  - model: opus
+  - deps: W0-P31, W0-P25
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §4, §9 decision 3; W0-P22
+  - touches: core/gateway/policy/approval/**, core/gateway/api/v1/approval-decision.ts, core/shared/src/api/v1/**, core/portal/src/app/approvals/**, tests/policy/**
+  - context: Owner decision, 30 Sep 2026 (asked with a recommendation to keep separation of duties): **"Their own too, flagged"**: "Allowed, but the audit row and the approval record are marked self-approved." Applies only to members of a `superAdmins:` group (W0-P31). Everyone else is still refused self-approval.
+  - done: a super admin can approve a runtime request they raised; the approval row, the `approve` audit row and the `/api/v1` response carry `selfApproved: true`, and the portal shows it; a non-super-admin is still refused self-approval with a `next`; W0-P22's change-proposal rule accepts `selfApproved: true` from a super admin as a warning; policy tests cover both.
+
+- [ ] **W0-P33** — Add a tool end to end from the portal: draft, propose, approve, merge, codegen, reload — design note first
+  - model: opus
+  - deps: W0-P31, W0-P32
+  - wave: 0
+  - reads: 02#2, 02#7, 03 write-path and Build sections, CLAUDE.md §2 "The portal writes to git"
+  - touches: docs/build-plan/w0-p33-portal-merge.md (first), then core/portal/src/app/build/**, core/portal/src/lib/change-host/**, core/gateway/**
+  - context: Owner decision, 30 Sep 2026: **"Full path in the portal (Recommended)"**: "Draft, propose, super admin reviews and approves, the portal merges to git and runs codegen and validate, then the gateway reloads. The tool reads 'Not probed' until a probe runs, which the portal could also trigger." Today `ChangeHost` has saveDraft, propose, discard, list, diff and readFile, and no approve or merge. Blast radius: the portal would write the main branch, run codegen and make the gateway reload its catalogue.
+  - done: a design note the owner reviews before any code, settling: who may approve and merge (super admin; self-approval flagged per W0-P32); how the approval record is written; where codegen and validate run and what happens when either fails; how the gateway picks up a new catalogue (restart or hot reload) without dropping the write path's guarantees; whether the portal may trigger `forge probe`; and what the VM deployment needs (git identity, a remote or none).
 
 - [x] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
   - model: opus
@@ -1750,7 +1779,7 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
   - context: With the repo now on GitHub (`W0-P8`), tasks could run as Claude Code agents in the cloud, from claude.ai/code, scheduled routines, or a GitHub Actions trigger, each on its own `forge/<taskId>-<slug>` branch for review. The owner deferred this on 25 Sep 2026. Facts to decide with: (1) cloud sandboxes are Linux with no route to this machine, so there is no JDE instance, no `forge probe`, no OS keychain for `EncryptedFileStore`, and no `.mcpforge/` state. Suitable work is codegen, validate, unit, contract and policy tests, portal work and design notes; the human gates, probes and approvals stay local; (2) the build lane `tools/build/` is **empty** (only `.gitkeep`), so the PowerShell `Invoke-ForgeBuild.ps1` that 04 and this file describe does not exist in the repo, and a cloud run would need its own task-selection entry point; (3) `forge consumer issue-credential` already refuses when `CI=true`, which is the right behaviour for a cloud agent; (4) every `OPUS_GUARDED_PATHS` diff still needs its security review pass, whoever wrote it.
   - done: the owner decides whether, how and for which task classes cloud runs are allowed; the decision is recorded here; any setup (environment setup script, allowed network, branch protection on `main`) is then a separate task.
 
-- [ ] **W0-Q12** — The live external-agent conversation, end to end
+- [ ] **W0-Q12** — The live external-agent conversation, end to end — OPTIONAL (owner, 30 Sep 2026)
   - model: human
   - deps: W0-P11, W0-P19
   - wave: 0

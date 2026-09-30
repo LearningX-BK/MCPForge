@@ -8,6 +8,8 @@ import {
   findMappingFiles,
   identityAdminGroups,
   isIdentityAdmin,
+  isSuperAdmin,
+  superAdminGroups,
   loadMappingFiles,
   parseGroupRoleMappingFile,
   personasForPrincipal,
@@ -336,5 +338,47 @@ identityAdmins:
     remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
     const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
     expect(reparsed.ok && reparsed.doc.identityAdmins).toEqual(['mcpforge-admins']);
+  });
+});
+
+describe('superAdmins (W0-P31) -- the super-admin groups, from git', () => {
+  const WITH_SUPER = `
+apiVersion: mcpforge/v1
+kind: GroupRoleMapping
+deployment: local
+groups:
+  mcpforge-superadmins:
+    roles: [super-admin]
+superAdmins:
+  - mcpforge-superadmins
+`;
+
+  it('parses the list and answers by group membership only', () => {
+    const result = parseGroupRoleMappingFile('x.yaml', WITH_SUPER);
+    if (!result.ok) throw new Error('fixture must parse');
+    expect(superAdminGroups([result.doc])).toEqual(['mcpforge-superadmins']);
+    expect(isSuperAdmin([result.doc], ['mcpforge-superadmins'])).toBe(true);
+    expect(isSuperAdmin([result.doc], ['finance-ap-clerks', '__proto__'])).toBe(false);
+  });
+
+  it('refuses a malformed list and is empty when absent (fail closed)', () => {
+    const bad = parseGroupRoleMappingFile(
+      'x.yaml',
+      WITH_SUPER.replace(/superAdmins:[\s\S]*$/, 'superAdmins: yes'),
+    );
+    expect(bad.ok).toBe(false);
+    const none = parseGroupRoleMappingFile('x.yaml', LOCAL_ONLY);
+    if (!none.ok) throw new Error('fixture must parse');
+    expect(superAdminGroups([none.doc])).toEqual([]);
+  });
+
+  it('a subject remap keeps the superAdmins list', () => {
+    const file = writeMapping(
+      'local',
+      `${WITH_SUPER}subjectOverrides:\n  local:jdoe:\n    roles: [p2p]\n`,
+    );
+    remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
+    const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
+    expect(reparsed.ok && reparsed.doc.superAdmins).toEqual(['mcpforge-superadmins']);
   });
 });

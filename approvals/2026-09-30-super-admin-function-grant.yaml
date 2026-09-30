@@ -1,0 +1,22 @@
+# MCPForge approval record — the super-admin role's bindingGrant (W0-P31).
+# CLAUDE.md non-negotiable 7: being in scope is not permission to execute an
+# elevated binding; a `function` binding needs this named, expiring,
+# approval-recorded grant, for the super admin as for anyone.
+apiVersion: mcpforge/v1
+kind: Approval
+id: 2026-09-30-super-admin-function-grant
+status: approved
+decision: approved
+subject:
+  kind: BindingGrant
+  role: super-admin
+  bindingType: function
+  names: [AP_VOUCHER, GL_JOURNAL, PO_ORCHESTRATION]
+action: grant
+summary: "Grant role super-admin permission to execute function-binding writes (the AP_VOUCHER, GL_JOURNAL and PO_ORCHESTRATION orchestration families)."
+requestedBy: pattnaikbikash@gmail.com
+requestedAt: 2026-09-30T00:00:00.000Z
+approver: Admin
+approvedAt: 2026-09-30
+expiresAt: 2027-03-29
+note: "Provisional approval on the owner's decision of 2026-09-30 (W0-P31): a super admin with access to everything, 'inside the rules' — this grant is the rule non-negotiable 7 requires. Re-review once real stewards/approvers are named. Expiry is the 180-day default (02 §11.4)."

@@ -68,6 +68,14 @@ export interface GroupRoleMappingFile {
    * refuses anyone whose groups are not listed. It grants no tool and no role.
    */
   readonly identityAdmins?: readonly string[];
+  /**
+   * W0-P31 (owner decision, 30 Sep 2026): the groups whose members are the
+   * deployment's SUPER ADMINS. Grants nothing by itself: a super admin's tools
+   * come from the `super-admin` role through `groups`, like anyone's. The
+   * gateway reads it for the one thing the owner allowed only them: approving
+   * their own request, flagged (W0-P32).
+   */
+  readonly superAdmins?: readonly string[];
 }
 
 /** 03 §2's three portal personas. Closed: a fourth is a reviewed change. */
@@ -185,15 +193,18 @@ export function parseGroupRoleMappingFile(
   if (!personas.ok) {
     return { ok: false, error: { filePath, message: `personas: ${personas.message}` } };
   }
-  const identityAdmins = raw['identityAdmins'];
-  if (
-    identityAdmins !== undefined &&
-    (!Array.isArray(identityAdmins) ||
-      !identityAdmins.every((g) => typeof g === 'string' && g.length > 0))
-  ) {
+  const identityAdmins = readGroupList(raw['identityAdmins']);
+  if (identityAdmins === null) {
     return {
       ok: false,
       error: { filePath, message: 'identityAdmins: must be a list of non-empty group names' },
+    };
+  }
+  const superAdmins = readGroupList(raw['superAdmins']);
+  if (superAdmins === null) {
+    return {
+      ok: false,
+      error: { filePath, message: 'superAdmins: must be a list of non-empty group names' },
     };
   }
   const doc: GroupRoleMappingFile = {
@@ -205,11 +216,19 @@ export function parseGroupRoleMappingFile(
       ? { subjectOverrides: subjectOverrides.entries }
       : {}),
     ...(Object.keys(personas.entries).length > 0 ? { personas: personas.entries } : {}),
-    ...(identityAdmins === undefined || identityAdmins.length === 0
-      ? {}
-      : { identityAdmins: [...new Set(identityAdmins as string[])].sort() }),
+    ...(identityAdmins.length === 0 ? {} : { identityAdmins }),
+    ...(superAdmins.length === 0 ? {} : { superAdmins }),
   };
   return { ok: true, doc };
+}
+
+/** A list of non-empty group names, de-duplicated and sorted; `[]` when absent; `null` when malformed. */
+function readGroupList(value: unknown): string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.every((g) => typeof g === 'string' && g.length > 0)) {
+    return null;
+  }
+  return [...new Set(value as string[])].sort();
 }
 
 /** Recursively find every `mappings/*.yaml` / `*.yml` file under `root` (default `overlays/`). */
@@ -324,6 +343,7 @@ export function remapSubjectAcrossMappingFiles(
       subjectOverrides: nextOverrides,
       ...(doc.personas === undefined ? {} : { personas: doc.personas }),
       ...(doc.identityAdmins === undefined ? {} : { identityAdmins: doc.identityAdmins }),
+      ...(doc.superAdmins === undefined ? {} : { superAdmins: doc.superAdmins }),
     };
     writeFileSync(filePath, serializeGroupRoleMappingFile(nextDoc), 'utf-8');
 
@@ -352,6 +372,10 @@ export function serializeGroupRoleMappingFile(doc: GroupRoleMappingFile): string
     // user administration away from everyone.
     ...(doc.identityAdmins !== undefined && doc.identityAdmins.length > 0
       ? { identityAdmins: doc.identityAdmins }
+      : {}),
+    // W0-P31 — kept on a rewrite.
+    ...(doc.superAdmins !== undefined && doc.superAdmins.length > 0
+      ? { superAdmins: doc.superAdmins }
       : {}),
   };
   return `${stringifyYaml(ordered, { indent: 2, sortMapEntries: false })}`;
@@ -476,5 +500,24 @@ export function isIdentityAdmin(
   groups: readonly string[],
 ): boolean {
   const admins = identityAdminGroups(mapping);
+  return groups.some((g) => admins.includes(g));
+}
+
+/**
+ * W0-P31 — the groups whose members are super admins in this deployment: the
+ * union of every mapping file's `superAdmins`, sorted. Empty means nobody is.
+ */
+export function superAdminGroups(mapping: readonly GroupRoleMappingFile[]): readonly string[] {
+  const groups = new Set<string>();
+  for (const doc of mapping) for (const g of doc.superAdmins ?? []) groups.add(g);
+  return [...groups].sort();
+}
+
+/** W0-P31 — true when any of `groups` is a super-admin group. */
+export function isSuperAdmin(
+  mapping: readonly GroupRoleMappingFile[],
+  groups: readonly string[],
+): boolean {
+  const admins = superAdminGroups(mapping);
   return groups.some((g) => admins.includes(g));
 }

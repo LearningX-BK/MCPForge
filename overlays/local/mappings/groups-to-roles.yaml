@@ -33,6 +33,12 @@ groups:
   mcpforge-admins:
     roles:
       - p2p-admin
+  # W0-P31 — the super admin: every tool, through the git-held super-admin
+  # role (roles/super-admin.yaml). Still intersected with the consumer, and an
+  # elevated binding still needs that role's named, expiring grant.
+  mcpforge-superadmins:
+    roles:
+      - super-admin
 
   # Wave 1 LTM AD groups (OidcProvider, W0-D3) — distinguished names. Same
   # map, same key type as above: a group key is a group key.
@@ -63,6 +69,8 @@ subjectOverrides: {}
 # `subjectOverrides`. A person whose groups appear nowhere here still signs in
 # and sees every page, and holds no gated portal action.
 personas:
+  mcpforge-superadmins:
+    personas: [admin, developer, business]
   mcpforge-admins:
     personas: [admin, developer]
   mcpforge-developers:
@@ -80,3 +88,11 @@ personas:
 # reviewed diff on this file, like any other grant.
 identityAdmins:
   - mcpforge-admins
+  - mcpforge-superadmins
+
+# W0-P31 (owner decision, 30 Sep 2026) — the super-admin groups. Grants
+# nothing by itself (the tools come from the super-admin role above). The
+# gateway reads it for the one thing the owner allowed only a super admin:
+# approving their own request, always flagged as self-approved (W0-P32).
+superAdmins:
+  - mcpforge-superadmins
