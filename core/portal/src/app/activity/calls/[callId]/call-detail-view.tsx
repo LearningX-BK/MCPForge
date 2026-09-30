@@ -197,6 +197,12 @@ export function CallDetailView({ detail }: { readonly detail: ActivityCallDetail
             {' — '}
             {d.approval.state}
             {d.approval.decidedBy ? ` by ${d.approval.decidedBy}` : ''}
+            {d.approval.selfApproved === true ? (
+              <strong data-testid="call-approval-self-approved">
+                {' '}
+                (self-approved, super admin)
+              </strong>
+            ) : null}
           </p>
         </section>
       ) : null}

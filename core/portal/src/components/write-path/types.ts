@@ -241,6 +241,11 @@ export interface ApprovalView {
   readonly approvers: readonly ApprovalPersonView[];
   /** Who actually decided, once decided. */
   readonly decidedBy?: ApprovalPersonView | undefined;
+  /**
+   * W0-P32 — the requester decided their own request (a super admin, owner
+   * decision 30 Sep 2026). Shown wherever the decision is, never hidden.
+   */
+  readonly selfApproved?: boolean | undefined;
   readonly decisionReason?: string | undefined;
   /** ISO-8601. `ApprovalRequest.createdAt`. */
   readonly raisedAt: string;

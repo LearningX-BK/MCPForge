@@ -25,6 +25,7 @@ const DECIDED = {
     decidedAt: '2026-09-30T00:00:00Z',
     createdAt: '2026-09-29T00:00:00Z',
     expiresAt: '2026-10-01T00:00:00Z',
+    selfApproved: false,
   },
   auditCallId: 'call_1',
   next: 'Approved. The requester executes it.',

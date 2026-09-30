@@ -41,6 +41,7 @@ import {
   API_V1_PAGE_MAX,
   API_V1_PREFIX,
   AUDIT_OUTCOMES,
+  isSelfApproved,
   USAGE_WINDOWS,
   type ApiError,
   type ApprovalDetailResponse,
@@ -107,6 +108,12 @@ export interface ReadApiOptions {
    * mapping), every `/api/v1/admin/users` path is refused as not served.
    */
   readonly userAdmin?: Omit<UserAdminDeps, 'store' | 'gatewayVersion' | 'now'>;
+  /**
+   * W0-P32 — the `superAdmins:` groups from the git mapping. A member may
+   * decide their own approval request, always flagged self-approved. Absent
+   * means nobody may.
+   */
+  readonly superAdminGroups?: readonly string[];
 }
 
 export interface ReadApi {
@@ -426,7 +433,14 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
           const viewer = await authenticate(req, correlationId);
           const body = await readBoundedJson(req, DECISION_BODY_MAX_BYTES);
           const decided = await decideApproval(
-            { store: options.store, catalogue: options.catalogue, gate, gatewayVersion, now },
+            {
+              store: options.store,
+              catalogue: options.catalogue,
+              gate,
+              gatewayVersion,
+              now,
+              superAdminGroups: options.superAdminGroups ?? [],
+            },
             viewer,
             decisionFor,
             body,
@@ -572,6 +586,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
               approvalId: approval.id,
               status: approval.status,
               approverSubject: approval.approverSubject,
+              selfApproved: isSelfApproved(approval),
             },
     };
   }
@@ -660,6 +675,7 @@ function toApproval(a: ApprovalRequest): RuntimeApproval {
     decidedAt: a.decidedAt,
     createdAt: a.createdAt,
     expiresAt: a.expiresAt,
+    selfApproved: isSelfApproved(a),
   };
 }
 

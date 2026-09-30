@@ -128,11 +128,22 @@ export interface RaiseOutcome {
 
 export interface DecideApprovalCommand {
   readonly approvalId: string;
-  /** `Principal.subject` of the human deciding. Never the requester's. */
+  /**
+   * `Principal.subject` of the human deciding. Never the requester's, unless
+   * `allowSelfApproval` is set.
+   */
   readonly approverSubject: string;
   readonly decision: 'approved' | 'rejected';
   /** Required for a decline — 03 §7.4 returns it to the agent as the `next`. */
   readonly reason?: string;
+  /**
+   * W0-P32 (owner decision, 30 Sep 2026: "Their own too, flagged"): the
+   * decider is a SUPER ADMIN (a `superAdmins:` group in the git mapping), so
+   * deciding their own request is allowed. The caller establishes that; the
+   * gate never infers it. The result is marked self-approved wherever it is
+   * shown, because approver === requester on the stored row.
+   */
+  readonly allowSelfApproval?: boolean;
 }
 
 /**

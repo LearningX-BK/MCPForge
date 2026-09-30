@@ -64,6 +64,7 @@ export function toRuntimeEntry(
       // decision time; the row does not name candidates, so none are invented.
       approvers: [],
       ...(a.approverSubject === null ? {} : { decidedBy: { subject: a.approverSubject } }),
+      ...(a.selfApproved ? { selfApproved: true } : {}),
       ...(a.decisionReason === null ? {} : { decisionReason: a.decisionReason }),
       raisedAt: a.createdAt,
       ...(a.decidedAt === null ? {} : { decidedAt: a.decidedAt }),
