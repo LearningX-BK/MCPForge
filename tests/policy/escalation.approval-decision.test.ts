@@ -41,6 +41,8 @@ import {
 } from '../../core/gateway/transport/consumer-auth/testkit.js';
 import { MCPFORGE_CONSUMER_ASSERTION_HEADER } from '../../core/gateway/transport/index.js';
 import { DECISION_PSEUDO_TOOL_ID } from '../../core/gateway/api/v1/approval-decision.js';
+import { buildPlanBody } from '../../core/gateway/policy/confirm/plan.js';
+import { planCanonicalHash } from '../../core/gateway/policy/confirm/hash.js';
 
 const AUDIENCE = 'https://mcpforge.local/mcp';
 const SECRETS_ENV = { MCPFORGE_SECRETS_KEY: 'w0-p25-test-only-sealing-passphrase' };
@@ -377,6 +379,85 @@ describe('W0-P25 — the approval decision path fails closed', () => {
     expect(refusal(r.body).code).toBe('PLAN_EXPIRED');
     expect((await launched.store.approvals.get(id))?.approverSubject).toBeNull();
     expect((await approveRows(id))[0]).toMatchObject({ deniedByRule: 'approval.expired' });
+  });
+
+  // --- W0-P3f: the stored plan body -----------------------------------------------
+
+  const BODY = buildPlanBody({
+    template:
+      'Create an AP voucher for supplier {supplier} for {amount} GBP. This creates an OPEN PAYABLE in JD Edwards.',
+    args: { supplier: '4242', amount: 18400 },
+    dryRun: { warnings: ['PO 0000451 is only 60% receipted.'] },
+    defaultEffect: { system: 'jde-fin-ap', object: 'voucher', action: 'create', reversible: true },
+    reversal: { class: 'compensating-tool', tool: 'jde.ap.voucher.cancel', windowHours: 720 },
+  });
+
+  async function pendingWithBody(planBody: unknown): Promise<string> {
+    plan += 1;
+    const created = await launched.store.approvals.create({
+      // The hash of the REAL body, whatever is stored: that is the situation a
+      // tampered row presents.
+      planHash: planCanonicalHash(BODY),
+      argsCanonicalHash: `p3f-args-${plan}`,
+      planSummary: BODY.plan,
+      planBody,
+      callerSubject: REQUESTER.subject,
+      consumerId: TEST_CONSUMER,
+      toolId: WRITE_TOOL,
+      toolVersion: '1.0.0',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+    });
+    return created.id;
+  }
+
+  async function detail(approvalId: string) {
+    const res = await fetch(`${base}/api/v1/approvals/${encodeURIComponent(approvalId)}`, {
+      headers: {
+        authorization: `Bearer ${await bearer(APPROVER.username)}`,
+        [MCPFORGE_CONSUMER_ASSERTION_HEADER]: await signTestAssertion({
+          consumerId: TEST_CONSUMER,
+          audience: AUDIENCE,
+          keypair,
+        }),
+      },
+    });
+    const text = await res.text();
+    return { status: res.status, text, body: approvalDetailResponseSchema.parse(JSON.parse(text)) };
+  }
+
+  it('W0-P3f: shows the stored plan body when it re-hashes to the approved planHash', async () => {
+    const id = await pendingWithBody(BODY);
+    const d = await detail(id);
+    expect(d.body.planBodyStatus).toBe('verified');
+    expect(d.body.planBody?.warnings).toEqual(['PO 0000451 is only 60% receipted.']);
+    expect(d.body.planBody?.effects[0]).toMatchObject({ system: 'jde-fin-ap', action: 'create' });
+  });
+
+  it('W0-P3f: a tampered stored body is withheld on read, and the request cannot be decided on it', async () => {
+    const tampered = { ...BODY, warnings: [], plan: BODY.plan.replace('18400', '184') };
+    const id = await pendingWithBody(tampered);
+
+    const d = await detail(id);
+    expect(d.body.planBodyStatus).toBe('mismatch');
+    expect(d.body.planBody).toBeNull();
+    // The tampered text is not served anywhere in the detail response body's plan field.
+    expect(d.text).not.toContain('"warnings":[]');
+
+    const r = await decide(id, { decision: 'approved' });
+    expect(r.status).toBe(409);
+    expect(refusal(r.body).code).toBe('APPROVAL_REQUIRED');
+    expect(await statusOf(id)).toBe('pending');
+    expect((await approveRows(id))[0]).toMatchObject({
+      outcome: 'policy_denied',
+      deniedByRule: 'approval.plan_body_mismatch',
+    });
+  });
+
+  it('W0-P3f: a request raised before bodies were stored reads as absent and stays decidable', async () => {
+    const id = await pending();
+    const d = await detail(id);
+    expect(d.body.planBodyStatus).toBe('absent');
+    expect(d.body.planBody).toBeNull();
   });
 
   it('keeps the audit chain intact through every decision and refusal above', async () => {

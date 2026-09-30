@@ -71,6 +71,7 @@ import {
   decideApproval,
   decisionPathApprovalId,
 } from './approval-decision.js';
+import { verifiedPlanBody } from './plan-body.js';
 import { ApiRefusal, STATUS_BY_CODE } from './refusal.js';
 
 export interface ReadApiOptions {
@@ -257,7 +258,13 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     if (approval === undefined || !mayRead(viewer, approval.toolId, approval.callerSubject)) {
       throw notFound('approval', id);
     }
-    return { asOf: now().toISOString(), approval: toApproval(approval) };
+    const checked = verifiedPlanBody(approval);
+    return {
+      asOf: now().toISOString(),
+      approval: toApproval(approval),
+      planBody: checked.status === 'verified' ? checked.body : null,
+      planBodyStatus: checked.status,
+    };
   }
 
   async function consumerUsage(url: URL): Promise<ConsumerUsageResponse> {

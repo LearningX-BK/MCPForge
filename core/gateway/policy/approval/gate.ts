@@ -160,6 +160,7 @@ export function approvalGate(deps: ApprovalGateDeps): ApprovalGate {
           planHash: input.planHash,
           argsCanonicalHash: input.argsCanonicalHash,
           planSummary: input.planSummary,
+          planBody: input.planBody,
           callerSubject: input.callerSubject,
           ...(input.consumerId === undefined ? {} : { consumerId: input.consumerId }),
           toolId: input.toolId,

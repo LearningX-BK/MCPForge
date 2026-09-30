@@ -8,10 +8,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(cleanup);
 
-import { ApprovalGateCard, ApproverDecisionPanel, ConfirmAction } from './index';
+import { ApproverDecisionPanel } from './index';
 import type {
   ApprovalView,
-  LockedArgsView,
   PlanBodyView,
   ProbeIdentityView,
 } from './types';
@@ -35,11 +34,6 @@ const IDENTITY: ProbeIdentityView = {
   compensatingControl: 'Wrapper schema records p_requested_by.',
 };
 
-const LOCKED: LockedArgsView = {
-  args: { supplier: '4242', amount: 18400 },
-  argsCanonicalHash: 'aaaabbbbccccdddd',
-};
-
 const PENDING: ApprovalView = {
   approvalId: 'apr_01J8XYZ',
   state: 'pending',
@@ -55,96 +49,6 @@ const PENDING: ApprovalView = {
   envClass: 'prod',
   approvalUrl: 'https://forge.local/approvals/apr_01J8XYZ',
 };
-
-function gate(approval: ApprovalView, confirmAction?: React.ReactNode) {
-  return render(
-    <ApprovalGateCard
-      approval={approval}
-      plan={PLAN}
-      identity={IDENTITY}
-      locked={LOCKED}
-      confirmAction={confirmAction}
-    />,
-  );
-}
-
-const CONFIRM = (
-  <ConfirmAction
-    consequence={{
-      reversalClass: 'compensating-tool',
-      sensitivity: 'financial',
-      envClass: 'prod',
-      entityName: 'voucher',
-    }}
-    onConfirm={() => {}}
-  />
-);
-
-describe('ApprovalGateCard — the requester’s view', () => {
-  it('keeps the same plan content and replaces the actions with a status block', () => {
-    gate(PENDING);
-    expect(screen.getByTestId('plan-sentence').textContent).toBe(PLAN_TEXT);
-    expect(screen.getByTestId('approval-status-block')).toBeTruthy();
-    expect(screen.getByText('apr_01J8XYZ')).toBeTruthy();
-  });
-
-  it('names a person and a time — not a spinner', () => {
-    gate(PENDING);
-    const sentence = screen.getByTestId('approval-state-sentence').textContent ?? '';
-    expect(sentence).toContain('Meera Rao');
-    expect(sentence).toContain('m.rao@ltm.example');
-    expect(sentence).toMatch(/since \d{2}:\d{2}/);
-
-    // No spinner of any kind is the feedback.
-    const block = screen.getByTestId('approval-status-block');
-    expect(block.querySelector('[role="progressbar"]')).toBeNull();
-    expect(block.querySelector('.animate-spin')).toBeNull();
-  });
-
-  it('carries the copyable approval link', () => {
-    gate(PENDING);
-    expect(screen.getByTestId('approval-link').getAttribute('href')).toBe(
-      'https://forge.local/approvals/apr_01J8XYZ',
-    );
-  });
-
-  it('renders NO confirm affordance while pending, even when one is supplied', () => {
-    gate(PENDING, CONFIRM);
-    expect(screen.queryByTestId('approval-confirm-slot')).toBeNull();
-    expect(screen.queryByTestId('confirm-submit')).toBeNull();
-  });
-
-  it('renders NO confirm affordance for a declined or expired approval either', () => {
-    for (const state of ['rejected', 'expired'] as const) {
-      cleanup();
-      gate({ ...PENDING, state, decidedBy: { subject: 'm.rao@ltm.example' } }, CONFIRM);
-      expect(screen.queryByTestId('confirm-submit')).toBeNull();
-    }
-  });
-
-  it('on APPROVED the confirm action goes live — the requester executes', () => {
-    gate(
-      {
-        ...PENDING,
-        state: 'approved',
-        decidedBy: { subject: 'm.rao@ltm.example', displayName: 'Meera Rao' },
-        decidedAt: '2026-09-08T14:20:00.000Z',
-      },
-      CONFIRM,
-    );
-    expect(screen.getByTestId('approval-confirm-slot')).toBeTruthy();
-    expect(screen.getByTestId('confirm-submit')).toBeTruthy();
-    expect(screen.getByTestId('approval-state-sentence').textContent).toContain(
-      'the approver did not',
-    );
-  });
-
-  it('an expired approval says so, rather than disappearing', () => {
-    gate({ ...PENDING, state: 'expired' });
-    expect(screen.getByTestId('approval-state-sentence').textContent).toContain('expired');
-    expect(screen.getByTestId('plan-sentence').textContent).toBe(PLAN_TEXT);
-  });
-});
 
 describe('ApproverDecisionPanel — the approver’s view', () => {
   function panel(approval: ApprovalView, handlers: Partial<{

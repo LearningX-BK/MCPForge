@@ -583,6 +583,14 @@ export const APPROVAL_REQUEST: TableSpec = {
     // what a human actually agreed to, so it is stored verbatim rather than
     // re-rendered later from a manifest that may since have changed.
     plan_summary: { kind: 'text' },
+    // W0-P3f (owner decision, 30 Sep 2026): the whole plan body the requester
+    // was shown — plan, effects, warnings, reversal — so the approver sees
+    // "everything the requester saw and nothing less" (03 §7.4). It is exactly
+    // the object `plan_hash` is the canonical hash of, so every read re-hashes
+    // it and a mismatch is refused, never shown. No argument VALUES are stored
+    // (only their hash, above); the values the approver needs are in the plan
+    // sentence. Null on rows raised before this column existed.
+    plan_body: { kind: 'json' },
 
     // -- who asked
     caller_subject: { kind: 'text', notNull: true },

@@ -1,0 +1,1 @@
+ALTER TABLE "approval_request" ADD COLUMN "plan_body" text;

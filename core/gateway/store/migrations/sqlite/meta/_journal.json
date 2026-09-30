@@ -85,6 +85,13 @@
       "when": 1790478003725,
       "tag": "0011_luxuriant_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790761420551,
+      "tag": "0012_third_hedge_knight",
+      "breakpoints": true
     }
   ]
 }

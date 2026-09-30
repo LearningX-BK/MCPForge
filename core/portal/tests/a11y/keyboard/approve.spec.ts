@@ -8,8 +8,9 @@
 // carries the signed-in viewer's name (W0-P4 §3), never an invented one. So the
 // outcome a keyboard user is told about is the refusal, on `role="alert"`, and
 // the approval stays pending. The keyboard path being proved is unchanged. The
-// signed-in outcome ("Approved by <you>") is covered by
-// src/app/approvals/[approvalId]/approval-decision.test.tsx.
+// signed-in outcome is covered by
+// src/app/approvals/[approvalId]/approval-review.test.tsx (W0-P3f, which mounts
+// the panel on live data) and tests/policy/escalation.approval-decision.test.ts.
 import { expect, test } from '@playwright/test';
 
 test('an approval is decidable — approve, decline, and the reason field — without a mouse', async ({

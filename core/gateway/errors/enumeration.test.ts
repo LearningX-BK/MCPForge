@@ -175,6 +175,7 @@ function enumApprovalQueue(): ApprovalQueue {
         planHash: input.planHash,
         argsCanonicalHash: input.argsCanonicalHash,
         planSummary: input.planSummary ?? null,
+        planBody: input.planBody ?? null,
         callerSubject: input.callerSubject,
         consumerId: input.consumerId ?? null,
         toolId: input.toolId,
@@ -216,6 +217,7 @@ function enumRaiseInput(): RaiseApprovalInput {
     argsCanonicalHash: 'a'.repeat(64),
     planHash: 'b'.repeat(64),
     planSummary: 'Create an AP voucher for 100. This creates an OPEN PAYABLE in JD Edwards.',
+    planBody: null,
     tokenTtlSeconds: 300,
   };
 }

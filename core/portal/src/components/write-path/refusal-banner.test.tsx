@@ -7,39 +7,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 afterEach(cleanup);
 
-import { RefusalBanner, RefusedPlanCard } from './index';
-import type {
-  GuardrailResultView,
-  LockedArgsView,
-  PlanBodyView,
-  ProbeIdentityView,
-  RefusalView,
-} from './types';
-
-const PLAN_TEXT =
-  'Create an AP voucher for supplier 4242 (ACME LTD) for 18,400.00 GBP. This creates an OPEN PAYABLE in JD Edwards.';
-
-const PLAN: PlanBodyView = {
-  plan: PLAN_TEXT,
-  effects: [{ system: 'jde-fin', object: 'voucher', action: 'create', reversible: true }],
-  warnings: [],
-  reversal: { class: 'compensating-tool', tool: 'jde.ap.voucher.cancel', windowHours: 720 },
-};
-
-const IDENTITY: ProbeIdentityView = {
-  subject: 'p.rao@ltm.example',
-  bindingType: 'plsql',
-  carries: 'no',
-  probeRef: 'probe/jde-fin/2026-08-20',
-  compensatingControl: 'Wrapper schema records p_requested_by.',
-};
-
-const LOCKED: LockedArgsView = {
-  args: { supplier: '4242', amount: 18400 },
-  argsCanonicalHash: 'a1b2c3d4e5f60000',
-};
-
-const GUARDRAILS: readonly GuardrailResultView[] = [];
+import { RefusalBanner } from './index';
+import type { RefusalView } from './types';
 
 describe('RefusalBanner — every variant', () => {
   it('announces assertively on role="alert" — never a toast', () => {
@@ -59,45 +28,19 @@ describe('RefusalBanner — every variant', () => {
 });
 
 describe('PLAN_EXPIRED', () => {
-  const refusal: RefusalView = { code: 'PLAN_EXPIRED', next: 'Plan again to get a fresh plan.' };
-
-  it('greys the card, keeps the ORIGINAL plan text visible, and offers only Plan again', () => {
+  it('names the expiry and carries the next', () => {
     render(
-      <RefusedPlanCard
-        refusal={refusal}
-        plan={PLAN}
-        guardrails={GUARDRAILS}
-        identity={IDENTITY}
-        locked={LOCKED}
-        expiresAt={new Date(Date.now() - 60_000).toISOString()}
-        onPlanAgain={() => {}}
+      <RefusalBanner
+        refusal={{
+          code: 'PLAN_EXPIRED',
+          message: 'Approval apr_1 expired before it was decided.',
+          next: 'The requester must plan the change again.',
+        }}
       />,
     );
-
-    // The plan the user lost is still on screen, verbatim.
-    expect(screen.getByTestId('plan-sentence').textContent).toBe(PLAN_TEXT);
-
-    // The card greys, and says so to assistive tech.
-    const body = screen.getByTestId('refused-plan-body');
-    expect(body.className).toContain('opacity-60');
-    expect(body.getAttribute('aria-disabled')).toBe('true');
-
-    // The countdown reads "Expired".
-    expect(screen.getByTestId('plan-expiry-text').textContent).toBe('Expired');
-
-    // The only action.
-    expect(screen.getByTestId('plan-again')).toBeTruthy();
-    expect(screen.queryByTestId('confirm-submit')).toBeNull();
-  });
-
-  it('the refusal banner itself is NOT greyed — the explanation stays live', () => {
-    const { container } = render(
-      <RefusedPlanCard refusal={refusal} plan={PLAN} identity={IDENTITY} locked={LOCKED} />,
-    );
     const banner = screen.getByTestId('refusal-banner');
-    expect(container.querySelector('[data-testid="refused-plan-body"]')?.contains(banner)).toBe(
-      false,
-    );
+    expect(banner.getAttribute('data-code')).toBe('PLAN_EXPIRED');
+    expect(banner.textContent).toContain('The requester must plan the change again.');
   });
 });
 

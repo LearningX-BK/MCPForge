@@ -42,6 +42,7 @@ const C = {
   planHash: sql.identifier('plan_hash'),
   argsCanonicalHash: sql.identifier('args_canonical_hash'),
   planSummary: sql.identifier('plan_summary'),
+  planBody: sql.identifier('plan_body'),
   callerSubject: sql.identifier('caller_subject'),
   consumerId: sql.identifier('consumer_id'),
   toolId: sql.identifier('tool_id'),
@@ -68,12 +69,28 @@ function required(row: Row, column: string): string {
   return value;
 }
 
+/**
+ * W0-P3f — the stored plan body, parsed. Not validated here: a value that is
+ * not JSON is returned as its raw string so the reader's hash check fails on
+ * it, rather than this read throwing and hiding the row.
+ */
+function planBodyOf(value: unknown): unknown {
+  const raw = text(value);
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return raw;
+  }
+}
+
 function toRequest(row: Row): ApprovalRequest {
   return {
     id: required(row, 'id'),
     planHash: required(row, 'plan_hash'),
     argsCanonicalHash: required(row, 'args_canonical_hash'),
     planSummary: text(row['plan_summary']),
+    planBody: planBodyOf(row['plan_body']),
     callerSubject: required(row, 'caller_subject'),
     consumerId: text(row['consumer_id']),
     toolId: required(row, 'tool_id'),
@@ -103,6 +120,7 @@ export function approvalRepository(connection: DialectConnection): ApprovalRepos
         planHash: input.planHash,
         argsCanonicalHash: input.argsCanonicalHash,
         planSummary: input.planSummary ?? null,
+        planBody: input.planBody ?? null,
         callerSubject: input.callerSubject,
         consumerId: input.consumerId ?? null,
         toolId: input.toolId,
@@ -115,7 +133,7 @@ export function approvalRepository(connection: DialectConnection): ApprovalRepos
         expiresAt: input.expiresAt,
       };
       await connection.run(
-        sql`insert into ${T} (${C.id}, ${C.planHash}, ${C.argsCanonicalHash}, ${C.planSummary}, ${C.callerSubject}, ${C.consumerId}, ${C.toolId}, ${C.toolVersion}, ${C.status}, ${C.approverSubject}, ${C.decisionReason}, ${C.decidedAt}, ${C.createdAt}, ${C.expiresAt}) values (${request.id}, ${request.planHash}, ${request.argsCanonicalHash}, ${request.planSummary}, ${request.callerSubject}, ${request.consumerId}, ${request.toolId}, ${request.toolVersion}, ${request.status}, ${null}, ${null}, ${null}, ${request.createdAt}, ${request.expiresAt})`,
+        sql`insert into ${T} (${C.id}, ${C.planHash}, ${C.argsCanonicalHash}, ${C.planSummary}, ${C.planBody}, ${C.callerSubject}, ${C.consumerId}, ${C.toolId}, ${C.toolVersion}, ${C.status}, ${C.approverSubject}, ${C.decisionReason}, ${C.decidedAt}, ${C.createdAt}, ${C.expiresAt}) values (${request.id}, ${request.planHash}, ${request.argsCanonicalHash}, ${request.planSummary}, ${input.planBody === undefined ? null : JSON.stringify(input.planBody)}, ${request.callerSubject}, ${request.consumerId}, ${request.toolId}, ${request.toolVersion}, ${request.status}, ${null}, ${null}, ${null}, ${request.createdAt}, ${request.expiresAt})`,
       );
       return request;
     },

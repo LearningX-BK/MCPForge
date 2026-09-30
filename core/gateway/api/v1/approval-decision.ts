@@ -42,6 +42,7 @@ import { confirmTokenHash } from '../../policy/idempotency/audit-row.js';
 import type { AppendAuditCallInput } from '../../store/audit/types.js';
 import type { RuntimeStore } from '../../store/repository.js';
 import type { ApprovalRequest } from '../../store/runtime/types.js';
+import { verifiedPlanBody } from './plan-body.js';
 import { ApiRefusal } from './refusal.js';
 
 /**
@@ -92,6 +93,7 @@ type DeniedRule =
   | 'approval.self_approval'
   | 'approval.not_pending'
   | 'approval.expired'
+  | 'approval.plan_body_mismatch'
   | 'approval.internal';
 
 interface Attempt {
@@ -180,7 +182,31 @@ export async function decideApproval(
     );
   }
 
-  // 3. The gate decides, and the audit row commits with it or not at all.
+  // 3. W0-P3f: nobody decides on a stored plan that is not the plan being
+  //    approved. A body that fails its hash has been altered in the store;
+  //    deciding on it would approve something the approver never saw.
+  if (verifiedPlanBody(current).status === 'mismatch') {
+    await deps.store.transaction(() =>
+      deps.store.audit.append(
+        refusedRow(
+          deps,
+          actor,
+          attempt,
+          current,
+          'approval.plan_body_mismatch',
+          'APPROVAL_REQUIRED',
+          'The stored plan body does not hash to the approved planHash.',
+        ),
+      ),
+    );
+    throw new ApiRefusal(
+      'APPROVAL_REQUIRED',
+      `Approval ${approvalId} cannot be decided: its stored plan does not match the plan hash it was raised with, so what would be shown to you is not what would be approved.`,
+      'Do not decide it. Report the approval id to the MCPForge operator so the runtime store can be inspected (forge audit verify), and ask the requester to plan the change again, which raises a fresh request.',
+    );
+  }
+
+  // 4. The gate decides, and the audit row commits with it or not at all.
   const { outcome, row } = await deps.store.transaction(async () => {
     const decided = await deps.gate.decide({
       approvalId,
