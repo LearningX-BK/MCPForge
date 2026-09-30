@@ -12,6 +12,7 @@
 # Runtime state and secrets — never in an image.
 .mcpforge/
 **/.mcpforge/
+.mcpforge-docker/
 .env
 .env.*
 *.pem

@@ -24,10 +24,19 @@ services:
       MCPFORGE_MODE: ${MCPFORGE_MODE:-full}
       MCPFORGE_GATEWAY_PORT: '3939'
       PORT: '3000'
+      # W0-K4: a container has no OS keychain, so the SecretStore's sealing
+      # key comes from the environment (05 §4.3.1's env-var path). REQUIRED:
+      # compose refuses to start without it rather than inventing one.
+      MCPFORGE_SECRETS_KEY: ${MCPFORGE_SECRETS_KEY:?set MCPFORGE_SECRETS_KEY (a long random passphrase) before docker compose up}
     volumes:
       # The ONLY persistent state (02 §10.3: definitions are git, events are
-      # the store). Bind-mounted so `docker compose down && up` — and even
-      # `rm -rf` of the container — leaves the SQLite file exactly where a
-      # developer would find it if they had run `pnpm dev` instead.
-      - ./.mcpforge:/app/.mcpforge
+      # the store). W0-K4: the container's OWN directory, not the host's
+      # `.mcpforge/`: the host store is sealed with a key held in the host's
+      # OS keychain, which a Linux container cannot reach, so sharing it
+      # would make the gateway unable to start.
+      - ./.mcpforge-docker:/app/.mcpforge
+      # The portal's registered consumer key (consumers/portal-local.consumer.yaml
+      # names its public half). Read-only; issue a fresh one per deployment
+      # with `forge consumer issue-credential` (see DEPLOY.md).
+      - ./.mcpforge/portal/portal-local.private.jwk.json:/app/.mcpforge/portal/portal-local.private.jwk.json:ro
     restart: unless-stopped

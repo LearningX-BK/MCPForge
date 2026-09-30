@@ -1,0 +1,96 @@
+# Deploying MCPForge on one VM (Wave 0)
+
+What this covers: running the `mcpforge-core` image (gateway + portal, one
+container) on a single Linux VM, for example an OCI Compute instance, against
+the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
+(W0-K4). This is a **demo deployment**, not production: see "Not possible yet".
+
+## What the image is
+
+- One image, `mcpforge-core`, built from this repo's `Dockerfile` (`node:22-slim`).
+  The gateway is the entrypoint (`node --import tsx core/gateway/launch.ts`) and,
+  in `full` mode, spawns the portal (`next start`) as a sibling process.
+- Gateway on **3939** (MCP at `/mcp`, the governance API at `/api/v1`, sign-in at
+  `/auth/local/*`); portal on **3000**.
+- All runtime state lives in ONE mounted directory, `./.mcpforge-docker`
+  (SQLite runtime store, the sealed SecretStore, the gateway's signing keys).
+  Definitions (manifests, roles, consumers, overlays) are in the image from git.
+- `.dockerignore` keeps every local secret and runtime file out of the image.
+  Never remove `.mcpforge/` from it.
+
+## Steps
+
+1. **Install Docker** on the VM (Docker Engine + Compose plugin). Open only the
+   ports your TLS proxy needs (443); do NOT expose 3939 or 3000 publicly.
+
+2. **Clone the repo** at the commit you want to run and build:
+   ```sh
+   docker compose build
+   ```
+
+3. **Choose the SecretStore key.** A container has no OS keychain, so the store
+   is sealed with `MCPFORGE_SECRETS_KEY` (05 §4.3.1's env-var path). Use a long
+   random passphrase, keep it in the VM's secret manager or an OCI Vault secret,
+   and supply it at start. Compose refuses to start without it. Losing it means
+   losing the sealed store (the gateway re-mints its own keys on a fresh store;
+   binding credentials must be re-seeded).
+   ```sh
+   export MCPFORGE_SECRETS_KEY='<long random passphrase>'
+   ```
+
+4. **Give the portal its consumer key.** The portal presents the registered
+   consumer `portal-local` (`consumers/portal-local.consumer.yaml`) with a
+   private key whose public half is in that record. For a VM, issue a key for
+   this deployment rather than copying a developer's:
+   ```sh
+   node core/cli/bin/forge.js consumer issue-credential portal-local \
+     --method private-key-jwt --key-file .mcpforge/portal/portal-local.private.jwk.json --by <you>
+   ```
+   That stages a change proposal adding the public key; it must be approved and
+   merged (a reviewed grant, like every consumer change). `docker-compose.yml`
+   mounts `.mcpforge/portal/portal-local.private.jwk.json` read-only.
+
+5. **Put TLS in front.** The portal sets `Secure` session cookies whenever it is
+   not reached on loopback, so over plain HTTP sign-in cannot work. Terminate
+   HTTPS at nginx/Caddy on the VM, or at an OCI Load Balancer, and proxy to
+   `127.0.0.1:3000` (portal) and, for agents, `127.0.0.1:3939` (gateway).
+   The gateway's consumer-assertion audience is fixed at
+   `https://mcpforge.local/mcp` whatever public URL it is reached on; clients
+   sign for that audience. Do not set `MCPFORGE_GATEWAY_AUDIENCE` on the portal
+   alone: the gateway does not read it, and the two would stop matching.
+
+6. **Start:**
+   ```sh
+   docker compose up -d
+   docker compose logs -f   # expect: "gateway listening on 0.0.0.0:3939 (mode=full, portal=spawned)"
+   ```
+
+7. **Create local users.** There is no `forge` command for this yet. Seed users
+   inside the container with `localUserStore({ store }).createUser(...)`
+   (`core/gateway/identity`), as the W0-K4 check did. Groups map to roles in
+   `overlays/local/mappings/groups-to-roles.yaml`.
+
+8. **Point it at a JD Edwards target and probe (optional).** Start the mock
+   (`pnpm --filter @mcpforge/mocks mock-jde`, or run it as a second service),
+   seed the three per-server client credentials named in
+   `overlays/local/ais-targets.yaml` into the SecretStore (no `forge secrets put`
+   yet, W0-P26), then run `forge probe --env local` so tools are enabled.
+   Without a probe report every tool reads "Not probed" and nothing can execute.
+
+## Verified (30 Sep 2026, local Docker)
+
+- `docker compose build` succeeds on `node:22-slim` (including `better-sqlite3`).
+- The gateway binds `0.0.0.0:3939` in the container and spawns the portal.
+- Unregistered callers are refused on `/mcp` and `/api/v1` (`CONSUMER_UNREGISTERED`, with a `next`).
+- Local sign-in through the gateway issues tokens from the container's sealed store.
+- A browser signed in to the portal and read live data (Activity, Environments, Catalog)
+  through `/api/v1` with the portal's consumer key.
+
+## Not possible yet (and which task owns it)
+
+- **A real JD Edwards target:** the real token-provider protocol is an open human decision (W0-P14 note).
+- **Anyone approving anything:** no local group maps to the real role `p2p` (owner fix to the mapping).
+- **External agents (Claude Desktop etc.):** no supported way to issue a key to a new consumer; W0-P19, W0-Q12.
+- **Storing binding credentials without a script:** W0-P26.
+- **Production secrets:** `OciVaultStore` is the named production target and is not built in Wave 0.
+- **More than one instance:** SQLite is single-instance; multi-replica needs the Postgres store (built and tested, not wired for this image).
