@@ -84,7 +84,8 @@ function pageFiles(dir: string, prefix = ''): { route: string; file: string }[] 
 /** One representative id per dynamic segment, as the a11y route list does. */
 const PARAMS: Readonly<Record<string, Record<string, string>>> = {
   '/activity/calls/[callId]': { callId: 'call_a1f9e0' },
-  '/build/[draftId]': { draftId: 'draft-voucher-create' },
+  // W0-P3c: drafts are git branches now, so the one id that always resolves is `new`.
+  '/build/[draftId]': { draftId: 'new' },
   '/catalog/[toolId]': { toolId: 'jde.ap.voucher.search' },
 };
 

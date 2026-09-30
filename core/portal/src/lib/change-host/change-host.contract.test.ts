@@ -155,6 +155,42 @@ describe('LocalGit — branch + commit + a review record (02 §10.1 item 1)', ()
     expect(await host.getProposal(draft.id)).toBeUndefined();
   });
 
+  it('readFile returns a file as the draft branch holds it, and undefined for a path it does not hold', async () => {
+    const repo = makeRepo();
+    const host = new LocalGit({ repoRoot: repo });
+    const draft = await host.saveDraft({
+      branch: 'forge/W0-P3c-read',
+      title: 'x',
+      author: 'p',
+      files: { 'manifests/jde/ap/voucher.create.tool.yaml': 'id: jde.ap.voucher.create\n' },
+    });
+    // Read from the branch, not the working tree: switch away first.
+    git(repo, ['checkout', 'main']);
+    expect(await host.readFile(draft.id, 'manifests/jde/ap/voucher.create.tool.yaml')).toBe(
+      'id: jde.ap.voucher.create\n',
+    );
+    expect(await host.readFile(draft.id, 'manifests/absent.tool.yaml')).toBeUndefined();
+  });
+
+  it('readFile refuses anything outside the definitional trees, and traversal', async () => {
+    const repo = makeRepo();
+    const host = new LocalGit({ repoRoot: repo });
+    const draft = await host.saveDraft({
+      branch: 'forge/W0-P3c-refuse',
+      title: 'x',
+      author: 'p',
+      files: { 'manifests/z.tool.yaml': 'id: z\n' },
+    });
+    for (const bad of ['.env', '/etc/passwd', 'manifests/../.env', 'core/x.ts', 'manifests\\z']) {
+      await expect(host.readFile(draft.id, bad)).rejects.toMatchObject({
+        code: 'CHANGE_NOT_PERMITTED',
+      });
+    }
+    await expect(host.readFile('no-such-change', 'manifests/z.tool.yaml')).rejects.toMatchObject({
+      code: 'CHANGE_NOT_FOUND',
+    });
+  });
+
   it('errors are the closed taxonomy and always carry an actionable `next`', async () => {
     const repo = makeRepo();
     const host = new LocalGit({ repoRoot: repo });
@@ -265,6 +301,7 @@ describe('HostedGit — a stub that fails loudly, never quietly (CLAUDE.md §3.1
     ['listProposals', () => host.listProposals()],
     ['getProposal', () => host.getProposal('i')],
     ['diff', () => host.diff('i')],
+    ['readFile', () => host.readFile('i', 'manifests/x.tool.yaml')],
   ];
 
   for (const [name, call] of calls) {

@@ -4,12 +4,13 @@
 // (`src/app/build/_components/sandbox-run.tsx`, W0-J14's "the sandbox run
 // exercises the full plan/confirm path against mocks") — `/catalog/[toolId]`
 // only has static Detail/Agent-view/Role-simulator tabs, no live execute.
-// `draft-voucher-create` (`build/fixtures.ts`) is the write-tool draft this
-// flow needs.
+// W0-P3c: the write-tool draft this flow needs is `jde.ap.voucher.create`'s
+// committed manifest, opened as a new draft (`/build/new?from=`), since Build
+// no longer serves fixture drafts.
 import { expect, test } from '@playwright/test';
 
 test('a write tool is completable plan -> confirm -> execute without a mouse', async ({ page }) => {
-  await page.goto('/build/draft-voucher-create');
+  await page.goto('/build/new?from=jde.ap.voucher.create');
 
   await page.getByTestId('sandbox-plan-button').focus();
   await page.keyboard.press('Enter');

@@ -4,10 +4,15 @@
 // see `fixtures.ts`'s header for how each ask was chosen.
 import { describe, expect, it } from 'vitest';
 import { fixtureCatalogSource } from '../catalog/fixtures';
-import { verdictFor, EXISTS_SCORE_THRESHOLD, NEAR_MISS_SCORE_THRESHOLD } from './rank-adapter';
+import {
+  requestCatalogFromCatalogData,
+  verdictFor,
+  EXISTS_SCORE_THRESHOLD,
+  NEAR_MISS_SCORE_THRESHOLD,
+} from './rank-adapter';
 
 describe('verdictFor', () => {
-  const data = fixtureCatalogSource();
+  const data = requestCatalogFromCatalogData(fixtureCatalogSource());
 
   it('returns exists, with a real score, when the ask names the tool\'s own verb', () => {
     const v = verdictFor('search AP vouchers for supplier', data);

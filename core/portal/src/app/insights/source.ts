@@ -1,7 +1,7 @@
 // MCPForge — W0-J20 (reduced scope): the default `InsightsSource` (03 §5.3
-// "Insights"). Named `fixtures.ts` for consistency with every other J-track
-// page (`home/fixtures.ts` et al. are real loaders too, not invented data —
-// see that file's header), not because anything here is fabricated.
+// "Insights"). W0-P3c renamed it from `fixtures.ts` to `source.ts`: nothing
+// here was ever fabricated, and a page may not import a `fixtures.ts`
+// (tools/ci/src/page-fixture-imports.ts), so the name now says what it is.
 //
 // This runs the REAL `forge bench` rank-1 pipeline — `loadCatalogueIndex`,
 // `loadAllIntents`, `buildTokenModel`, `runRank1`, `measureIntent`,
@@ -109,5 +109,5 @@ export function loadInsightsSource(repoRoot: string = resolveRepoRoot()): Insigh
   return { report, baseline, comparison, budget };
 }
 
-/** Insights' default `InsightsSource` — same injectable-source seam every J-track page follows. */
-export const fixtureInsightsSource: () => InsightsSource = () => loadInsightsSource();
+/** Insights' default `InsightsSource`: this repository's own index, intents and baseline. */
+export const repoInsightsSource: () => InsightsSource = () => loadInsightsSource();

@@ -1,11 +1,16 @@
 // MCPForge — W0-J19: the real `forge.find`-equivalent verdict.
 //
-// This is the load-bearing file for this task's done: criterion. It builds a
-// real `CatalogueIndex` (`@mcpforge/registry/index`, W0-G1) from the same
-// `CatalogData` the Catalog page renders, then runs the real six-stage
-// ranking pipeline (`@mcpforge/registry/rank`'s `rankTools`, W0-G2/G3) over
-// it. Nothing here re-implements scoring, tokenizing or fusion — every number
-// this module returns is `RankedResult.score` untouched.
+// This is the load-bearing file for this task's done: criterion. It runs the
+// real six-stage ranking pipeline (`@mcpforge/registry/rank`'s `rankTools`,
+// W0-G2/G3) over a real `CatalogueIndex`. Nothing here re-implements scoring,
+// tokenizing or fusion — every number this module returns is
+// `RankedResult.score` untouched.
+//
+// W0-P3c: WHICH INDEX. The page ranks over `generated/index/catalogue-index.json`,
+// the committed artefact `forge.find` itself serves (`./source.ts` reads it
+// with titles from the manifests), so "the same search your agents use" is
+// literally true. `requestCatalogFromCatalogData` builds the same shape from a
+// Catalog `CatalogData` and remains for tests only.
 //
 // VISIBILITY, A JUDGMENT CALL: Requests is business intake, not a scoped
 // agent session — 03 §5.3 says "the human and the agent get the same answer
@@ -14,13 +19,11 @@
 // (there is no session to scope Requests against — it is reached by a
 // business user asking in plain English, before any tool grant exists).
 // `SessionVisibility.visibleToolIds` is therefore set to every tool id in the
-// supplied `CatalogData`, i.e. stage 1's hard filter passes every entry
-// through unfiltered, and stage 5's `activeRoleIds` is left empty so the
-// active-role boost never fires (there is no active role to boost). This
-// mirrors `role-simulator.ts`'s reuse of `CatalogData` directly rather than
-// inventing a second data shape, and is flagged here (and in the task's
-// final report) as a genuine choice a human should be free to revisit if
-// Requests should instead be scoped to the asking user's own visible set.
+// index, i.e. stage 1's hard filter passes every entry through unfiltered,
+// and stage 5's `activeRoleIds` is left empty so the active-role boost never
+// fires (there is no active role to boost). Flagged as a genuine choice a
+// human should be free to revisit if Requests should instead be scoped to the
+// asking user's own visible set.
 //
 // TIER BOUNDARIES, A JUDGMENT CALL: `RankedResult.score` is comparable across
 // queries (`rank/types.ts`'s own comment on `RankedResult.score`) but W0-G3's
@@ -32,16 +35,25 @@
 // itself, which is always the real fused+boosted number and is always
 // rendered verbatim next to whichever tier it landed in. Once W0-HG5 signs
 // off the calibrated floor, these thresholds should be replaced with that
-// floor and the top-2 margin `choose` policy — noted as an open flag in the
-// final report.
+// floor and the top-2 margin `choose` policy.
 import { buildCatalogueIndex } from '@mcpforge/registry/index';
 import { rankTools } from '@mcpforge/registry/rank';
-import type { CatalogueIndexToolInput } from '@mcpforge/registry/index';
+import type { CatalogueIndex, CatalogueIndexToolInput } from '@mcpforge/registry/index';
 import type { RankContext, RankedResult } from '@mcpforge/registry/rank';
 import type { CatalogData, CatalogTool } from '../catalog/types';
-import { NEW_DRAFT_TEMPLATE_YAML } from '../build/fixtures';
+import { NEW_DRAFT_TEMPLATE_YAML } from '../build/new-draft';
 import type { BuildDraft } from '../build/types';
 import type { RequestVerdict, RequestVerdictMatch } from './types';
+
+/**
+ * What the ranker runs over: an index plus the one thing the index does not
+ * carry, each tool's title. Plain JSON, so a server page can hand it to the
+ * client-side ask box as a prop.
+ */
+export interface RequestCatalog {
+  readonly index: CatalogueIndex;
+  readonly tools: Readonly<Record<string, { readonly title: string; readonly disambiguation: string | null }>>;
+}
 
 /**
  * A tool's score above this is treated as "this already exists, here it is."
@@ -89,32 +101,37 @@ function toIndexInput(tool: CatalogTool): CatalogueIndexToolInput {
   };
 }
 
-/** Build the real index + rank context from the same `CatalogData` the Catalog page reads. See file header re: visibility. */
-export function buildRequestRankContext(data: CatalogData): {
-  readonly index: ReturnType<typeof buildCatalogueIndex>;
-  readonly context: RankContext;
-  readonly byId: ReadonlyMap<string, CatalogTool>;
-} {
-  const inputs = data.tools.map(toIndexInput);
-  const index = buildCatalogueIndex(inputs, new Set());
-  const byId = new Map(data.tools.map((t) => [t.manifest.id, t]));
-  const context: RankContext = {
+/** TEST ADAPTER: the same `RequestCatalog` shape, built in-process from Catalog `CatalogData`. */
+export function requestCatalogFromCatalogData(data: CatalogData): RequestCatalog {
+  return {
+    index: buildCatalogueIndex(data.tools.map(toIndexInput), new Set()),
+    tools: Object.fromEntries(
+      data.tools.map((t) => [
+        t.manifest.id,
+        { title: t.manifest.title, disambiguation: t.manifest.disambiguation ?? null },
+      ]),
+    ),
+  };
+}
+
+/** The rank context for Requests: every indexed tool visible, no active role. See file header. */
+export function buildRequestRankContext(catalog: RequestCatalog): RankContext {
+  return {
     visibility: {
-      visibleToolIds: new Set(data.tools.map((t) => t.manifest.id)),
+      visibleToolIds: new Set(catalog.index.tools.map((t) => t.id)),
       activeRoleIds: [],
     },
   };
-  return { index, context, byId };
 }
 
-function toMatch(result: RankedResult, byId: ReadonlyMap<string, CatalogTool>): RequestVerdictMatch {
-  const tool = byId.get(result.id);
+function toMatch(result: RankedResult, catalog: RequestCatalog): RequestVerdictMatch {
+  const tool = catalog.tools[result.id];
   return {
     toolId: result.id,
-    title: tool?.manifest.title ?? result.id,
+    title: tool?.title ?? result.id,
     score: result.score,
     href: `/catalog/${encodeURIComponent(result.id)}`,
-    disambiguation: tool?.manifest.disambiguation ?? null,
+    disambiguation: tool?.disambiguation ?? null,
   };
 }
 
@@ -152,21 +169,19 @@ function draftTemplateFor(askText: string): BuildDraft {
 
 /**
  * Run the real ranker for one free-text ask and return the three-tier
- * verdict. `data` is the same `CatalogData` the Catalog page renders —
- * callers typically pass `fixtureCatalogSource()` today (see `fixtures.ts`).
+ * verdict. The page passes the committed index (`./source.ts`).
  */
-export function verdictFor(askText: string, data: CatalogData): RequestVerdict {
-  const { index, context, byId } = buildRequestRankContext(data);
-  const ranked = rankTools(index, { text: askText }, context);
+export function verdictFor(askText: string, catalog: RequestCatalog): RequestVerdict {
+  const ranked = rankTools(catalog.index, { text: askText }, buildRequestRankContext(catalog));
 
   const top = ranked[0];
   if (top !== undefined && top.score >= EXISTS_SCORE_THRESHOLD) {
-    return { tier: 'exists', match: toMatch(top, byId) };
+    return { tier: 'exists', match: toMatch(top, catalog) };
   }
 
   const nearMisses = ranked.filter((r) => r.score >= NEAR_MISS_SCORE_THRESHOLD).slice(0, NEAR_MISS_LIMIT);
   if (nearMisses.length > 0) {
-    return { tier: 'near_miss', matches: nearMisses.map((r) => toMatch(r, byId)) };
+    return { tier: 'near_miss', matches: nearMisses.map((r) => toMatch(r, catalog)) };
   }
 
   return { tier: 'new', draftTemplate: draftTemplateFor(askText) };

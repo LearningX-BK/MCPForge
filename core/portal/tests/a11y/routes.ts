@@ -12,7 +12,8 @@ export const ROUTES: readonly string[] = [
   '/catalog',
   '/catalog/jde.ap.voucher.search',
   '/build',
-  '/build/draft-voucher-create',
+  // W0-P3c: a draft seeded from a committed manifest (the fixture draft id is gone).
+  '/build/new?from=jde.ap.voucher.create',
   '/activity',
   '/activity/calls/call_a1f9e0',
   '/approvals',

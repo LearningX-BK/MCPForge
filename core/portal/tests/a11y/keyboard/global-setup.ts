@@ -36,7 +36,7 @@ const ROUTES = [
   '/approvals/warmup-probe',
   '/catalog',
   '/home',
-  '/build/draft-voucher-create',
+  '/build/new?from=jde.ap.voucher.create',
   '/activity/calls/call_ex4402',
   '/governance',
 ] as const;

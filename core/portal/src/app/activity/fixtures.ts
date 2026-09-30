@@ -337,14 +337,6 @@ export function getActivityCall(
 }
 
 /**
- * The `sha256[:12]` marker rendered for a redacted arg — see `types.ts`'s
- * header. Not a hashing function; `hash` is already computed upstream.
- */
-export function redactedAnnouncement(hash: string): string {
-  return `Redacted value, hash ${hash}`;
-}
-
-/**
  * Stand-in for `AuditRepository.verifyChain()` — see the file header seam
  * note. Consistent with `loadActivityCallDetails()`'s own chain: 5 rows,
  * genesis origin, no break.

@@ -88,4 +88,8 @@ export class HostedGit implements GitChangeHost {
   diff(): Promise<ChangeDiffSet> {
     return Promise.reject(notImplemented('diff'));
   }
+
+  readFile(): Promise<string | undefined> {
+    return Promise.reject(notImplemented('readFile'));
+  }
 }

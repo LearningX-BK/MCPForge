@@ -43,6 +43,8 @@ import path from 'node:path';
 
 import {
   ChangeHostError,
+  DEFINITIONAL_PREFIXES,
+  isDefinitionalPath,
   type ChangeDiffSet,
   type GitChangeHost,
   type ChangeProposal,
@@ -393,6 +395,25 @@ export class LocalGit implements GitChangeHost {
     const branch = branches.find((candidate) => proposalIdForBranch(candidate) === id);
     if (branch === undefined) return undefined;
     return this.#readProposal(branch, await this.#mergedBranches());
+  }
+
+  async readFile(id: string, filePath: string): Promise<string | undefined> {
+    if (!isDefinitionalPath(filePath)) {
+      throw new ChangeHostError(
+        'CHANGE_NOT_PERMITTED',
+        `${filePath} is not a repo-relative path under a definitional tree.`,
+        `Read a path under one of ${DEFINITIONAL_PREFIXES.join(', ')}, with no "..".`,
+      );
+    }
+    const proposal = await this.getProposal(id);
+    if (proposal === undefined) {
+      throw new ChangeHostError(
+        'CHANGE_NOT_FOUND',
+        `No change proposal ${id}.`,
+        'Pick the change from the change tray, or Save draft first.',
+      );
+    }
+    return this.#tryGit(['show', `${proposal.branch}:${filePath}`]);
   }
 
   async #patch(range: string, filePath: string): Promise<string> {

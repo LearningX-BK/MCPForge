@@ -8,8 +8,17 @@
 // here to a definition-list value).
 import { cn } from 'cn';
 
-import { redactedAnnouncement } from './fixtures';
 import type { ActivityArgEntryView } from './types';
+
+/**
+ * The `sha256[:12]` marker rendered for a redacted arg — see `types.ts`'s
+ * header. Not a hashing function; `hash` is already computed upstream. (Moved
+ * here from `fixtures.ts` in W0-P3c: a live page renders it, so it is not a
+ * fixture.)
+ */
+export function redactedAnnouncement(hash: string): string {
+  return `Redacted value, hash ${hash}`;
+}
 
 export interface RedactedArgProps {
   entry: ActivityArgEntryView;

@@ -20,7 +20,6 @@ import type {
   EnablementBacklogGroup,
   EnablementEntry,
   KillFlagView,
-  PackageSummary,
   SecretPostureView,
 } from './types';
 
@@ -142,26 +141,6 @@ export function loadEnablementBacklog(): readonly EnablementBacklogGroup[] {
     .map(([owningTeam, entries]) => ({ owningTeam, entries }));
 }
 
-// ---------------------------------------------------------------------------
-// Packages
-// ---------------------------------------------------------------------------
-
-const PACKAGES: readonly PackageSummary[] = [
-  {
-    id: 'jde-fin',
-    label: 'JD Edwards Financials',
-    blurb: 'AP, AR and GL tools for JD Edwards EnterpriseOne.',
-    servers: ['jde-ap'],
-    roleCount: 1,
-    bindingTypesPresent: ['function'],
-    toolCount: 11,
-    waveCount: 1,
-    notIncluded: ['SCM', 'HCM', 'EPM'],
-  },
-];
-
-export function loadPackages(): readonly PackageSummary[] {
-  return PACKAGES;
-}
-
-export const STALE_AFTER_HOURS = 24;
+// Packages: W0-P3c moved them to git (`packages/load-packages.ts`). The old
+// fixture here was stale (one server where `packages/jde-fin.yaml` names
+// three) and is gone rather than kept as a second, wrong opinion.

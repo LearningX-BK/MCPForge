@@ -109,7 +109,7 @@ export function ToolDetail({ tool, data, onOpenAgentView }: ToolDetailProps) {
           Describe
         </Button>
         <Button size="sm" variant="secondary" asChild>
-          <Link href={`/build?from=${encodeURIComponent(m.id)}`}>Propose change</Link>
+          <Link href={`/build/new?from=${encodeURIComponent(m.id)}`}>Propose change</Link>
         </Button>
         <Button size="sm" variant="ghost">
           Add to activation set

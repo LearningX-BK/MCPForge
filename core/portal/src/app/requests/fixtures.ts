@@ -15,8 +15,12 @@
 // `rank-adapter.test.ts`, not assumed) lands as new. Not by asserting a tier
 // and skipping the ranker.
 import { fixtureCatalogSource } from '../catalog/fixtures';
-import { verdictFor } from './rank-adapter';
+import { requestCatalogFromCatalogData, verdictFor } from './rank-adapter';
 import type { RequestRecord, RequestSource } from './types';
+
+// TEST SOURCE ONLY since W0-P3c. `/requests` shows no tracked requests until
+// they have a store of their own (W0-Q4/Q5); these seeded ones remain as
+// component-test input and feed `home/fixtures.ts`.
 
 // A FIXED anchor, not `Date.now()` — `page.tsx` is `'use client'`, so this
 // module evaluates once during SSR and again on hydration; a wall-clock
@@ -27,7 +31,8 @@ const NOW = new Date('2026-09-15T12:00:00.000Z').getTime();
 const DAY = 24 * 60 * 60_000;
 
 export function loadRequests(now: number = NOW): readonly RequestRecord[] {
-  const data = fixtureCatalogSource();
+  const catalogData = fixtureCatalogSource();
+  const data = requestCatalogFromCatalogData(catalogData);
 
   const askExists = 'search AP vouchers for supplier';
   const askNearMiss = 'look up bills for supplier by amount';
@@ -38,7 +43,7 @@ export function loadRequests(now: number = NOW): readonly RequestRecord[] {
   // `owningTeam` documents itself against (W0-J17 precedent) — never typed
   // by hand.
   const voucherSearchOwner =
-    data.tools.find((t) => t.manifest.id === 'jde.ap.voucher.search')?.manifest.governance.owner ?? null;
+    catalogData.tools.find((t) => t.manifest.id === 'jde.ap.voucher.search')?.manifest.governance.owner ?? null;
 
   return [
     {
