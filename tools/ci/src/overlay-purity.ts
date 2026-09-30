@@ -240,7 +240,82 @@ function stripQuotesAndComment(value: string): string {
   return v;
 }
 
-function scanLineForLeaks(line: string): string | null {
+// --- W0-P30: a consumer's registered PUBLIC key is not a credential ------------
+//
+// A consumer record (02 §11.2) carries the public half of its `private-key-jwt`
+// keypair under `credential.publicKeys`, as JWK members. An Ed25519 `x` is 43
+// base64url characters and trips the high-entropy scan, yet registration
+// requires it and it is public by definition. So, for YAML under `consumers/`
+// only, the scan exempts exactly the public members (`x`, `y`, `n`, `e`) of an
+// entry in a `publicKeys` list that declares a `kty`, matched by member name
+// AND exact value. Everything else on every other line is scanned as before.
+// A PRIVATE member (`d`, `p`, `q`, `dp`, `dq`, `qi`, or a symmetric `k`) in
+// such an entry is a violation outright, whatever its entropy.
+
+const PUBLIC_JWK_MEMBERS = ['x', 'y', 'n', 'e'] as const;
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'k'] as const;
+const JWK_MEMBER_LINE = /^\s*(?:-\s*)?["']?([a-z]{1,2})["']?\s*:\s*(.+?)\s*$/;
+
+interface PublicKeyFacts {
+  /** `${member}\u0000${value}` for every exempt public member. */
+  readonly publicValues: ReadonlySet<string>;
+  /** Private members present in a `publicKeys` entry. */
+  readonly privateMembers: ReadonlySet<string>;
+}
+
+function publicKeyFacts(text: string): PublicKeyFacts {
+  const publicValues = new Set<string>();
+  const privateMembers = new Set<string>();
+  let doc: unknown;
+  try {
+    doc = parseYaml(text);
+  } catch {
+    return { publicValues, privateMembers };
+  }
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (!isRecord(node)) return;
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'publicKeys' && Array.isArray(value)) {
+        for (const jwk of value) {
+          if (!isRecord(jwk) || typeof jwk['kty'] !== 'string') continue;
+          for (const m of PUBLIC_JWK_MEMBERS) {
+            if (typeof jwk[m] === 'string') publicValues.add(`${m}\u0000${jwk[m]}`);
+          }
+          for (const m of PRIVATE_JWK_MEMBERS) {
+            if (m in jwk) privateMembers.add(m);
+          }
+        }
+      }
+      visit(value);
+    }
+  };
+  visit(doc);
+  return { publicValues, privateMembers };
+}
+
+function isExemptPublicMember(line: string, facts: PublicKeyFacts): boolean {
+  const m = JWK_MEMBER_LINE.exec(line);
+  if (m === null) return false;
+  return facts.publicValues.has(`${m[1]}\u0000${stripQuotesAndComment(m[2] ?? '')}`);
+}
+
+function isPrivateMemberLine(line: string, facts: PublicKeyFacts): string | undefined {
+  const m = JWK_MEMBER_LINE.exec(line);
+  return m !== null && facts.privateMembers.has(m[1]!) ? m[1] : undefined;
+}
+
+const NO_FACTS: PublicKeyFacts = { publicValues: new Set(), privateMembers: new Set() };
+
+function scanLineForLeaks(line: string, facts: PublicKeyFacts = NO_FACTS): string | null {
+  const privateMember = isPrivateMemberLine(line, facts);
+  if (privateMember !== undefined) {
+    return `a publicKeys entry carries the PRIVATE JWK member "${privateMember}" — only the public half (kty, crv, x/y or n/e) may be registered; the private key stays with the consumer (non-negotiable #8).`;
+  }
+  if (isExemptPublicMember(line, facts)) return null;
   if (PEM_HEADER.test(line)) {
     return 'contains a PEM header (a private key or certificate value) — store it via a secretRef:// reference, never inline.';
   }
@@ -299,9 +374,14 @@ export function checkForLeakedSecrets(repoRoot: string): OverlayPurityViolation[
         continue; // not readable as text (e.g. a binary branding asset with a misleading extension) — nothing to scan.
       }
 
+      // W0-P30 — only a consumer record's YAML may register a public key.
+      const facts =
+        root === 'consumers' && (ext === '.yaml' || ext === '.yml')
+          ? publicKeyFacts(text)
+          : NO_FACTS;
       const lines = text.split(/\r?\n/);
       for (let i = 0; i < lines.length; i += 1) {
-        const message = scanLineForLeaks(lines[i]!);
+        const message = scanLineForLeaks(lines[i]!, facts);
         if (message) {
           violations.push({ file: relPath, line: i + 1, message });
         }
