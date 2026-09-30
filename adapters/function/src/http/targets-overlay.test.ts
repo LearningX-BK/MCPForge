@@ -47,6 +47,29 @@ describe('AisTargets overlay', () => {
     });
   });
 
+  it('W0-P21: a target may name the probe test user, and every server routed to it carries it', () => {
+    const d = doc({ 'jde-fin-ap': AP });
+    const withIdentity = {
+      ...d,
+      targets: { mock: { ...d.targets.mock, probeIdentity: 'mcpforge-probe@ltm.example' } },
+    };
+    expect(
+      aisTargetForServer(parseAisTargetsOverlay(withIdentity), 'jde-fin-ap').probeIdentity,
+    ).toBe('mcpforge-probe@ltm.example');
+    // Optional for the gateway, which never uses it; absent means absent, never a default.
+    expect(
+      aisTargetForServer(parseAisTargetsOverlay(d), 'jde-fin-ap').probeIdentity,
+    ).toBeUndefined();
+  });
+
+  it('W0-P21: a probeIdentity that is not a plain subject is refused', () => {
+    const d = doc({ 'jde-fin-ap': AP });
+    for (const bad of ['', 'two words', 'secretRef://binding/jde-fin-ap/x', 42]) {
+      const withBad = { ...d, targets: { mock: { ...d.targets.mock, probeIdentity: bad } } };
+      expect(problems(withBad).join(' ')).toContain('probeIdentity');
+    }
+  });
+
   it('refuses an unlisted server: there is no default target', () => {
     const overlay = parseAisTargetsOverlay(doc({ 'jde-fin-ap': AP }));
     expect(() => aisTargetForServer(overlay, 'jde-fin-gl')).toThrow(AisTargetsOverlayInvalid);

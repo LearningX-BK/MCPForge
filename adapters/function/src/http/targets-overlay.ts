@@ -9,7 +9,8 @@
 //   kind: AisTargets
 //   deployment: local
 //   targets:
-//     <targetId>: { baseUrl: <http(s) URL>, tokenUrl: <http(s) URL> }
+//     <targetId>: { baseUrl: <http(s) URL>, tokenUrl: <http(s) URL>,
+//                   probeIdentity?: <Principal.subject of the designated probe user> }
 //   servers:
 //     <serverId>:
 //       target: <targetId>
@@ -27,6 +28,12 @@
 //   * No default target. A server that is not listed has NO AIS target, and
 //     `aisTargetForServer` refuses it rather than guessing (CLAUDE.md #1's
 //     spirit: nothing is reached by a fallback).
+//   * W0-P21 (owner decision, 30 Sep 2026): `probeIdentity` names the
+//     designated test user the capability probe authenticates as on that JDE
+//     instance (02 §4.5). Optional here, because the gateway never uses it;
+//     `forge probe` refuses a target that lacks one. It is a subject, not a
+//     credential: the token for it comes from the same per-server token
+//     provider, and nothing defaults it.
 
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
@@ -36,6 +43,8 @@ export const AIS_TARGETS_KIND = 'AisTargets';
 export interface AisTargetEndpoint {
   readonly baseUrl: string;
   readonly tokenUrl: string;
+  /** W0-P21 — the probe's designated test user on this target. Never defaulted. */
+  readonly probeIdentity?: string;
 }
 
 export interface AisServerTarget extends AisTargetEndpoint {
@@ -62,6 +71,8 @@ export class AisTargetsOverlayInvalid extends Error {
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const BINDING_REF_RE = /^secretRef:\/\/binding\/([a-z0-9][a-z0-9-]*)\/([a-z0-9][a-z0-9-]*)$/;
+/** A `Principal.subject`: printable, no whitespace, and not a secret reference. */
+const SUBJECT_RE = /^(?!secretRef:)[^\s]{1,256}$/;
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -118,13 +129,26 @@ export function parseAisTargetsOverlay(
         problems.push(`${where} must be a mapping`);
         continue;
       }
-      onlyKeys(t, ['baseUrl', 'tokenUrl'], where, problems);
+      onlyKeys(t, ['baseUrl', 'tokenUrl', 'probeIdentity'], where, problems);
       if (!httpUrl(t['baseUrl']))
         problems.push(`${where}.baseUrl must be an http(s) URL with no credentials in it`);
       if (!httpUrl(t['tokenUrl']))
         problems.push(`${where}.tokenUrl must be an http(s) URL with no credentials in it`);
-      if (httpUrl(t['baseUrl']) && httpUrl(t['tokenUrl'])) {
-        targets.set(id, { baseUrl: t['baseUrl'], tokenUrl: t['tokenUrl'] });
+      const probeIdentity = t['probeIdentity'];
+      const probeIdentityOk =
+        probeIdentity === undefined ||
+        (typeof probeIdentity === 'string' && SUBJECT_RE.test(probeIdentity));
+      if (!probeIdentityOk) {
+        problems.push(
+          `${where}.probeIdentity must be a Principal.subject (no spaces), e.g. local:probe-user`,
+        );
+      }
+      if (httpUrl(t['baseUrl']) && httpUrl(t['tokenUrl']) && probeIdentityOk) {
+        targets.set(id, {
+          baseUrl: t['baseUrl'],
+          tokenUrl: t['tokenUrl'],
+          ...(typeof probeIdentity === 'string' ? { probeIdentity } : {}),
+        });
       }
     }
   }

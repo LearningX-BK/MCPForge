@@ -15,6 +15,9 @@ users:
   - a.clerk@ltm.example
   - a.approver@ltm.example
   - bikash@ltm.example
+  # W0-P21 — the designated probe test user (overlays/local/ais-targets.yaml
+  # targets.jde-local-mock.probeIdentity). `forge probe` authenticates as it.
+  - mcpforge-probe@ltm.example
 clients:
   - mcpforge-local-jde-fin-ap
   - mcpforge-local-jde-fin-gl
