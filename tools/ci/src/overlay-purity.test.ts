@@ -7,6 +7,7 @@ import {
   checkOverlayFileTypes,
   runOverlayPurityCheck,
 } from './overlay-purity.js';
+import { findRepoRoot } from './repo-root.js';
 
 let repoRoot: string;
 
@@ -120,6 +121,74 @@ describe('checkOverlayFileTypes', () => {
   it('returns no violations when overlays/ does not exist', () => {
     repoRoot = makeRepoRoot();
     expect(checkOverlayFileTypes(repoRoot)).toEqual([]);
+  });
+});
+
+describe('checkForLeakedSecrets — a consumer PUBLIC key (W0-P30)', () => {
+  const X = 'VqISKnakHcwaRLFZwzAdNg1B9cIWPl4c1c4fpCSbpts';
+  const D = 'q9Wz3Lx7Rk2Vt8Jm4Ns6Pb1Hc5Yf0Ga3Ue7Io2Kd9Xw';
+
+  function consumer(jwkLines: string[]): string {
+    return [
+      'apiVersion: mcpforge/v1',
+      'kind: Consumer',
+      'id: portal-local',
+      'credential:',
+      '  method: private-key-jwt',
+      '  ref: secretRef://consumer/portal-local/client',
+      '  publicKeys:',
+      '    - kid: 2026-09-27-06e2',
+      '      kty: OKP',
+      '      crv: Ed25519',
+      ...jwkLines,
+      '',
+    ].join('\n');
+  }
+
+  it('accepts the x member of a publicKeys entry in a consumer record', () => {
+    repoRoot = makeRepoRoot();
+    writeFile(repoRoot, 'consumers/portal-local.consumer.yaml', consumer([`      x: ${X}`]));
+    expect(checkForLeakedSecrets(repoRoot)).toEqual([]);
+  });
+
+  it('refuses a private member (d) in a publicKeys entry, naming it and its line', () => {
+    repoRoot = makeRepoRoot();
+    writeFile(
+      repoRoot,
+      'consumers/portal-local.consumer.yaml',
+      consumer([`      x: ${X}`, `      d: ${D}`]),
+    );
+    const violations = checkForLeakedSecrets(repoRoot);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.line).toBe(12);
+    expect(violations[0]!.message).toContain('PRIVATE JWK member "d"');
+  });
+
+  it('still refuses a high-entropy string anywhere else — another key, another file, another root', () => {
+    repoRoot = makeRepoRoot();
+    // The same value, but not as a publicKeys member.
+    writeFile(
+      repoRoot,
+      'consumers/other.consumer.yaml',
+      consumer([`      x: ${X}`]) + `notes: ${D}\n`,
+    );
+    // The same shape outside consumers/ is not exempt.
+    writeFile(repoRoot, 'overlays/local/keys.yaml', consumer([`      x: ${X}`]));
+    const violations = checkForLeakedSecrets(repoRoot);
+    expect(violations.map((v) => v.file).sort()).toEqual([
+      'consumers/other.consumer.yaml',
+      'overlays/local/keys.yaml',
+    ]);
+  });
+
+  it('does not exempt an x member outside a publicKeys entry with a kty', () => {
+    repoRoot = makeRepoRoot();
+    writeFile(repoRoot, 'consumers/odd.consumer.yaml', `kind: Consumer\nx: ${X}\n`);
+    expect(checkForLeakedSecrets(repoRoot)).toHaveLength(1);
+  });
+
+  it('the real repository passes the whole overlay-purity job', () => {
+    expect(runOverlayPurityCheck(findRepoRoot()).violations).toEqual([]);
   });
 });
 

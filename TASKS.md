@@ -1573,7 +1573,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - context: Found in W0-P28, 30 Sep 2026. `AuthSessionRepository` can revoke one session by id, not every session of a subject. So after an admin resets a password (e.g. because it leaked), a refresh token already held keeps renewing for up to 12 hours. Disabling the account does stop it (the principal stops resolving). The reset's `next` says so honestly today.
   - done: a password reset (and a disable) revokes every live auth session of that subject in the same transaction as the change; a test proves a refresh token issued before the reset no longer renews.
 
-- [ ] **W0-P30** — `overlay-purity` flags a consumer's PUBLIC key as a leaked credential
+- [x] **W0-P30** — `overlay-purity` flags a consumer's PUBLIC key as a leaked credential
   - model: opus
   - deps: —
   - wave: 0
@@ -1581,6 +1581,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: tools/ci/src/overlay-purity.ts
   - context: Found in W0-P28, 30 Sep 2026. `runOverlayPurityCheck` on main fails on `consumers/portal-local.consumer.yaml`: the Ed25519 public key `x` under `publicKeys` is a 43-character high-entropy string. A public key is not a secret, and registration requires it. So `forge ci`'s overlay-purity stage cannot pass on this repo. The secret scanner needs to recognise a JWK public-key member under `publicKeys` without opening a hole for private members (`d`) or anything else.
   - done: `runOverlayPurityCheck` is ok on this repo; a `publicKeys[].x` is accepted; a `d` member or a high-entropy string anywhere else is still refused; tests prove all three.
+  - result (30 Sep 2026): the content scan parses each YAML file under `consumers/` and exempts exactly the public JWK members (`x`, `y`, `n`, `e`) of a `publicKeys` entry that declares a `kty`, matched by member name AND exact value; a private member (`d`, `p`, `q`, `dp`, `dq`, `qi`, `k`) in such an entry is a violation whatever its entropy; the same shape outside `consumers/` is not exempt. `runOverlayPurityCheck` is OK on this repo (28 files). 5 new tests in `tools/ci/src/overlay-purity.test.ts`, one of them running the job against the real repository.
 
 - [x] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
   - model: opus
