@@ -20,6 +20,7 @@ import {
   changeHostGetProposal,
   changeHostListProposals,
   changeHostPropose,
+  changeHostReadFile,
   changeHostSaveDraft,
   type ActionResult,
 } from './local-git-actions';
@@ -68,5 +69,8 @@ export const defaultChangeHost: ChangeHost = {
   },
   async diff(id: string): Promise<ChangeDiffSet> {
     return unwrap(await changeHostDiff(id));
+  },
+  async readFile(id: string, filePath: string): Promise<string | undefined> {
+    return unwrap(await changeHostReadFile(id, filePath));
   },
 };

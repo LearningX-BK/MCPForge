@@ -247,3 +247,11 @@ export async function changeHostGetProposal(id: string): Promise<ActionResult<Ch
 export async function changeHostDiff(id: string): Promise<ActionResult<ChangeDiffSet>> {
   return runAction(async () => (await ensureHost()).diff(id));
 }
+
+/** W0-P3c — a read, like `diff`; `LocalGit.readFile` refuses any non-definitional path. */
+export async function changeHostReadFile(
+  id: string,
+  filePath: string,
+): Promise<ActionResult<string | undefined>> {
+  return runAction(async () => (await ensureHost()).readFile(id, filePath));
+}

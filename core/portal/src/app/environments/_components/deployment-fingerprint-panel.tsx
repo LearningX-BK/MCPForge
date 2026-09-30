@@ -5,7 +5,7 @@
 import { EnvChip } from '../../../components/chips';
 import { DataClassChip } from './data-class-chip';
 import { asOfLabel, isStale } from '../staleness';
-import { STALE_AFTER_HOURS } from '../fixtures';
+import { STALE_AFTER_HOURS } from '../types';
 import { NO_REMOTE_LABEL } from '../../../components/shell/branch-chip';
 import type { DeploymentFingerprint } from '../types';
 

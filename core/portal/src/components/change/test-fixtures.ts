@@ -82,5 +82,6 @@ export function stubHost(options: StubHostOptions = {}): ChangeHost {
       options.failDiff === true
         ? Promise.reject(new Error('diff failed'))
         : Promise.resolve(options.diff ?? fixtureDiff()),
+    readFile: () => Promise.resolve(undefined),
   };
 }

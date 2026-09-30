@@ -91,6 +91,12 @@ export interface EnablementBacklogGroup {
   readonly entries: readonly EnablementEntry[];
 }
 
+/**
+ * A probe run older than this is shown as stale. Moved here from
+ * `fixtures.ts` in W0-P3c: the live fingerprint panel uses it.
+ */
+export const STALE_AFTER_HOURS = 24;
+
 // ---------------------------------------------------------------------------
 // Packages (`/environments/packages`) — 03 §5.3 item 3.
 // ---------------------------------------------------------------------------
@@ -103,8 +109,17 @@ export interface PackageSummary {
   readonly roleCount: number;
   readonly bindingTypesPresent: readonly string[];
   readonly toolCount: number;
-  readonly waveCount: number;
+  /**
+   * Module servers defined in `manifests/_servers/` that this package does not
+   * select (W0-P3c: counted from git). The old `waveCount` is gone: no file in
+   * git records a wave for a package, so there was nothing true to count.
+   */
   readonly notIncluded: readonly string[];
+  /**
+   * False when `generated/packages/<id>.selection.json` is missing, so the
+   * counts are zero because codegen has not run, not because the package is empty.
+   */
+  readonly compiled: boolean;
 }
 
 /**

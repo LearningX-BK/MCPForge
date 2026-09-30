@@ -5,7 +5,9 @@
 # Dependencies and build output
 node_modules/
 dist/
-build/
+# Root-anchored (W0-P3c): an unanchored `build/` also matched the portal's
+# Build route, core/portal/src/app/build/, so that source was never committed.
+/build/
 *.tsbuildinfo
 
 # Package manager

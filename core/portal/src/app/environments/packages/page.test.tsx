@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 //
 // MCPForge — W0-J17: the Packages tab carries the standing D1 note verbatim.
+// W0-P3c: the page reads this repository's own `packages/` from git.
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,5 +21,12 @@ describe('PackagesPage', () => {
   it('shows what is not included per package — staleness/completeness honesty', () => {
     render(<PackagesPage />);
     expect(document.body.textContent).toContain('Not included');
+  });
+
+  it('shows the committed package as git holds it, not a fixture', () => {
+    render(<PackagesPage />);
+    expect(screen.getByRole('heading', { name: 'JD Edwards Financials' })).toBeTruthy();
+    // packages/jde-fin.yaml selects these three servers.
+    expect(document.body.textContent).toContain('jde-fin-ap, jde-fin-gl, jde-scm-po');
   });
 });

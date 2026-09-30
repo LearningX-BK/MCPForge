@@ -119,7 +119,10 @@ const ALLOWED_TEST_ONLY_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> =
   ]),
 };
 
-const SKIP_DIRS = new Set(['node_modules', 'dist', '.next', 'build']);
+// Not `build`: this walk is over `core/portal/src`, where `app/build/` is the
+// Build route's SOURCE. Skipping it (as this set did until W0-P3c) meant the
+// boundary was never checked for Build.
+const SKIP_DIRS = new Set(['node_modules', 'dist', '.next']);
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx']);
 
 export interface BoundaryViolation {

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeStore } from '@mcpforge/gateway/store';
 
-import { loadDeploymentFingerprint, loadEnablementBacklog, loadPackages } from './fixtures';
+import { loadDeploymentFingerprint, loadEnablementBacklog } from './fixtures';
 
 describe('loadDeploymentFingerprint', () => {
   it('sources `store` from the real describeStore(), not an invented label', () => {
@@ -45,16 +45,5 @@ describe('loadEnablementBacklog', () => {
     const groups = loadEnablementBacklog();
     const names = groups.map((g) => g.owningTeam);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
-  });
-});
-
-describe('loadPackages', () => {
-  it('returns at least one package with real derived counts', () => {
-    const packages = loadPackages();
-    expect(packages.length).toBeGreaterThan(0);
-    for (const pkg of packages) {
-      expect(pkg.servers.length).toBeGreaterThan(0);
-      expect(pkg.toolCount).toBeGreaterThan(0);
-    }
   });
 });

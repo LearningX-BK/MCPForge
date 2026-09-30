@@ -6,7 +6,7 @@
 //
 // All six named elements are now built for real, against the real
 // `BenchReport`/`TtfcReport`/`TokenBudgetGateResult`/`BenchBaseline` shapes
-// (`fixtures.ts`/`_lib/derive.ts`):
+// (`source.ts`/`_lib/derive.ts`):
 //   1. Five metric cards (target / current / trend vs baseline / CI pass-fail)
 //   2. Per-role TTFC breakdown
 //   3. Token-budget pressure (tools/roles near their ceilings)
@@ -24,7 +24,7 @@
 //      `computeSa1`) — `_components/failing-intents-panel.tsx`.
 import * as React from 'react';
 
-import { fixtureInsightsSource } from './fixtures';
+import { repoInsightsSource } from './source';
 import {
   buildBudgetPressureRows,
   buildFailingIntentRows,
@@ -41,9 +41,9 @@ import type { InsightsSource } from './types';
 
 const BUDGET_PRESSURE_THRESHOLD = 0.7;
 
-/** `source` is test-injectable — same seam every J-track page follows; the App Router route always uses the default (`fixtures.ts`'s `fixtureInsightsSource`, which is real, not fabricated — see that file's header). */
+/** `source` is test-injectable — same seam every J-track page follows; the App Router route always uses the default (`source.ts`'s `repoInsightsSource`: this repo's own index, intents and baseline). */
 export default function InsightsPage({
-  source = fixtureInsightsSource,
+  source = repoInsightsSource,
 }: {
   readonly source?: () => InsightsSource;
 } = {}): React.ReactElement {

@@ -5,14 +5,32 @@
 // twin, for pages that read definitional state (open proposals, the remote)
 // while they render. Which host answers is decided here and nowhere else.
 // Reads only: a server component never proposes or merges.
+//
+// W0-P3c adds `getProposal`, `diff` and `readFile`, so Build can list its
+// drafts and reopen one's manifest from the branch that holds it.
 
 import type { ActionResult } from './local-git-actions';
-import { changeHostDescribeRemote, changeHostListProposals } from './local-git-actions';
-import type { ChangeProposal, RemoteInfo } from './types';
+import {
+  changeHostDescribeRemote,
+  changeHostDiff,
+  changeHostGetProposal,
+  changeHostListProposals,
+  changeHostReadFile,
+} from './local-git-actions';
+import type { ChangeDiffSet, ChangeProposal, RemoteInfo } from './types';
 
 export const serverChangeHost = {
   listProposals(): Promise<ActionResult<readonly ChangeProposal[]>> {
     return changeHostListProposals();
+  },
+  getProposal(id: string): Promise<ActionResult<ChangeProposal | undefined>> {
+    return changeHostGetProposal(id);
+  },
+  diff(id: string): Promise<ActionResult<ChangeDiffSet>> {
+    return changeHostDiff(id);
+  },
+  readFile(id: string, filePath: string): Promise<ActionResult<string | undefined>> {
+    return changeHostReadFile(id, filePath);
   },
   describeRemote(): Promise<RemoteInfo> {
     return changeHostDescribeRemote();

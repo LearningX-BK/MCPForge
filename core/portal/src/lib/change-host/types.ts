@@ -222,6 +222,37 @@ export interface ChangeHost {
   getProposal(id: string): Promise<ChangeProposal | undefined>;
   /** The three diffs of 03 §6.5, always computed together. */
   diff(id: string): Promise<ChangeDiffSet>;
+  /**
+   * W0-P3c — one file's contents as the proposal's branch holds it, so Build
+   * can reopen a draft's manifest. `undefined` when the branch does not hold
+   * that path. Only repo-relative paths under the definitional trees are
+   * readable; anything else is refused with `CHANGE_NOT_PERMITTED`.
+   */
+  readFile(id: string, path: string): Promise<string | undefined>;
+}
+
+/**
+ * The trees a change proposal may touch and `readFile` may read. The same set
+ * the portal's sandbox is seeded from (`local-git-actions.ts`).
+ */
+export const DEFINITIONAL_PREFIXES = [
+  'manifests/',
+  'roles/',
+  'packages/',
+  'consumers/',
+  'enums/',
+  'evals/',
+  'approvals/',
+  'generated/',
+] as const;
+
+/** A repo-relative path under a definitional tree, with no traversal. */
+export function isDefinitionalPath(path: string): boolean {
+  if (path.length === 0 || path.startsWith('/') || path.includes('\\')) return false;
+  if (path.split('/').some((segment) => segment === '..' || segment === '.' || segment === '')) {
+    return false;
+  }
+  return DEFINITIONAL_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
 /**
