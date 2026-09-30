@@ -17,6 +17,7 @@
 import path from 'node:path';
 
 import {
+  isSuperAdmin,
   loadDeploymentGroupRoleMapping,
   personasForPrincipal,
 } from '@mcpforge/gateway/identity/group-role-mapping';
@@ -41,5 +42,26 @@ export function heldPersonas(
     return personasForPrincipal(mapping, { groups });
   } catch {
     return [];
+  }
+}
+
+/**
+ * W0-P33b — whether `groups` include a `superAdmins:` group of this
+ * deployment's git mapping (W0-P31). Fails closed: an unreadable mapping is
+ * `false`. Decides who may MERGE a definitional change in the portal; the
+ * groups come from the gateway-verified session, never from a component.
+ */
+export function holdsSuperAdmin(
+  groups: readonly string[],
+  options: { readonly repoRoot?: string; readonly deployment?: string } = {},
+): boolean {
+  try {
+    const mapping = loadDeploymentGroupRoleMapping(
+      path.join(options.repoRoot ?? resolveRepoRoot(), 'overlays'),
+      options.deployment ?? deploymentId(),
+    );
+    return isSuperAdmin(mapping, groups);
+  } catch {
+    return false;
   }
 }

@@ -51,7 +51,15 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 import { resolveRepoRoot, resolveRuntimeRoot } from '../../app/build/_lib/repo-root';
-import { gateDiscard, gateSaveOrPropose, type GateResult } from '../viewer/gates';
+import {
+  gateApproveDefinitional,
+  gateDiscard,
+  gateMerge,
+  gateSaveOrPropose,
+  type GateResult,
+} from '../viewer/gates';
+import { holdsSuperAdmin } from '../viewer/mapping';
+import { forgeMergeCheck } from './merge-check';
 import { getViewer } from '../viewer/session';
 import { LocalGit } from './local-git';
 import {
@@ -59,6 +67,7 @@ import {
   type ChangeDiffSet,
   type ChangeHostErrorCode,
   type ChangeProposal,
+  type MergeResult,
   type ProposeInput,
   type RemoteInfo,
   type SaveDraftInput,
@@ -75,9 +84,26 @@ const COPY_DIRS = [
   'evals',
   'approvals',
   'generated',
+  // W0-P33b — the merge check runs `forge validate` on this tree, which reads
+  // the deployment's overlays; without them the sandbox would fail a check
+  // the real definitions pass.
+  'overlays',
 ] as const;
 const COPY_FILES = ['.prettierrc', '.prettierignore', '.editorconfig'] as const;
 const SANDBOX_RELATIVE = path.join('.mcpforge', 'change-host-sandbox');
+/** W0-P33b — the linked worktree of the definitions clone where drafts are checked out. */
+const WORKTREE_RELATIVE = path.join('.mcpforge', 'change-worktree');
+
+/**
+ * W0-P33b — the VM's definitions clone, when `MCPFORGE_DEFINITIONS_ROOT` names
+ * a git working tree. Without it (a developer machine, tests) the portal keeps
+ * using the disposable sandbox and never touches this repository's own tree.
+ */
+function definitionsClone(): string | undefined {
+  const root = process.env['MCPFORGE_DEFINITIONS_ROOT'];
+  if (root === undefined || root.length === 0) return undefined;
+  return existsSync(path.join(root, '.git')) ? root : undefined;
+}
 
 let cachedHost: LocalGit | undefined;
 // Single-flight promise guarding `seedSandbox`/construction. Every route
@@ -131,6 +157,21 @@ async function ensureHost(): Promise<LocalGit> {
   if (cachedHost !== undefined) return cachedHost;
   if (hostPromise === undefined) {
     hostPromise = (async () => {
+      // W0-P33b: on the VM the definitions are a real git clone. Drafts live
+      // in a linked worktree of it under the install root's .mcpforge/, so the
+      // clone itself (what the gateway reads) never has a draft checked out;
+      // Merge is the only act that touches it.
+      const clone = definitionsClone();
+      if (clone !== undefined) {
+        const worktree = path.join(resolveRuntimeRoot(), WORKTREE_RELATIVE);
+        if (!existsSync(path.join(worktree, '.git'))) {
+          execFileSync('git', ['worktree', 'prune'], { cwd: clone });
+          execFileSync('git', ['worktree', 'add', '--detach', worktree, 'main'], { cwd: clone });
+        }
+        const host = new LocalGit({ repoRoot: worktree, integrationRoot: clone });
+        cachedHost = host;
+        return host;
+      }
       // W0-P33a: the sandbox is runtime state (under the install root's
       // .mcpforge/); it is seeded FROM the definitions root.
       const sandbox = path.join(resolveRuntimeRoot(), SANDBOX_RELATIVE);
@@ -247,6 +288,52 @@ export async function changeHostGetProposal(id: string): Promise<ActionResult<Ch
 
 export async function changeHostDiff(id: string): Promise<ActionResult<ChangeDiffSet>> {
   return runAction(async () => (await ensureHost()).diff(id));
+}
+
+/**
+ * W0-P33b — Approve a proposed definitional change. Who may: the existing
+ * gate (an admin; an admin approving their own proposal is allowed and
+ * recorded `selfApproved`, owner decisions W0-P4 §9-3 and W0-P32). The
+ * approver is the session, never an argument.
+ */
+export async function changeHostApprove(id: string): Promise<ActionResult<ChangeProposal>> {
+  return runAction(async () => {
+    const viewer = await getViewer();
+    const host = await ensureHost();
+    const proposal = await host.getProposal(id);
+    if (proposal === undefined) return host.approve({ id, approver: '', selfApproved: false });
+    const gate = gateApproveDefinitional(viewer, proposal.author);
+    if (!gate.allowed || viewer === null) {
+      throw new ChangeHostError(
+        viewer === null ? 'CHANGE_SIGN_IN_REQUIRED' : 'CHANGE_NOT_PERMITTED',
+        gate.allowed ? 'You are not signed in.' : gate.message,
+        gate.allowed ? 'Sign in, then approve again.' : gate.next,
+      );
+    }
+    return host.approve({ id, approver: viewer.subject, selfApproved: gate.selfApproved });
+  });
+}
+
+/**
+ * W0-P33b — Merge an approved change into the definitions: a super admin
+ * only, and only after `forge codegen` and `forge validate` pass on it.
+ */
+export async function changeHostMerge(id: string): Promise<ActionResult<MergeResult>> {
+  return runAction(async () => {
+    const viewer = await getViewer();
+    const gate = gateMerge(viewer, viewer !== null && holdsSuperAdmin(viewer.groups));
+    if (!gate.allowed || viewer === null) {
+      refused(
+        gate as GateResult & { allowed: false },
+        viewer === null ? 'CHANGE_SIGN_IN_REQUIRED' : 'CHANGE_NOT_PERMITTED',
+      );
+    }
+    return (await ensureHost()).merge({
+      id,
+      mergedBy: viewer.subject,
+      check: forgeMergeCheck(resolveRuntimeRoot()),
+    });
+  });
 }
 
 /** W0-P3c — a read, like `diff`; `LocalGit.readFile` refuses any non-definitional path. */

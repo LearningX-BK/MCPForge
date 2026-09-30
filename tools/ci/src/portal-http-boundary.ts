@@ -80,6 +80,8 @@ const ALLOWED_RUNTIME_IMPORTS: Readonly<Record<string, ReadonlySet<string>>> = {
   'identity/group-role-mapping': new Set([
     'loadDeploymentGroupRoleMapping',
     'personasForPrincipal',
+    // W0-P33b — who may MERGE a definitional change (git's superAdmins list).
+    'isSuperAdmin',
   ]),
 };
 

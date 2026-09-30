@@ -20,6 +20,7 @@ import {
   type ChangeDiffSet,
   type GitChangeHost,
   type ChangeProposal,
+  type MergeResult,
   type RemoteInfo,
 } from './types';
 
@@ -91,5 +92,13 @@ export class HostedGit implements GitChangeHost {
 
   readFile(): Promise<string | undefined> {
     return Promise.reject(notImplemented('readFile'));
+  }
+
+  approve(): Promise<ChangeProposal> {
+    return Promise.reject(notImplemented('approve'));
+  }
+
+  merge(): Promise<MergeResult> {
+    return Promise.reject(notImplemented('merge'));
   }
 }

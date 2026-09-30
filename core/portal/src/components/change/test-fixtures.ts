@@ -83,5 +83,13 @@ export function stubHost(options: StubHostOptions = {}): ChangeHost {
         ? Promise.reject(new Error('diff failed'))
         : Promise.resolve(options.diff ?? fixtureDiff()),
     readFile: () => Promise.resolve(undefined),
+    approve: () => Promise.resolve({ ...proposal, state: 'approved' as const }),
+    merge: () =>
+      Promise.resolve({
+        proposal: { ...proposal, state: 'merged' as const },
+        mergeCommit: '0000000',
+        generatedCommitted: false,
+        next: 'Merged into the definitions. It is not deployed yet.',
+      }),
   };
 }

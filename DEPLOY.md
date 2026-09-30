@@ -55,6 +55,17 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
    up `/opt/mcpforge/defs`: it is now the system of record for definitions.
    On SELinux-enforcing Oracle Linux, add `:z` to that volume line.
 
+   **Adding a tool from the portal (W0-P33b).** In **Build**: Save draft →
+   Propose → an admin **Approves** → a super admin **Merges**. Merge runs
+   `forge codegen` and `forge validate` on the change first and merges into
+   the clone's `main` only if both pass; otherwise it shows the rule and what
+   to fix. Drafts live in a git worktree under `.mcpforge-docker/`, so the
+   clone is only ever touched by a merge. Keep the clone clean and on `main`:
+   the portal refuses to merge into it otherwise. **Merged is not deployed:**
+   until the gateway reload lands (W0-P33c), restart to serve the new tool:
+   `docker compose -f docker-compose.yml -f docker-compose.vm.yml restart`.
+   A new tool then reads "Not probed" until a probe enables it.
+
 3. **Choose the SecretStore key.** A container has no OS keychain, so the store
    is sealed with `MCPFORGE_SECRETS_KEY` (05 §4.3.1's env-var path). Use a long
    random passphrase, keep it in the VM's secret manager or an OCI Vault secret,

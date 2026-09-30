@@ -13,7 +13,9 @@
 // callers import `defaultChangeHost` as one more `ChangeHost` value, exactly
 // as they would a test's `stubHost()`.
 import {
+  changeHostApprove,
   changeHostCurrentBranch,
+  changeHostMerge,
   changeHostDescribeRemote,
   changeHostDiff,
   changeHostDiscard,
@@ -29,6 +31,7 @@ import {
   type ChangeDiffSet,
   type ChangeHost,
   type ChangeProposal,
+  type MergeResult,
   type ProposeInput,
   type RemoteInfo,
   type SaveDraftInput,
@@ -72,5 +75,11 @@ export const defaultChangeHost: ChangeHost = {
   },
   async readFile(id: string, filePath: string): Promise<string | undefined> {
     return unwrap(await changeHostReadFile(id, filePath));
+  },
+  async approve(id: string): Promise<ChangeProposal> {
+    return unwrap(await changeHostApprove(id));
+  },
+  async merge(id: string): Promise<MergeResult> {
+    return unwrap(await changeHostMerge(id));
   },
 };
