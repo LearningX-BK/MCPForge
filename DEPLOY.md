@@ -65,10 +65,19 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
    docker compose logs -f   # expect: "gateway listening on 0.0.0.0:3939 (mode=full, portal=spawned)"
    ```
 
-7. **Create local users.** There is no `forge` command for this yet. Seed users
-   inside the container with `localUserStore({ store }).createUser(...)`
-   (`core/gateway/identity`), as the W0-K4 check did. Groups map to roles in
-   `overlays/local/mappings/groups-to-roles.yaml`.
+7. **Create the first admin, then everyone else in the portal (W0-P28).** Once,
+   on the VM, create the first identity admin. Type the password at the prompt
+   (`-it`), or pipe it on stdin (`-T`). Never pass it as an argument:
+   ```sh
+   docker compose exec -it mcpforge-core node core/cli/bin/forge.js \
+     identity bootstrap-admin --username <name> --display-name "<Full Name>"
+   ```
+   It joins the first group listed under `identityAdmins:` in
+   `overlays/local/mappings/groups-to-roles.yaml` (`mcpforge-admins`). It refuses
+   once any active admin exists, and when `CI=true`. After that, sign in to the
+   portal as that admin and create, disable, enable, regroup and reset accounts
+   under **Governance → Users**. Every change is an `identity` audit row. Groups
+   map to roles in the same mapping file.
 
 8. **Point it at a JD Edwards target and probe (optional).** Start the mock
    (`pnpm --filter @mcpforge/mocks mock-jde`, or run it as a second service),

@@ -63,6 +63,13 @@ export const CANONICAL_COMMANDS: readonly StubCommandSpec[] = [
     path: ['identity', 'remap'],
     description: 'Rewrite local-subject to new-subject correspondences (02 §4.4).',
   },
+  // W0-P28 (owner decision, 30 Sep 2026): the one-time first identity admin.
+  // Every later account is made in the portal; this refuses once an admin exists.
+  {
+    path: ['identity', 'bootstrap-admin'],
+    description:
+      'Create the FIRST identity admin. Password from a prompt or stdin, never argv. Refused once an admin exists and when CI=true.',
+  },
   // W0-N1. The consumer registry (02 §11.2, 05 §1.3) — CLAUDE.md §7 names
   // this surface verbatim: `forge consumer new|list|show|suspend|rotate|retire`
   // plus `forge consumer issue-credential <id>`. Registration is a git

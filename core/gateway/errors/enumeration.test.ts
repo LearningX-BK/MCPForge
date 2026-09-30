@@ -50,6 +50,8 @@ import {
 } from '../scope/scope.fixtures.js';
 import { killSwitchRefusalError } from '../flags/checks.js';
 import { createReadApi } from '../api/v1/read-api.js';
+import { changeNext } from '../api/v1/user-admin.js';
+import { ADMIN_USER_ACTIONS } from '@mcpforge/shared/api/v1';
 import { ConsumerAuthenticator, readConsumerPresentation } from '../transport/consumer-auth/index.js';
 import { constructReversingCall } from '../reversal/construct.js';
 import {
@@ -667,6 +669,19 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
     description:
       "api/v1/read-api.ts (W0-P3a) renders an ApiRefusal's next: either one of its own literal sites or a ForgeError.next forwarded from the [2a] gate / session establishment. Driven through the REAL handler and the REAL ConsumerAuthenticator with nothing presented.",
     dynamicCheck: () => readApiRefusalNext(),
+  },
+  {
+    match: (s) => basename(s.file) === 'user-admin.ts' && s.raw.startsWith('changeNext('),
+    description:
+      "api/v1/user-admin.ts (W0-P28) builds a change's next with changeNext(), a pure function whose every branch is a fixed sentence naming the account. Every action is driven here, with and without a group the mapping does not name; the shortest is returned.",
+    dynamicCheck: () => {
+      const mapped = new Set(['finance-ap-clerks']);
+      const nexts = ADMIN_USER_ACTIONS.flatMap((action) => [
+        changeNext(mapped, action, 'u', [], undefined),
+        changeNext(mapped, action, 'u', ['finance-ap-clerks'], ['finance-ap-clerks', 'unmapped']),
+      ]);
+      return nexts.reduce((a, b) => (a.length <= b.length ? a : b));
+    },
   },
 ];
 

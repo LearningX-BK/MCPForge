@@ -12,6 +12,7 @@ import { runValidateCommand } from './commands/validate.js';
 import { runAuditVerifyCommand } from './commands/audit.js';
 import { runAuditReverseCommand } from './commands/audit-reverse.js';
 import { runIdentityRemapCommand } from './commands/identity.js';
+import { runBootstrapAdminCommand } from './commands/identity-bootstrap.js';
 import { runKillCommand } from './commands/kill.js';
 import { runProbeCommand } from './commands/probe.js';
 import { runBenchCommand } from './commands/bench.js';
@@ -44,6 +45,8 @@ const REAL_HANDLERS: Readonly<
     runAuditReverseCommand(opts['target'] as string | undefined, opts as never),
   // W0-D4.
   'identity remap': runIdentityRemapCommand,
+  // W0-P28.
+  'identity bootstrap-admin': (opts) => runBootstrapAdminCommand(opts as never),
   // W0-E5. `target` arrives via `opts.target` — see `ARGUMENTS` and
   // `registerCommand` below, which lift Commander's positional argument into
   // the same options bag every other handler already receives.
@@ -191,6 +194,20 @@ const EXTRA_OPTIONS: Readonly<
       flags: '--root <dir>',
       description: 'Repository root to write consumers/portal-local.consumer.yaml into.',
     },
+  ],
+  'identity bootstrap-admin': [
+    { flags: '--username <name>', description: 'Login handle of the first admin (required).' },
+    { flags: '--display-name <name>', description: 'Name shown for the admin (required).' },
+    { flags: '--email <address>', description: 'Optional email address.' },
+    {
+      flags: '--group <group>',
+      description: 'Which identityAdmins group to join. Default: the first one the mapping lists.',
+    },
+    {
+      flags: '--deployment <id>',
+      description: 'Deployment whose mapping names the admin groups. Default: MCPFORGE_DEPLOYMENT or "local".',
+    },
+    { flags: '--root <dir>', description: 'Repository root holding overlays/. Default: the current directory.' },
   ],
   'identity remap': [
     {

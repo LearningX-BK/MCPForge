@@ -58,6 +58,16 @@ export interface GroupRoleMappingFile {
    * whatever the human's roles do not allow.
    */
   readonly personas?: Readonly<Record<string, { readonly personas: readonly Persona[] }>>;
+  /**
+   * W0-P28 (owner decision, 30 Sep 2026): the groups whose members may
+   * administer LOCAL user accounts (create, disable, enable, regroup, reset a
+   * password) through the gateway. Held here so widening who may administer
+   * identities is a reviewed diff, exactly like a role grant.
+   *
+   * Unlike `personas`, this IS read by the gateway: `/api/v1/admin/users`
+   * refuses anyone whose groups are not listed. It grants no tool and no role.
+   */
+  readonly identityAdmins?: readonly string[];
 }
 
 /** 03 §2's three portal personas. Closed: a fourth is a reviewed change. */
@@ -175,6 +185,17 @@ export function parseGroupRoleMappingFile(
   if (!personas.ok) {
     return { ok: false, error: { filePath, message: `personas: ${personas.message}` } };
   }
+  const identityAdmins = raw['identityAdmins'];
+  if (
+    identityAdmins !== undefined &&
+    (!Array.isArray(identityAdmins) ||
+      !identityAdmins.every((g) => typeof g === 'string' && g.length > 0))
+  ) {
+    return {
+      ok: false,
+      error: { filePath, message: 'identityAdmins: must be a list of non-empty group names' },
+    };
+  }
   const doc: GroupRoleMappingFile = {
     apiVersion: 'mcpforge/v1',
     kind: 'GroupRoleMapping',
@@ -184,6 +205,9 @@ export function parseGroupRoleMappingFile(
       ? { subjectOverrides: subjectOverrides.entries }
       : {}),
     ...(Object.keys(personas.entries).length > 0 ? { personas: personas.entries } : {}),
+    ...(identityAdmins === undefined || identityAdmins.length === 0
+      ? {}
+      : { identityAdmins: [...new Set(identityAdmins as string[])].sort() }),
   };
   return { ok: true, doc };
 }
@@ -299,6 +323,7 @@ export function remapSubjectAcrossMappingFiles(
       groups: doc.groups,
       subjectOverrides: nextOverrides,
       ...(doc.personas === undefined ? {} : { personas: doc.personas }),
+      ...(doc.identityAdmins === undefined ? {} : { identityAdmins: doc.identityAdmins }),
     };
     writeFileSync(filePath, serializeGroupRoleMappingFile(nextDoc), 'utf-8');
 
@@ -322,6 +347,11 @@ export function serializeGroupRoleMappingFile(doc: GroupRoleMappingFile): string
     // silently take every persona away from every group.
     ...(doc.personas !== undefined && Object.keys(doc.personas).length > 0
       ? { personas: doc.personas }
+      : {}),
+    // W0-P28 — kept on a rewrite, for the same reason: dropping it would take
+    // user administration away from everyone.
+    ...(doc.identityAdmins !== undefined && doc.identityAdmins.length > 0
+      ? { identityAdmins: doc.identityAdmins }
       : {}),
   };
   return `${stringifyYaml(ordered, { indent: 2, sortMapEntries: false })}`;
@@ -427,4 +457,24 @@ export function personasForPrincipal(
     }
   }
   return PERSONAS.filter((p) => held.has(p));
+}
+
+/**
+ * W0-P28 — the groups that may administer local users in this deployment:
+ * the union of every mapping file's `identityAdmins`, sorted. Empty means
+ * nobody may, which is the fail-closed default.
+ */
+export function identityAdminGroups(mapping: readonly GroupRoleMappingFile[]): readonly string[] {
+  const groups = new Set<string>();
+  for (const doc of mapping) for (const g of doc.identityAdmins ?? []) groups.add(g);
+  return [...groups].sort();
+}
+
+/** W0-P28 — true when any of `groups` is an identity-admin group. */
+export function isIdentityAdmin(
+  mapping: readonly GroupRoleMappingFile[],
+  groups: readonly string[],
+): boolean {
+  const admins = identityAdminGroups(mapping);
+  return groups.some((g) => admins.includes(g));
 }

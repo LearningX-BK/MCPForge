@@ -6,6 +6,8 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   findMappingFiles,
+  identityAdminGroups,
+  isIdentityAdmin,
   loadMappingFiles,
   parseGroupRoleMappingFile,
   personasForPrincipal,
@@ -264,5 +266,75 @@ personas:
       'admin',
       'developer',
     ]);
+  });
+});
+
+describe('identityAdmins (W0-P28) -- who may administer local users, from git', () => {
+  const WITH_ADMINS = `
+apiVersion: mcpforge/v1
+kind: GroupRoleMapping
+deployment: local
+groups:
+  mcpforge-admins:
+    roles: [p2p-admin]
+  finance-ap-clerks:
+    roles: [p2p-ap-clerk]
+subjectOverrides:
+  local:jdoe:
+    roles: [p2p-ap-approver]
+identityAdmins:
+  - mcpforge-admins
+  - mcpforge-admins
+`;
+
+  it('parses the list, de-duplicated and sorted', () => {
+    const result = parseGroupRoleMappingFile('x.yaml', WITH_ADMINS);
+    expect(result.ok && result.doc.identityAdmins).toEqual(['mcpforge-admins']);
+  });
+
+  it('refuses a list that is not of non-empty group names', () => {
+    for (const bad of [
+      'identityAdmins: mcpforge-admins',
+      "identityAdmins: ['']",
+      'identityAdmins: [1]',
+    ]) {
+      const result = parseGroupRoleMappingFile(
+        'x.yaml',
+        WITH_ADMINS.replace(/identityAdmins:[\s\S]*$/, bad),
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.message).toMatch(/identityAdmins/);
+    }
+  });
+
+  it('is empty when absent, so nobody may administer (fail closed)', () => {
+    const result = parseGroupRoleMappingFile('x.yaml', LOCAL_ONLY);
+    if (!result.ok) throw new Error('fixture must parse');
+    expect(identityAdminGroups([result.doc])).toEqual([]);
+    expect(isIdentityAdmin([result.doc], ['finance-ap-clerks'])).toBe(false);
+  });
+
+  it('answers by group membership only, and grants no role', () => {
+    const result = parseGroupRoleMappingFile('x.yaml', WITH_ADMINS);
+    if (!result.ok) throw new Error('fixture must parse');
+    expect(isIdentityAdmin([result.doc], ['mcpforge-admins'])).toBe(true);
+    expect(isIdentityAdmin([result.doc], ['finance-ap-clerks', '__proto__'])).toBe(false);
+    const without = parseGroupRoleMappingFile(
+      'x.yaml',
+      WITH_ADMINS.slice(0, WITH_ADMINS.indexOf('identityAdmins:')),
+    );
+    if (!without.ok) throw new Error('fixture must parse');
+    const principal = { subject: 'local:a', groups: ['mcpforge-admins'] };
+    expect(rolesForPrincipal([result.doc], principal)).toEqual(
+      rolesForPrincipal([without.doc], principal),
+    );
+  });
+
+  it('a subject remap keeps the identityAdmins list', () => {
+    const file = writeMapping('local', WITH_ADMINS);
+    remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
+    const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
+    expect(reparsed.ok && reparsed.doc.identityAdmins).toEqual(['mcpforge-admins']);
   });
 });

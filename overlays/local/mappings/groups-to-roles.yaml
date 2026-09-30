@@ -71,3 +71,12 @@ personas:
     personas: [business]
   finance-ap-approvers:
     personas: [business]
+
+# W0-P28 (owner decision, 30 Sep 2026) — the groups whose members may
+# administer LOCAL user accounts through the gateway: create, disable, enable,
+# change groups, reset a password. Unlike `personas` this IS a grant, of that
+# one capability only: the gateway refuses user administration to anyone whose
+# groups are not listed here. It grants no tool and no role. Widening it is a
+# reviewed diff on this file, like any other grant.
+identityAdmins:
+  - mcpforge-admins

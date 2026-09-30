@@ -62,6 +62,9 @@ const REAL_HANDLER_LABELS = new Set([
   // id, so it doesn't fit the generic NOT_IMPLEMENTED assertions below.
   'audit reverse',
   'identity remap',
+  // W0-P28 — writes the runtime store, so it is never spawned against this repo
+  // from here; see ./commands/identity-bootstrap.test.ts.
+  'identity bootstrap-admin',
   // W0-E5 — see ./commands/kill.test.ts for its own end-to-end coverage,
   // including the real binary. It takes a positional target, so it doesn't
   // fit the generic "no positional argument" NOT_IMPLEMENTED assertions below.

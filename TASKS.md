@@ -1553,6 +1553,35 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
     - **Verified live, 30 Sep 2026:** standalone mock JDE on :4545, the three mock client credentials seeded into the local SecretStore from `.mcpforge/mock-jde/clients.json` (see W0-P26), then `node core/cli/bin/forge.js probe --env local` in the repo: **11/11 `resolved`, identity `verified` by the probe's own WHOAMI check for every tool, validate-pair evidence on all 6 writes**, exit 0. The first run, before seeding, reported every tool `disabled_identity_unverified` with the reason, which is the honest failure. `.mcpforge/probe-report.json` on this machine is now that resolved report.
     - **Tests:** `core/cli` probe 7/7 against the REAL mock (all 11 resolved; each refusal); `core/probe` 93/93 (new: `function-wiring` 5); `adapters/function` 75/75 (new: `probeIdentity` parsing 2); gateway `launch*` 16/16; `overlay-purity` 17/17; lint and tsc clean. `pnpm -C core/cli test` still has the 3 failures W0-P20 already owns (`cli.test.ts`, `audit-reverse.test.ts`, `dev.test.ts`), unchanged by this task.
 
+- [x] **W0-P28** — Local user administration: the portal admin UI (02 §4.4), a gateway endpoint behind it, and a one-time bootstrap
+  - model: opus
+  - deps: W0-P25, W0-K4
+  - wave: 0
+  - reads: 02#4.4, w0-p4-portal-identity.md, CLAUDE.md §2 items 6 and 8
+  - touches: core/gateway/identity/group-role-mapping.ts, core/gateway/api/v1/**, core/gateway/store/audit/types.ts, core/shared/src/api/v1/**, core/shared/src/status.ts, core/cli/src/commands/identity*.ts, core/cli/src/commands.ts, overlays/local/mappings/groups-to-roles.yaml, core/portal/src/app/governance/**, core/portal/src/lib/gateway-client/**, tests/policy/**
+  - context: Found 30 Sep 2026 in W0-K4: creating a local user takes a script against the runtime DB, on a laptop and on a VM alike. 02 §4.4 names "Admin UI in the portal (Phase 3)", and it was never built.
+  - **Owner decisions, 30 Sep 2026 (asked with recommendations):** (1) **The portal admin UI** (not a CLI) is the management path. (2) **Who may administer users:** groups named in git, a new `identityAdmins: [<group>, …]` list in `overlays/<deployment>/mappings/groups-to-roles.yaml`, reviewed like every grant; the GATEWAY checks the signed-in human's groups against it (the portal persona is a lens, never a grant). (3) **The first admin:** a one-time `forge identity bootstrap-admin`, password from a prompt or stdin (never argv), refused once any active admin exists and when `CI=true`. (4) **Audit:** a hash-chained `identity` audit phase; every change and every refused attempt writes a row naming who did what to which subject; passwords are never recorded, not even hashed.
+  - done: an identity admin (per the git list) can list, create, disable, enable, regroup and reset the password of local users from the portal, through `/api/v1`, behind the same consumer ∩ human front door with a write-allowed consumer; a non-admin, a read-only consumer and an unauthenticated caller are refused with a `next`; the last active admin cannot be disabled or stripped of admin; every change and refusal is an `identity` audit row with no password in it; `forge identity bootstrap-admin` creates exactly one admin and then refuses; `pnpm test:policy` covers the refusals.
+  - result (30 Sep 2026): `/api/v1/admin/users` (GET list, POST create) and `/api/v1/admin/users/{subject}` (POST disable · enable · set_groups · reset_password) in `core/gateway/api/v1/user-admin.ts`; `identityAdmins:` parsed by the one mapping reader and set to `[mcpforge-admins]` for `local`; `identity` phase added to the audit, usage and status vocabularies; `forge identity bootstrap-admin`; portal `/governance/users` (sixth Governance tab). Decided as implementation: listing needs only the admin group (a read); a change also needs a write-allowed consumer; refused CHANGE attempts are audited, refused lists are not (reads are not audited anywhere in `/api/v1`); a malformed body is refused unaudited, as in W0-P25. `tests/policy/escalation.user-admin.test.ts` (11 cases), CLI and portal tests. Also: `overlay-purity` now accepts `personas` (missed by W0-P5b) and `identityAdmins`. Follow-ups: W0-P29, W0-P30.
+
+- [ ] **W0-P29** — A password reset does not end the account's live sessions
+  - model: opus
+  - deps: W0-P28
+  - wave: 0
+  - reads: w0-p4-portal-identity.md §9 decision 6; 02#4.4
+  - touches: core/gateway/store/identity/**, core/gateway/api/v1/user-admin.ts
+  - context: Found in W0-P28, 30 Sep 2026. `AuthSessionRepository` can revoke one session by id, not every session of a subject. So after an admin resets a password (e.g. because it leaked), a refresh token already held keeps renewing for up to 12 hours. Disabling the account does stop it (the principal stops resolving). The reset's `next` says so honestly today.
+  - done: a password reset (and a disable) revokes every live auth session of that subject in the same transaction as the change; a test proves a refresh token issued before the reset no longer renews.
+
+- [ ] **W0-P30** — `overlay-purity` flags a consumer's PUBLIC key as a leaked credential
+  - model: opus
+  - deps: —
+  - wave: 0
+  - reads: 02#6.3, 02#11.5; CLAUDE.md §2 item 8
+  - touches: tools/ci/src/overlay-purity.ts
+  - context: Found in W0-P28, 30 Sep 2026. `runOverlayPurityCheck` on main fails on `consumers/portal-local.consumer.yaml`: the Ed25519 public key `x` under `publicKeys` is a 43-character high-entropy string. A public key is not a secret, and registration requires it. So `forge ci`'s overlay-purity stage cannot pass on this repo. The secret scanner needs to recognise a JWK public-key member under `publicKeys` without opening a hole for private members (`d`) or anything else.
+  - done: `runOverlayPurityCheck` is ok on this repo; a `publicKeys[].x` is accepted; a `d` member or a high-entropy string anywhere else is still refused; tests prove all three.
+
 - [ ] **W0-P26** — No command stores a NEW binding credential: `forge secrets` can rotate and revoke, not put
   - model: opus
   - deps: W0-P21
