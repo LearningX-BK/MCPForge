@@ -128,16 +128,14 @@ export async function buildUnitTestTs(
   }
 
   // W0-B7 done criterion: "a generated unit test asserts every declared
-  // error path returns a non-empty next." The full end-to-end error-path
-  // round trips (actually driving `handle()` into each error) live in the
-  // sibling `contract.test.ts` (W0-B7); this schema-boundary file asserts
-  // the same guarantee at the taxonomy level — every error code this
-  // handler is generated to throw (`INPUT_INVALID` always;
-  // `POLICY_GUARDRAIL_BREACH` when this tool declares guardrails;
-  // `PLAN_ARGUMENT_MISMATCH` for write tools; `TARGET_ERROR` as the
-  // catch-all mapping in `mapUnknownError`) carries a non-empty,
-  // agent-actionable `next` in the closed taxonomy this handler constructs
-  // every thrown error from (CLAUDE.md non-negotiable #5).
+  // error path returns a non-empty next." Asserted at the taxonomy level:
+  // every error code a call to this tool can be refused with on the served
+  // path (`INPUT_INVALID` always, at 6d; `POLICY_GUARDRAIL_BREACH` when this
+  // tool declares guardrails, at 6f; `PLAN_ARGUMENT_MISMATCH` for write
+  // tools, at 6g; `TARGET_ERROR` as the executor's catch-all) carries a
+  // non-empty, agent-actionable `next` in the closed taxonomy every refusal
+  // is constructed from (CLAUDE.md non-negotiable #5). W0-P18: the generated
+  // handler no longer throws any of these itself; it is not a call path.
   const declaredErrorCodes = ['INPUT_INVALID', 'TARGET_ERROR'];
   if (numericGuardrails.length > 0) declaredErrorCodes.push('POLICY_GUARDRAIL_BREACH');
   if (tool.write) declaredErrorCodes.push('PLAN_ARGUMENT_MISMATCH');

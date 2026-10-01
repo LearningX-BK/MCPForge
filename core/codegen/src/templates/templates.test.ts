@@ -1,7 +1,9 @@
 // MCPForge — W0-B6 tests. Every clause of the task's `done:` criterion,
 // proven against the `jde.ap.voucher.create` fixture (the `bindingCustom:
-// true` variant at `../emit/fixtures-custom`, shared with W0-B5, since the
-// handler must demonstrably dispatch into `binding.custom.ts`).
+// true` variant at `../emit/fixtures-custom`, shared with W0-B5). W0-P18
+// narrowed artefact 3: the handler no longer dispatches into
+// `binding.custom.ts` and carries no confirm or audit; its tests below now
+// prove that absence.
 
 import { cpSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -107,39 +109,67 @@ describe('W0-B6 DONE CRITERION: tool.ts (artefact 2)', () => {
   });
 });
 
-describe('W0-B6 DONE CRITERION: handler.generated.ts wires all six concerns (artefact 3)', () => {
-  it('wires argument validation (compiled Ajv from schema.json)', async () => {
+describe('W0-B6 DONE CRITERION (narrowed by W0-P18): handler.generated.ts is a type contract plus pure helpers (artefact 3)', () => {
+  it('carries argument validation (compiled Ajv from schema.json)', async () => {
     const repoRoot = freshRepoRoot();
     await runCodegen(repoRoot);
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
     expect(source).toMatch(/from ['"]\.\/schema\.json['"]/);
     expect(source).toContain('Ajv2020');
     expect(source).toContain('ajv.compile(schema)');
-    expect(source).toContain('validateArgs(rawArgs)');
+    expect(source).toContain('export const validateArgs');
   });
 
-  it('wires two-phase confirm / dry-run dispatch into binding.custom.ts execute/dryRun', async () => {
+  it('W0-P18: is NOT a call path — no handle(), no confirm mint/verify, no idempotency, no audit, no binding dispatch', async () => {
     const repoRoot = freshRepoRoot();
     await runCodegen(repoRoot);
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
-    expect(source).toMatch(/from ['"]\.\/binding\.custom\.js['"]/);
-    expect(source).toContain('customBinding.dryRun(ctx, args)');
-    expect(source).toContain('customBinding.execute(ctx, args)');
-    expect(source).toContain('isPlan');
-    expect(source).toContain('confirmTokens.mint');
-    expect(source).toContain('confirmTokens.verify');
+    // What the file is FOR is stated in its own header.
+    expect(source).toContain('WHAT THIS FILE IS FOR (W0-P18). It is NOT a call path.');
+    // Path B, gone: a second copy of 6g (confirm), 6h (idempotency) and [9] (audit).
+    expect(source).not.toMatch(/export (async )?function handle\b/);
+    expect(source).not.toContain('confirmTokens');
+    expect(source).not.toContain('.mint(');
+    expect(source).not.toContain('.verify(');
+    expect(source).not.toContain('canonicalArgsHash');
+    expect(source).not.toContain('recordBeforeInvoke');
+    expect(source).not.toContain('recordOutcome');
+    expect(source).not.toContain('audit.record');
+    expect(source).not.toContain('AuditRecordInput');
+    expect(source).not.toContain('confirm_required');
+    // It dispatches nothing: the hand-owned body is never imported at runtime.
+    expect(source).not.toMatch(/from ['"]\.\/binding\.custom(\.js)?['"]/);
+    expect(source).not.toContain('customBinding');
+    // And it throws nothing of its own: refusals are the gateway's.
+    expect(source).not.toContain('forgeError(');
+    expect(source).not.toMatch(/from ['"]@mcpforge\/shared\/errors['"]/);
   });
 
-  it('wires guardrail evaluation from writeSafety.guardrails', async () => {
+  it('W0-P18: the same holds for both fixture variants, custom binding body and generic executor', async () => {
+    for (const fixtures of [fixturesRepoRoot, join(here, '..', 'emit', 'fixtures')]) {
+      const dir = mkdtempSync(join(tmpdir(), 'mcpforge-templates-'));
+      tmpDirs.push(dir);
+      cpSync(join(fixtures, 'manifests'), join(dir, 'manifests'), { recursive: true });
+      cpSync(join(fixtures, 'roles'), join(dir, 'roles'), { recursive: true });
+      const report = await runCodegen(dir);
+      expect(report.ok).toBe(true);
+      const source = readGeneratedFile(join(dir, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
+      expect(source).not.toMatch(/export (async )?function handle\b/);
+      expect(source).not.toContain('confirmTokens');
+      expect(source).not.toContain('audit.record');
+    }
+  });
+
+  it('carries the argument-only guardrail kinds from writeSafety.guardrails', async () => {
     const repoRoot = freshRepoRoot();
     await runCodegen(repoRoot);
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
     expect(source).toContain('evaluateGuardrails');
     expect(source).toContain('GUARDRAILS');
-    expect(source).toContain('POLICY_GUARDRAIL_BREACH');
+    expect(source).toContain('GATEWAY_EVALUATED_KINDS');
   });
 
-  it('wires result-key extraction from output.resultKeys', async () => {
+  it('carries result-key extraction from output.resultKeys', async () => {
     const repoRoot = freshRepoRoot();
     await runCodegen(repoRoot);
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
@@ -147,27 +177,6 @@ describe('W0-B6 DONE CRITERION: handler.generated.ts wires all six concerns (art
     expect(source).toContain('extractResultKeys');
     expect(source).toContain('document_number');
     expect(source).toContain('$.voucher.docNumber');
-  });
-
-  it('wires audit calls (a documented Track C call-site stub)', async () => {
-    const repoRoot = freshRepoRoot();
-    await runCodegen(repoRoot);
-    const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
-    expect(source).toContain('ctx.audit.record');
-    expect(source).toContain('AuditRecordInput');
-    expect(source).toMatch(/phase:\s*"plan"/);
-    expect(source).toMatch(/phase:\s*"execute"/);
-  });
-
-  it('maps errors to the closed taxonomy from @mcpforge/shared', async () => {
-    const repoRoot = freshRepoRoot();
-    await runCodegen(repoRoot);
-    const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/handler.generated.ts`.split('/')));
-    expect(source).toMatch(/from ['"]@mcpforge\/shared\/errors['"]/);
-    expect(source).toContain('forgeError(');
-    expect(source).toContain('INPUT_INVALID');
-    expect(source).toContain('PLAN_ARGUMENT_MISMATCH');
-    expect(source).toContain('TARGET_ERROR');
   });
 
   it('exports Ctx/Args/Result — the exact types binding.custom.ts\'s stub imports', async () => {
