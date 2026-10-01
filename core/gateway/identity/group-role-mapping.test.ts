@@ -84,6 +84,18 @@ describe('parseGroupRoleMappingFile', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('W0-P22: reads superAdminSubjects as a sorted subject list and rejects a malformed one', () => {
+    const ok = parseGroupRoleMappingFile(
+      'ok.yaml',
+      `${LOCAL_ONLY}superAdminSubjects: [local:b, local:a, local:a]\n`,
+    );
+    expect(ok.ok && ok.doc.superAdminSubjects).toEqual(['local:a', 'local:b']);
+    const bad = parseGroupRoleMappingFile('bad.yaml', `${LOCAL_ONLY}superAdminSubjects: local:a\n`);
+    expect(bad.ok).toBe(false);
+    if (bad.ok) return;
+    expect(bad.error.message).toContain('superAdminSubjects');
+  });
+
   it('rejects a groups entry missing roles', () => {
     const result = parseGroupRoleMappingFile(
       'bad.yaml',
@@ -178,6 +190,47 @@ subjectOverrides:
     const { changed, errors } = remapSubjectAcrossMappingFiles(root, 'local:nobody', 'oidc:nobody');
     expect(changed).toEqual([]);
     expect(errors).toEqual([]);
+  });
+
+  // W0-P22 — superAdminSubjects holds subject values, so a remap rewrites it;
+  // missing it would silently take the super admin's self-approval away.
+  it('rewrites a superAdminSubjects entry, even in a file with no subjectOverrides', () => {
+    const f1 = writeMapping(
+      'local',
+      `
+apiVersion: mcpforge/v1
+kind: GroupRoleMapping
+deployment: local
+groups:
+  mcpforge-superadmins:
+    roles: [super-admin]
+superAdmins: [mcpforge-superadmins]
+superAdminSubjects: [local:jdoe, local:other]
+`,
+    );
+    const { changed, errors } = remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
+    expect(errors).toEqual([]);
+    expect(changed).toHaveLength(1);
+    expect(changed[0]).toMatchObject({
+      filePath: f1,
+      roles: [],
+      mergedWithExisting: false,
+      superAdminSubjectRewritten: true,
+    });
+    const reparsed = parseGroupRoleMappingFile(f1, readFileSync(f1, 'utf-8'));
+    expect(reparsed.ok).toBe(true);
+    if (!reparsed.ok) return;
+    expect(reparsed.doc.superAdminSubjects).toEqual(['local:other', 'oidc:jdoe']);
+    expect(reparsed.doc.superAdmins).toEqual(['mcpforge-superadmins']);
+    expect(reparsed.doc.subjectOverrides).toBeUndefined();
+  });
+
+  it('keeps superAdminSubjects on a remap of a subjectOverrides entry for someone else', () => {
+    const f1 = writeMapping('local', `${LOCAL_ONLY}superAdminSubjects: [local:boss]\n`);
+    const { changed } = remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
+    expect(changed[0]?.superAdminSubjectRewritten).toBe(false);
+    const reparsed = parseGroupRoleMappingFile(f1, readFileSync(f1, 'utf-8'));
+    expect(reparsed.ok && reparsed.doc.superAdminSubjects).toEqual(['local:boss']);
   });
 
   it('skips a broken file but still remaps the ones that parse', () => {

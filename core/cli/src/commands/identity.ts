@@ -77,7 +77,7 @@ export function formatIdentityRemapReportHuman(report: IdentityRemapReport): str
   );
   if (report.changed.length === 0) {
     lines.push(
-      `  No subjectOverrides entry for "${report.fromSubject}" was found in any mapping file — nothing to change.`,
+      `  No subjectOverrides or superAdminSubjects entry for "${report.fromSubject}" was found in any mapping file — nothing to change.`,
     );
   }
   for (const row of report.changed) {
@@ -85,8 +85,9 @@ export function formatIdentityRemapReportHuman(report: IdentityRemapReport): str
     const mergeNote = row.mergedWithExisting
       ? ' (merged into an existing entry for the target subject)'
       : '';
+    const superAdminNote = row.superAdminSubjectRewritten ? ' (superAdminSubjects rewritten)' : '';
     lines.push(
-      `  ${rel}: ${row.fromSubject} -> ${row.toSubject} — roles: [${row.roles.join(', ')}]${mergeNote}`,
+      `  ${rel}: ${row.fromSubject} -> ${row.toSubject} — roles: [${row.roles.join(', ')}]${mergeNote}${superAdminNote}`,
     );
   }
   for (const err of report.errors) {

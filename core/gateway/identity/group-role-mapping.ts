@@ -76,6 +76,19 @@ export interface GroupRoleMappingFile {
    * their own request, flagged (W0-P32).
    */
   readonly superAdmins?: readonly string[];
+  /**
+   * W0-P22 (owner decision, 1 Oct 2026: "A: superAdminSubjects list
+   * (Recommended)"): the `Principal.subject` values of the super admins whose
+   * SELF-APPROVAL of a definitional change `forge validate` accepts (as a
+   * warning, rule `policy.approval-not-self-approved`). Group membership lives
+   * in the identity provider, not in git, so validate cannot check
+   * `superAdmins:` against an approval record; this list is the git fact it
+   * checks instead. Grants nothing at runtime: the gateway does not read it,
+   * and a subject here that is not ALSO in a `superAdmins:` group cannot merge.
+   * Like `subjectOverrides`, it holds subject values, so `forge identity
+   * remap` rewrites it.
+   */
+  readonly superAdminSubjects?: readonly string[];
 }
 
 /** 03 §2's three portal personas. Closed: a fourth is a reviewed change. */
@@ -207,6 +220,16 @@ export function parseGroupRoleMappingFile(
       error: { filePath, message: 'superAdmins: must be a list of non-empty group names' },
     };
   }
+  const superAdminSubjects = readGroupList(raw['superAdminSubjects']);
+  if (superAdminSubjects === null) {
+    return {
+      ok: false,
+      error: {
+        filePath,
+        message: 'superAdminSubjects: must be a list of non-empty Principal.subject values',
+      },
+    };
+  }
   const doc: GroupRoleMappingFile = {
     apiVersion: 'mcpforge/v1',
     kind: 'GroupRoleMapping',
@@ -218,6 +241,7 @@ export function parseGroupRoleMappingFile(
     ...(Object.keys(personas.entries).length > 0 ? { personas: personas.entries } : {}),
     ...(identityAdmins.length === 0 ? {} : { identityAdmins }),
     ...(superAdmins.length === 0 ? {} : { superAdmins }),
+    ...(superAdminSubjects.length === 0 ? {} : { superAdminSubjects }),
   };
   return { ok: true, doc };
 }
@@ -294,11 +318,19 @@ export interface RemapChangedRow {
    * bare key — the row a human reviewing the diff most needs called out.
    */
   readonly mergedWithExisting: boolean;
+  /**
+   * W0-P22 — true when `fromSubject` was listed in this file's
+   * `superAdminSubjects` and is now `toSubject` there. A file can change for
+   * this reason alone (no `subjectOverrides` entry); `roles` is then whatever
+   * `toSubject` already held there, usually none.
+   */
+  readonly superAdminSubjectRewritten: boolean;
 }
 
 /**
  * Rewrite every `subjectOverrides` entry keyed `fromSubject` to `toSubject`,
- * across every mapping file found under `root`. Files with no matching entry
+ * across every mapping file found under `root`, and (W0-P22) every
+ * `superAdminSubjects` entry equal to `fromSubject`. Files with no matching entry
  * are left untouched (not even rewritten byte-for-byte) so a `git diff` shows
  * only the deployments actually affected — 02 §4.4 item 3's "the one thing
  * that genuinely changes at swap time is the subject value" only ever touches
@@ -317,37 +349,71 @@ export function remapSubjectAcrossMappingFiles(
 
   for (const { filePath, doc } of loaded) {
     const overrides = doc.subjectOverrides;
-    if (overrides === undefined || !(fromSubject in overrides)) continue;
+    const inOverrides =
+      overrides !== undefined && Object.prototype.hasOwnProperty.call(overrides, fromSubject);
+    // W0-P22 — `superAdminSubjects` holds subject values too; a remap that
+    // skipped it would silently take the super admin's self-approval away.
+    const superAdminSubjectRewritten = (doc.superAdminSubjects ?? []).includes(fromSubject);
+    if (!inOverrides && !superAdminSubjectRewritten) continue;
 
-    const fromEntry = overrides[fromSubject]!;
-    const existingToEntry = overrides[toSubject];
-    const mergedWithExisting = existingToEntry !== undefined;
-    const roles = mergedWithExisting
-      ? mergeRoles(existingToEntry.roles, fromEntry.roles)
-      : [...fromEntry.roles].sort();
+    let nextOverrides: Record<string, { roles: string[] }> | undefined;
+    let roles: string[];
+    let mergedWithExisting = false;
+    if (inOverrides) {
+      const fromEntry = overrides[fromSubject]!;
+      const existingToEntry = overrides[toSubject];
+      mergedWithExisting = existingToEntry !== undefined;
+      roles =
+        existingToEntry !== undefined
+          ? mergeRoles(existingToEntry.roles, fromEntry.roles)
+          : [...fromEntry.roles].sort();
 
-    const nextOverrides: Record<string, { roles: string[] }> = {};
-    for (const [subject, entry] of Object.entries(overrides)) {
-      if (subject === fromSubject) continue;
-      nextOverrides[subject] = subject === toSubject ? { roles } : { roles: [...entry.roles] };
+      nextOverrides = {};
+      for (const [subject, entry] of Object.entries(overrides)) {
+        if (subject === fromSubject) continue;
+        nextOverrides[subject] = subject === toSubject ? { roles } : { roles: [...entry.roles] };
+      }
+      if (!(toSubject in nextOverrides)) {
+        nextOverrides[toSubject] = { roles };
+      }
+    } else {
+      roles = [...(overrides?.[toSubject]?.roles ?? [])].sort();
     }
-    if (!(toSubject in nextOverrides)) {
-      nextOverrides[toSubject] = { roles };
-    }
+
+    const nextSuperAdminSubjects =
+      doc.superAdminSubjects === undefined
+        ? undefined
+        : [
+            ...new Set(doc.superAdminSubjects.map((s) => (s === fromSubject ? toSubject : s))),
+          ].sort();
 
     const nextDoc: GroupRoleMappingFile = {
       apiVersion: doc.apiVersion,
       kind: doc.kind,
       deployment: doc.deployment,
       groups: doc.groups,
-      subjectOverrides: nextOverrides,
+      ...(nextOverrides !== undefined
+        ? { subjectOverrides: nextOverrides }
+        : overrides === undefined
+          ? {}
+          : { subjectOverrides: overrides }),
       ...(doc.personas === undefined ? {} : { personas: doc.personas }),
       ...(doc.identityAdmins === undefined ? {} : { identityAdmins: doc.identityAdmins }),
       ...(doc.superAdmins === undefined ? {} : { superAdmins: doc.superAdmins }),
+      ...(nextSuperAdminSubjects === undefined
+        ? {}
+        : { superAdminSubjects: nextSuperAdminSubjects }),
     };
     writeFileSync(filePath, serializeGroupRoleMappingFile(nextDoc), 'utf-8');
 
-    changed.push({ filePath, fromSubject, toSubject, roles, mergedWithExisting });
+    changed.push({
+      filePath,
+      fromSubject,
+      toSubject,
+      roles,
+      mergedWithExisting,
+      superAdminSubjectRewritten,
+    });
   }
 
   return { changed, errors };
@@ -376,6 +442,10 @@ export function serializeGroupRoleMappingFile(doc: GroupRoleMappingFile): string
     // W0-P31 — kept on a rewrite.
     ...(doc.superAdmins !== undefined && doc.superAdmins.length > 0
       ? { superAdmins: doc.superAdmins }
+      : {}),
+    // W0-P22 — kept on a rewrite (and rewritten by a remap).
+    ...(doc.superAdminSubjects !== undefined && doc.superAdminSubjects.length > 0
+      ? { superAdminSubjects: doc.superAdminSubjects }
       : {}),
   };
   return `${stringifyYaml(ordered, { indent: 2, sortMapEntries: false })}`;

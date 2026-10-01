@@ -15,6 +15,7 @@
 
 import { SOD_RULES } from '../compile/sod.js';
 import type { ValidationRule } from '../validate/types.js';
+import { APPROVAL_RULES } from './approvals.js';
 import { BINDING_RULES } from './binding.js';
 import { COPY_RULES } from './copy.js';
 import { CREDENTIAL_RULES } from './credentials.js';
@@ -22,6 +23,13 @@ import { EVAL_RULES } from './evals.js';
 import { GRANT_RULES } from './grants.js';
 import { WRITE_SAFETY_RULES } from './write-safety.js';
 
+export {
+  APPROVAL_NOT_SELF_APPROVED,
+  APPROVAL_RULES,
+  GRANDFATHERED_APPROVAL_IDS,
+  PRINCIPAL_SUBJECT_RE,
+  loadSuperAdminSubjects,
+} from './approvals.js';
 export { BINDING_RULES, PLSQL_WRAPPER_REF_RE, ELEVATED_BINDING_TYPES } from './binding.js';
 export {
   COPY_RULES,
@@ -42,6 +50,8 @@ export const POLICY_RULES: readonly ValidationRule[] = [
   ...EVAL_RULES,
   ...CREDENTIAL_RULES,
   ...GRANT_RULES,
+  // W0-P22 — approval records are not self-approved (W0-P4 §4 item 3).
+  ...APPROVAL_RULES,
   // W0-B8 — segregation of duties over compiled role scopes (02 §4.3). It
   // lives under src/compile/ with the compiler whose output it reasons about,
   // and joins the DEFAULT rule set here so `forge validate` runs it without

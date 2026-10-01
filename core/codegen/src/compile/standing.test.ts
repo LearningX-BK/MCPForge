@@ -79,7 +79,7 @@ describe('W0-N4 DONE: a standingAuthorization resolves to a committed approval r
         ref: APPROVAL_REF,
         status: 'active',
         // Straight off the committed record, not off the grant.
-        approver: 'A. Named Approver',
+        approver: 'local:0192f000-0000-7000-8000-00000000a002',
         expiresAt: '2027-02-23',
         effective: true,
       });
@@ -93,7 +93,7 @@ describe('W0-N4 DONE: a standingAuthorization resolves to a committed approval r
     // record's kills only the standing authorization.
     const records = loadApprovalRecords(BASE);
     expect(records.get(APPROVAL_REF)?.expiresAt).toBe('2027-02-23');
-    expect(records.get(APPROVAL_REF)?.approver).toBe('A. Named Approver');
+    expect(records.get(APPROVAL_REF)?.approver).toBe('local:0192f000-0000-7000-8000-00000000a002');
   });
 });
 
@@ -144,7 +144,7 @@ describe('W0-N4 DONE: an unusable standing authorization compiles to effective: 
       writeApproval(repoRoot, {
         id: APPROVAL_REF,
         status: 'pending',
-        approver: 'A. Named Approver',
+        approver: 'local:0192f000-0000-7000-8000-00000000a002',
         expiresAt: '2027-02-23',
       });
       await runCodegen(repoRoot);
@@ -162,7 +162,7 @@ describe('W0-N4 DONE: an unusable standing authorization compiles to effective: 
       writeApproval(repoRoot, {
         id: APPROVAL_REF,
         decision: 'approved',
-        approver: 'A. Named Approver',
+        approver: 'local:0192f000-0000-7000-8000-00000000a002',
       });
       await runCodegen(repoRoot);
       const block = standingBlock(repoRoot);
@@ -181,7 +181,7 @@ describe('W0-N4 DONE: an unusable standing authorization compiles to effective: 
         APPROVAL_REF,
         {
           ref: APPROVAL_REF,
-          approver: 'A. Named Approver',
+          approver: 'local:0192f000-0000-7000-8000-00000000a002',
           expiresAt: '2026-01-31',
           decision: 'approved',
         },
@@ -190,7 +190,7 @@ describe('W0-N4 DONE: an unusable standing authorization compiles to effective: 
     expect(resolveStandingAuthorization(APPROVAL_REF, records, '2026-09-03')).toEqual({
       ref: APPROVAL_REF,
       status: 'expired',
-      approver: 'A. Named Approver',
+      approver: 'local:0192f000-0000-7000-8000-00000000a002',
       expiresAt: '2026-01-31',
       effective: false,
     });
@@ -247,9 +247,9 @@ describe('W0-N4 DONE: granting a standing authorization is visible in the compil
       const block = fn['standingAuthorization'] as Record<string, unknown>;
       // The reviewer sees WHO approved it and UNTIL WHEN, in the diff, without
       // opening another file.
-      expect(block['approver']).toBe('A. Named Approver');
+      expect(block['approver']).toBe('local:0192f000-0000-7000-8000-00000000a002');
       expect(block['expiresAt']).toBe('2027-02-23');
-      expect(after).toContain('A. Named Approver');
+      expect(after).toContain('local:0192f000-0000-7000-8000-00000000a002');
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
