@@ -11,6 +11,7 @@ import { cn } from 'cn';
 const TABS = [
   { href: '/environments', label: 'This deployment' },
   { href: '/environments/enablement', label: 'Enablement' },
+  { href: '/environments/servers', label: 'Servers' },
   { href: '/environments/packages', label: 'Packages' },
 ] as const;
 
