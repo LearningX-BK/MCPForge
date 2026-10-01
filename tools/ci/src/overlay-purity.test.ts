@@ -51,6 +51,11 @@ describe('checkOverlayFileTypes', () => {
         '    personas: [business]',
         'identityAdmins:',
         '  - mcpforge-admins',
+        // W0-P31 and W0-P22.
+        'superAdmins:',
+        '  - mcpforge-superadmins',
+        'superAdminSubjects:',
+        '  - local:0192aaaa-0000-7000-8000-000000000001',
       ].join('\n'),
     );
     expect(checkOverlayFileTypes(repoRoot)).toEqual([]);

@@ -128,6 +128,9 @@ function checkDeclaredKeys(doc: Record<string, unknown>): string | null {
       'personas',
       'identityAdmins',
       'superAdmins',
+      // W0-P22 — the super admins' subjects, for `forge validate`'s
+      // approval-not-self-approved rule.
+      'superAdminSubjects',
     ]);
     for (const key of Object.keys(doc)) {
       if (!allowedTop.has(key))

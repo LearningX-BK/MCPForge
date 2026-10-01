@@ -3,7 +3,9 @@
 id: appr-2026-08-27-p2p-plsql
 subject: role/p2p
 decision: approved
-approver: A. Named Approver
+# W0-P22: approver and requestedBy are Principal.subject values, and differ.
+requestedBy: local:0192f000-0000-7000-8000-00000000a001
+approver: local:0192f000-0000-7000-8000-00000000a002
 approvedAt: "2026-08-27"
 expiresAt: "2027-02-23"
 scope: Execute MCPFORGE_WRAP.AP_VOUCHER writes through the ordinary plan -> confirm path.

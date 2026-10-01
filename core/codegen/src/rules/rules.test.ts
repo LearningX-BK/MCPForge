@@ -263,8 +263,11 @@ describe('rules — the passing counterexample', () => {
     expect(new Set(ids).size).toBe(ids.length);
     // 19 W0-B3 policy rules + the 2 W0-B8 segregation-of-duties rules
     // (sod.declared-conflict, sod.implicit-create-approve), which join the
-    // same default set so `forge validate` runs them without opting in.
-    expect(ids).toHaveLength(21);
+    // same default set so `forge validate` runs them without opting in,
+    // + W0-P22's policy.approval-not-self-approved (exercised in
+    // approvals.test.ts against temporary repositories).
+    expect(ids).toHaveLength(22);
+    expect(ids).toContain('policy.approval-not-self-approved');
     expect(ids).toContain('sod.declared-conflict');
     expect(ids).toContain('sod.implicit-create-approve');
   });

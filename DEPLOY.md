@@ -119,6 +119,16 @@ the **local mock JD Edwards**. Verified locally with Docker 29.8 on 30 Sep 2026
    under **Governance → Users**. Every change is an `identity` audit row. Groups
    map to roles in the same mapping file.
 
+   **Self-approval (W0-P22).** A super admin may approve their own definitional
+   change only if their subject (printed by `bootstrap-admin` as
+   `created <name> (local:…)`) is listed under `superAdminSubjects:` in
+   `overlays/<deployment>/mappings/groups-to-roles.yaml`. `forge validate`
+   (which Merge runs) fails any other self-approved record, and reports a
+   listed super admin's as a warning naming them. The first entry cannot come
+   from your own portal change (that change would be a self-approval by
+   someone not yet listed): add it as a commit to the definitions clone, or
+   have another approver approve the change.
+
 8. **Point it at a JD Edwards target and probe (optional).** Start the mock
    (`pnpm --filter @mcpforge/mocks mock-jde`, or run it as a second service),
    store the three per-server client credentials named in

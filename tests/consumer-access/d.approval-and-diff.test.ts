@@ -216,7 +216,7 @@ describe('W0-N14(d) — registration, standing authorization and credential rota
           }
           expect(standing['status']).toBe('active');
           expect(standing['effective']).toBe(true);
-          expect(standing['approver']).toBe('A. Named Approver');
+          expect(standing['approver']).toBe('local:0192f000-0000-7000-8000-00000000a002');
           expect(standing['ref']).toBe(approvalRef);
 
           return {
