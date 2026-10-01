@@ -36,9 +36,11 @@ export interface AuditCredentialRef {
  * `catalogue` (W0-P33c, design decision C, 30 Sep 2026): a super admin
  * reloading the gateway catalogue from the definitions clone, or a refused
  * attempt to. Free text in both dialects, so again no migration.
+ * `probe` (W0-P33d, design decision D, 30 Sep 2026): a super admin running the
+ * capability probe from the portal, or a refused attempt to. No migration.
  */
 export type AuditPhase =
-  'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue';
+  'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue' | 'probe';
 
 /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
 export type AuditOutcome = 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';

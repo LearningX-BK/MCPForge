@@ -234,7 +234,8 @@ export const BINDING_TYPE: Readonly<Record<BindingType, StatusEntry>> = {
 // CALL_PHASE — 02 §4.6's audit `phase` column: plan | execute | reject | reverse,
 // plus `approve` (W0-P25, owner decision 30 Sep 2026), `identity` (W0-P28,
 // owner decision 30 Sep 2026) and `catalogue` (W0-P33c, decision C of the
-// approved W0-P33 design note, 30 Sep 2026: the audited catalogue reload).
+// approved W0-P33 design note, 30 Sep 2026: the audited catalogue reload) and
+// `probe` (W0-P33d, decision D: the portal-triggered capability probe).
 // ---------------------------------------------------------------------------
 
 export const CALL_PHASES = [
@@ -245,6 +246,7 @@ export const CALL_PHASES = [
   'approve',
   'identity',
   'catalogue',
+  'probe',
 ] as const;
 export type CallPhase = (typeof CALL_PHASES)[number];
 
@@ -293,6 +295,13 @@ export const CALL_PHASE: Readonly<Record<CallPhase, StatusEntry>> = {
     srLabel:
       'Call phase: catalogue. A super admin reloaded the gateway catalogue from the definitions clone, or was refused; nothing reached a target system.',
     icon: 'RefreshCw',
+  },
+  probe: {
+    token: 'status-platform',
+    label: 'Probe',
+    srLabel:
+      'Call phase: probe. A super admin ran the capability probe from the portal, or was refused; only read-only and validate-only checks reached a target system.',
+    icon: 'Radar',
   },
 } as const;
 

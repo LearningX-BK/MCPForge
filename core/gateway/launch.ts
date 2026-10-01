@@ -37,7 +37,16 @@ import {
   type AisClient,
   type ValidatePairRegistry,
 } from '@mcpforge/adapter-function';
-import { loadProbeReport, probeReportPath } from '@mcpforge/probe';
+import { loadManifestFiles } from '@mcpforge/codegen/validate';
+import {
+  isEnvironmentClass,
+  loadProbeReport,
+  probeDeployment,
+  probeReportPath,
+  writeProbeReport,
+  type ClientCredentialSource,
+  type EnvironmentClass,
+} from '@mcpforge/probe';
 import { createGatewayHttpTransport, type GatewayHttpTransport } from './transport/index.js';
 import { ConsumerAuthenticator, readConsumerPresentation } from './transport/index.js';
 import { loadConsumerRegistry } from './consumer/index.js';
@@ -129,6 +138,8 @@ export const GATEWAY_MODES = ['headless', 'full'] as const;
 export type GatewayMode = (typeof GATEWAY_MODES)[number];
 
 const DEFAULT_MODE: GatewayMode = 'full';
+/** The probe target name a portal-triggered run reports under: `forge probe`'s default. */
+const PORTAL_PROBE_TARGET_ID = 'local';
 const DEFAULT_AUDIENCE = 'https://mcpforge.local/mcp';
 
 /**
@@ -148,6 +159,24 @@ export function parseGatewayMode(
   throw new Error(`Unknown MCPFORGE_MODE "${raw}" — expected one of: ${GATEWAY_MODES.join(', ')}.`);
 }
 
+/**
+ * W0-P33d — this deployment's environment class (02 §7.1), from `MCPFORGE_ENV`
+ * exactly as `forge dev`, `forge consumer issue-credential` and `forge probe`
+ * read it: unset or empty is `local` (the clean-clone path), and any value
+ * outside the closed four refuses startup rather than being assumed local.
+ * It decides whether the portal may START a probe (`mayProbeFromPortal`).
+ */
+export function parseEnvironmentClass(
+  env: { readonly MCPFORGE_ENV?: string | undefined } = process.env,
+): EnvironmentClass {
+  const raw = env.MCPFORGE_ENV?.trim();
+  if (raw === undefined || raw === '') return 'local';
+  if (isEnvironmentClass(raw)) return raw;
+  throw new Error(
+    `Unknown MCPFORGE_ENV "${raw}" — expected one of: local, probe, staging, prod (02 §7.1).`,
+  );
+}
+
 export interface LaunchOptions {
   /**
    * Install root: the code, and `.mcpforge/` (runtime store, sealed secrets,
@@ -163,6 +192,11 @@ export interface LaunchOptions {
   readonly definitionsRoot?: string;
   /** Defaults to `parseGatewayMode()`. */
   readonly mode?: GatewayMode;
+  /**
+   * W0-P33d — this deployment's environment class. Defaults to `local`; the
+   * process entrypoint passes `parseEnvironmentClass()` (`MCPFORGE_ENV`).
+   */
+  readonly environmentClass?: EnvironmentClass;
   /** Port the gateway's Streamable HTTP endpoint binds to. 0 = OS-assigned (tests). */
   readonly gatewayPort?: number;
   readonly gatewayHost?: string;
@@ -318,6 +352,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
   // W0-P33a: definitions (git) and runtime state (.mcpforge/) may live apart.
   const defsRoot = options.definitionsRoot ?? repoRoot;
   const deployment = options.deployment ?? process.env['MCPFORGE_DEPLOYMENT'] ?? 'local';
+  const environmentClass = options.environmentClass ?? 'local';
 
   const catalogue = await loadRuntimeCatalogue({ repoRoot: defsRoot });
   const store = await openRuntimeStore(
@@ -492,6 +527,29 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       superAdminGroups: () => reloader.current().superAdminGroups,
       // W0-P33c — the reload endpoint: super admin only, audited, all or nothing.
       catalogueReload: reloader,
+      // W0-P33d — the portal-triggered probe: super admin, `local` only,
+      // audited. The definitions root is probed (the one implementation
+      // `forge probe` runs); the report lands under the install root, beside
+      // the vault the client credentials are read from.
+      probeRun: {
+        environmentClass,
+        targetId: PORTAL_PROBE_TARGET_ID,
+        run: () =>
+          probeDeployment({
+            definitionsRoot: defsRoot,
+            manifestDocs: loadManifestFiles(defsRoot).map((f) => f.doc),
+            target: {
+              id: PORTAL_PROBE_TARGET_ID,
+              environmentClass,
+              deploymentId: deployment,
+            },
+            credential: (ref) =>
+              ({ ref: parseSecretRef(ref), secretStore }) as ClientCredentialSource<unknown>,
+          }),
+        write: (report) => {
+          writeProbeReport(repoRoot, report);
+        },
+      },
     });
     const gateway = createGatewayHttpTransport({
       consumerAuth,
@@ -560,6 +618,8 @@ if (isDirectlyExecuted()) {
   const definitionsRoot = process.env['MCPFORGE_DEFINITIONS_ROOT'];
   launchGateway({
     repoRoot: process.cwd(),
+    // W0-P33d: MCPFORGE_ENV, read here only, like MCPFORGE_DEFINITIONS_ROOT.
+    environmentClass: parseEnvironmentClass(),
     ...(definitionsRoot === undefined || definitionsRoot === '' ? {} : { definitionsRoot }),
     gatewayPort: port,
     gatewayHost: host,

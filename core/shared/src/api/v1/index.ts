@@ -76,6 +76,7 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 /** `approve` (W0-P25): a human deciding a runtime approval request, or a refused attempt to. */
 /** `identity` (W0-P28): an identity admin changing a local user, or a refused attempt to. */
 /** `catalogue` (W0-P33c): a super admin reloading the gateway catalogue, or a refused attempt to. */
+/** `probe` (W0-P33d): a super admin running the capability probe from the portal, or a refused attempt to. */
 export const AUDIT_PHASES = [
   'plan',
   'execute',
@@ -84,6 +85,7 @@ export const AUDIT_PHASES = [
   'approve',
   'identity',
   'catalogue',
+  'probe',
 ] as const;
 export const AUDIT_OUTCOMES = [
   'ok',
@@ -608,3 +610,40 @@ export const catalogueReloadRefusalSchema = apiErrorSchema.extend({
   }),
 });
 export type CatalogueReloadRefusal = z.infer<typeof catalogueReloadRefusalSchema>;
+
+// --- portal-triggered probe (W0-P33d) -------------------------------------------
+//
+// Decision D of the approved W0-P33 design note (owner, 30 Sep 2026: "Local and
+// dev only (Recommended)"). A super admin, through a consumer that allows
+// writes and has a human in its loop, asks the gateway to run the capability
+// probe for its own deployment. Served only where the deployment's
+// environment class allows it (`local`); everywhere else the probe stays a CLI
+// act and the refusal says which command. Every attempt is a hash-chained
+// `probe` audit row. A run that completes writes the report and then reloads
+// the catalogue, so the new statuses are what the gateway serves.
+
+export const PROBE_RUN_PATH = `${API_V1_PREFIX}/admin/probe`;
+
+/** `POST /api/v1/admin/probe`, when the probe ran and its report was written. */
+export const probeRunResponseSchema = z.object({
+  asOf: z.string(),
+  deploymentId: z.string(),
+  environmentClass: z.string(),
+  targetId: z.string(),
+  finishedAt: z.string(),
+  toolCount: z.number().int().min(0),
+  /** Tools per probe status (02 §4.5's closed enum). */
+  byStatus: z.record(z.string(), z.number().int().min(0)),
+  /** The hash-chained `probe` audit row this run wrote. */
+  auditCallId: z.string(),
+  /** Whether the gateway now serves the new statuses (a catalogue reload ran). */
+  enablement: z.object({
+    served: z.boolean(),
+    /** The catalogue generation serving after the run. */
+    generation: z.number().int().min(1),
+    /** The `catalogue` audit row of the reload, when one was recorded. */
+    reloadAuditCallId: z.string().nullable(),
+  }),
+  next: z.string().min(1),
+});
+export type ProbeRunResponse = z.infer<typeof probeRunResponseSchema>;

@@ -70,7 +70,8 @@ export interface RecordUsageCallInput {
    * `approve` row counts as one call of its consumer and as nothing else: it is
    * not a write, a plan or a confirmation.
    */
-  readonly phase: 'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue';
+  readonly phase:
+    'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue' | 'probe';
   /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
   readonly outcome: 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';
   readonly errorCode?: string | null;

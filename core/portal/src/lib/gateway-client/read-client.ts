@@ -23,6 +23,10 @@
 // W0-P28 (owner decision, 30 Sep 2026): local user administration goes through
 // here too. Whether the viewer may administer users is the gateway's call
 // (`identityAdmins:` in git); the portal only forwards and renders the answer.
+//
+// W0-P33d (decision D of the W0-P33 design note): a super admin starting the
+// capability probe goes through here too. Who may, and in which environment
+// class, is the gateway's call; the portal forwards and renders the answer.
 
 import {
   API_V1_PATHS,
@@ -38,6 +42,8 @@ import {
   consumerUsageResponseSchema,
   deploymentResponseSchema,
   enablementResponseSchema,
+  PROBE_RUN_PATH,
+  probeRunResponseSchema,
   type AdminCreateUserRequest,
   type AdminUserActionRequest,
   type AdminUserChangeResponse,
@@ -52,6 +58,7 @@ import {
   type ConsumerUsageResponse,
   type DeploymentResponse,
   type EnablementResponse,
+  type ProbeRunResponse,
   type UsageWindow,
 } from '@mcpforge/shared/api/v1';
 import type { ZodType } from 'zod';
@@ -294,4 +301,16 @@ export function changeAdminUser(
   deps: ReadDeps = {},
 ): Promise<ReadResult<AdminUserChangeResponse>> {
   return request(API_V1_PATHS.adminUser(subject), adminUserChangeResponseSchema, deps, { body });
+}
+
+// --- the portal-triggered probe (W0-P33d) -----------------------------------------
+
+/**
+ * Run the capability probe for this deployment as the signed-in viewer. No
+ * body: the gateway decides the target, the class and the deployment, refuses
+ * anyone but a super admin, and refuses outside a `local` deployment with a
+ * next naming the `forge probe` command.
+ */
+export function runProbe(deps: ReadDeps = {}): Promise<ReadResult<ProbeRunResponse>> {
+  return request(PROBE_RUN_PATH, probeRunResponseSchema, deps, { body: undefined });
 }

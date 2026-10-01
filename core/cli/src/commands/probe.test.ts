@@ -185,6 +185,41 @@ describe('forge probe — W0-P21, against the running mock JDE', () => {
   });
 });
 
+describe('forge probe — W0-P33d: definitions root apart from the install root', () => {
+  it('reads manifests, index and overlays from MCPFORGE_DEFINITIONS_ROOT and writes the report under the install root only', async () => {
+    const defs = world(overlay());
+    const install = mkdtempSync(join(tmpdir(), 'mcpforge-probe-install-'));
+    dirs.push(install);
+    const out = captureStdout();
+    const code = await runProbeCommand(
+      { json: true },
+      { ...deps, env: { MCPFORGE_DEFINITIONS_ROOT: defs }, cwd: install },
+    );
+    out.restore();
+    expect(code).toBe(0);
+    const report = loadProbeReport(install);
+    expect(report.tools).toHaveLength(11);
+    expect(report.tools.every((t) => t.status === 'resolved')).toBe(true);
+    // Nothing was written into the definitions clone.
+    expect(readdirSync(defs).sort()).toEqual(['generated', 'manifests', 'overlays']);
+  });
+
+  it('refuses, naming the clone-relative overlay, when the definitions root has none', async () => {
+    const defs = world(null);
+    const install = world(overlay());
+    const out = captureStdout();
+    const code = await runProbeCommand(
+      { json: true },
+      { ...deps, env: { MCPFORGE_DEFINITIONS_ROOT: defs }, cwd: install },
+    );
+    out.restore();
+    expect(code).toBe(64);
+    const body = JSON.parse(out.text()) as Record<string, unknown>;
+    expect(body['code']).toBe('PROBE_TARGET_UNCONFIGURED');
+    expect(String(body['next'])).toContain('overlays/local/ais-targets.yaml');
+  });
+});
+
 describe('forge probe — refusals, each before any check runs', () => {
   it('refuses when the deployment has no AIS overlay, naming the file', async () => {
     const root = world(null);

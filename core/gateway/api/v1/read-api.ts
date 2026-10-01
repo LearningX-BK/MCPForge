@@ -11,9 +11,11 @@
 //    W0-P28's local user administration under `/api/v1/admin/users` (owner
 //    decision, 30 Sep 2026), served by ./user-admin.ts. The third is
 //    W0-P33c's `POST /api/v1/admin/catalogue/reload` (design note W0-P33,
-//    decision C, owner 30 Sep 2026), served by ./catalogue-reload.ts. All sit
-//    behind the same front door. No other write may be added without a fresh decision
-//    (W0-P2 §7 item 1).
+//    decision C, owner 30 Sep 2026), served by ./catalogue-reload.ts. W0-P33d
+//    adds `POST /api/v1/admin/probe` (decision D), served by ./probe-run.ts,
+//    which reloads through the same seam. All sit behind the same front
+//    door. No other write may be added without a fresh decision (W0-P2 §7
+//    item 1).
 //  - No tool discovery and no invocation: nothing here reads a tool's
 //    description, schema or card, and nothing calls the policy chain's
 //    execute path. Agents reach tools through `/mcp` only.
@@ -44,6 +46,7 @@ import {
   API_V1_PREFIX,
   AUDIT_OUTCOMES,
   CATALOGUE_RELOAD_PATH,
+  PROBE_RUN_PATH,
   isSelfApproved,
   USAGE_WINDOWS,
   type ApiError,
@@ -86,6 +89,12 @@ import {
   reloadCatalogue,
   type CatalogueReloadSource,
 } from './catalogue-reload.js';
+import {
+  isProbeRunPath,
+  runPortalProbe,
+  type ProbeReloadResult,
+  type ProbeRunSource,
+} from './probe-run.js';
 import {
   ADMIN_BODY_MAX_BYTES,
   adminUsersRoute,
@@ -137,6 +146,11 @@ export interface ReadApiOptions {
    * /api/v1/admin/catalogue/reload is refused as not served.
    */
   readonly catalogueReload?: CatalogueReloadSource;
+  /**
+   * W0-P33d — the portal-triggered probe. Absent (or with no reload seam to
+   * serve its report), POST /api/v1/admin/probe is refused as not served.
+   */
+  readonly probeRun?: ProbeRunSource;
 }
 
 export interface ReadApi {
@@ -175,6 +189,8 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     return d;
   };
   digestOf(currentCatalogue());
+  // W0-P33d: one portal probe at a time.
+  let probeQueue: Promise<void> = Promise.resolve();
   const loadProbe =
     options.loadProbe ??
     (() =>
@@ -453,7 +469,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     throw new ApiRefusal(
       'NOT_FOUND',
       `${url.pathname} is not an /api/v1 endpoint.`,
-      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, /admin/users for identity admins, and POST /admin/catalogue/reload for super admins. Agents reach tools through /mcp only.',
+      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, /admin/users for identity admins, and POST /admin/catalogue/reload and POST /admin/probe for super admins. Agents reach tools through /mcp only.',
     );
   }
 
@@ -472,6 +488,10 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
         }
         if (isCatalogueReloadPath(url.pathname)) {
           await handleReload(req, res, correlationId);
+          return;
+        }
+        if (isProbeRunPath(url.pathname)) {
+          await handleProbe(req, res, correlationId);
           return;
         }
         const decisionFor = decisionPathApprovalId(url.pathname);
@@ -572,6 +592,86 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
       { session: viewer.session, subject: viewer.subject, correlationId },
     );
     send(res, 200, reloaded);
+  }
+
+  /**
+   * W0-P33d — `POST /api/v1/admin/probe`. The front door runs first, before
+   * the method is even checked. No body is read: the request cannot name a
+   * target, a class or a path. Runs are serialised: one probe at a time.
+   */
+  async function handleProbe(
+    req: IncomingMessage,
+    res: ServerResponse,
+    correlationId: string,
+  ): Promise<void> {
+    const viewer = await authenticate(req, correlationId);
+    if (req.method !== 'POST') {
+      res.setHeader('allow', 'POST');
+      throw new ApiRefusal(
+        'METHOD_NOT_ALLOWED',
+        `${req.method ?? 'This method'} is not served on ${PROBE_RUN_PATH}.`,
+        'Use POST, with no body, to run the capability probe for this deployment.',
+      );
+    }
+    const prober = options.probeRun;
+    const reloader = options.catalogueReload;
+    if (prober === undefined || reloader === undefined) {
+      throw new ApiRefusal(
+        'NOT_FOUND',
+        'Running the capability probe is not served by this gateway.',
+        'Run forge probe on the gateway host, then restart the gateway so the new statuses are served.',
+      );
+    }
+    const actor = { session: viewer.session, subject: viewer.subject, correlationId };
+    const run = probeQueue.then(() =>
+      runPortalProbe(
+        {
+          store: options.store,
+          prober,
+          superAdminGroups: currentSuperAdminGroups(),
+          reload: () => reloadAfterProbe(reloader, actor),
+          gatewayVersion,
+          now,
+        },
+        actor,
+      ),
+    );
+    probeQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    send(res, 200, await run);
+  }
+
+  /** The reload a completed probe run asks for, as the same actor (W0-P33c's own row). */
+  async function reloadAfterProbe(
+    reloader: CatalogueReloadSource,
+    actor: { session: EstablishedSession; subject: string; correlationId: string },
+  ): Promise<ProbeReloadResult> {
+    try {
+      const reloaded = await reloadCatalogue(
+        {
+          store: options.store,
+          reloader,
+          superAdminGroups: currentSuperAdminGroups(),
+          digest: digestOf,
+          gatewayVersion,
+          now,
+        },
+        actor,
+      );
+      return { served: true, generation: reloaded.generation, auditCallId: reloaded.auditCallId };
+    } catch (error) {
+      if (error instanceof CatalogueReloadRefused) {
+        return {
+          served: false,
+          generation: error.reload.generation,
+          auditCallId: error.reload.auditCallId,
+          reloadNext: error.next,
+        };
+      }
+      throw error;
+    }
   }
 
   /**

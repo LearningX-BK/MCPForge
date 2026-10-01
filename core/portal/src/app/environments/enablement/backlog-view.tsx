@@ -12,6 +12,7 @@ export function EnablementBacklogView({
   groups,
   notice,
   toolsInScope,
+  probeRun,
 }: {
   readonly groups: readonly EnablementBacklogGroup[];
   /** Rendered instead of the backlog when the read failed. */
@@ -22,6 +23,8 @@ export function EnablementBacklogView({
    * must never read alike. Omitted (fixtures): not reported.
    */
   readonly toolsInScope?: number;
+  /** W0-P33d — the "Run probe" panel, rendered for a super admin only. */
+  readonly probeRun?: React.ReactNode;
 }): React.ReactElement {
   const totalCount = groups.reduce((n, g) => n + g.entries.length, 0);
 
@@ -36,6 +39,8 @@ export function EnablementBacklogView({
       </div>
 
       <EnvNav />
+
+      {probeRun ?? null}
 
       <h2 className="font-display text-lg text-text-1">Enablement backlog</h2>
       {notice ?? (
