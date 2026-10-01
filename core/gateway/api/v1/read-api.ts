@@ -5,12 +5,14 @@
 // (`@mcpforge/shared/api/v1`) and the row filter. This module serves exactly
 // that and nothing more:
 //
-//  - GET only, with TWO exceptions. Any other method is 405 with a `next`.
+//  - GET only, with THREE exceptions. Any other method is 405 with a `next`.
 //    The first is W0-P25's `POST /api/v1/approvals/{id}/decision` (owner
 //    decision, 30 Sep 2026), served by ./approval-decision.ts. The second is
 //    W0-P28's local user administration under `/api/v1/admin/users` (owner
-//    decision, 30 Sep 2026), served by ./user-admin.ts. Both sit behind the
-//    same front door. No other write may be added without a fresh decision
+//    decision, 30 Sep 2026), served by ./user-admin.ts. The third is
+//    W0-P33c's `POST /api/v1/admin/catalogue/reload` (design note W0-P33,
+//    decision C, owner 30 Sep 2026), served by ./catalogue-reload.ts. All sit
+//    behind the same front door. No other write may be added without a fresh decision
 //    (W0-P2 §7 item 1).
 //  - No tool discovery and no invocation: nothing here reads a tool's
 //    description, schema or card, and nothing calls the policy chain's
@@ -41,12 +43,14 @@ import {
   API_V1_PAGE_MAX,
   API_V1_PREFIX,
   AUDIT_OUTCOMES,
+  CATALOGUE_RELOAD_PATH,
   isSelfApproved,
   USAGE_WINDOWS,
   type ApiError,
   type ApprovalDetailResponse,
   type ApprovalsResponse,
   type AuditVerifyResponse,
+  type CatalogueReloadRefusal,
   type CallDetail,
   type CallDetailResponse,
   type CallSummary,
@@ -77,6 +81,12 @@ import {
 import { verifiedPlanBody } from './plan-body.js';
 import { ApiRefusal, STATUS_BY_CODE } from './refusal.js';
 import {
+  CatalogueReloadRefused,
+  isCatalogueReloadPath,
+  reloadCatalogue,
+  type CatalogueReloadSource,
+} from './catalogue-reload.js';
+import {
   ADMIN_BODY_MAX_BYTES,
   adminUsersRoute,
   changeAdminUser,
@@ -91,7 +101,12 @@ export interface ReadApiOptions {
   /** W0-P33a — where manifests live, for the catalogue digest. Default: `repoRoot`. */
   readonly definitionsRoot?: string;
   readonly store: RuntimeStore;
-  readonly catalogue: RuntimeCatalogue;
+  /**
+   * The served catalogue. W0-P33c: a function when the gateway can reload, so
+   * every request reads the catalogue serving at that moment; a plain value
+   * (tests, and before reload existed) is read the same way.
+   */
+  readonly catalogue: RuntimeCatalogue | (() => RuntimeCatalogue);
   readonly consumerAuth: ConsumerAuthGate;
   readonly sessions: Pick<SessionAssembly, 'establish' | 'deployment'>;
   readonly consumers: ConsumerRegistry;
@@ -116,7 +131,12 @@ export interface ReadApiOptions {
    * decide their own approval request, always flagged self-approved. Absent
    * means nobody may.
    */
-  readonly superAdminGroups?: readonly string[];
+  readonly superAdminGroups?: readonly string[] | (() => readonly string[]);
+  /**
+   * W0-P33c — the catalogue reload seam. Absent, POST
+   * /api/v1/admin/catalogue/reload is refused as not served.
+   */
+  readonly catalogueReload?: CatalogueReloadSource;
 }
 
 export interface ReadApi {
@@ -135,12 +155,26 @@ interface Viewer {
 
 export function createReadApi(options: ReadApiOptions): ReadApi {
   const now = options.now ?? (() => new Date());
-  const entries = options.catalogue.entries;
   const gatewayVersion = options.gatewayVersion ?? packageVersion();
-  const catalogueDigest = digestCatalogue(
-    options.definitionsRoot ?? options.repoRoot,
-    options.catalogue,
-  );
+  // W0-P33c: read per request, never captured at construction, so a reload is
+  // seen by the very next request and never half-seen by one in flight.
+  const catalogueSource = options.catalogue;
+  const currentCatalogue = (): RuntimeCatalogue =>
+    typeof catalogueSource === 'function' ? catalogueSource() : catalogueSource;
+  const superAdminSource = options.superAdminGroups ?? [];
+  const currentSuperAdminGroups = (): readonly string[] =>
+    typeof superAdminSource === 'function' ? superAdminSource() : superAdminSource;
+  // One digest per catalogue object: computed once, and again only after a reload.
+  const digests = new WeakMap<RuntimeCatalogue, string>();
+  const digestOf = (catalogue: RuntimeCatalogue): string => {
+    let d = digests.get(catalogue);
+    if (d === undefined) {
+      d = digestCatalogue(options.definitionsRoot ?? options.repoRoot, catalogue);
+      digests.set(catalogue, d);
+    }
+    return d;
+  };
+  digestOf(currentCatalogue());
   const loadProbe =
     options.loadProbe ??
     (() =>
@@ -163,7 +197,10 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
       throw new ApiRefusal(e.code, e.message, e.next);
     }
     const session = established.session;
-    const visibleToolIds = resolveReadAuthority(entries, session.scopeAt(now())).visible;
+    const visibleToolIds = resolveReadAuthority(
+      currentCatalogue().entries,
+      session.scopeAt(now()),
+    ).visible;
     return {
       session,
       subject: session.principal.subject,
@@ -348,8 +385,8 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
   function enablement(viewer: Viewer): EnablementResponse {
     const report = loadProbe();
     const byTool = new Map((report?.tools ?? []).map((t) => [t.toolId, t]));
-    const tools = entries
-      .filter((e) => viewer.visible.has(e.toolId))
+    const tools = currentCatalogue()
+      .entries.filter((e) => viewer.visible.has(e.toolId))
       .map((e) => {
         const t = byTool.get(e.toolId);
         const failing = t?.checks.find((c) => c.result === 'fail');
@@ -378,6 +415,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
   }
 
   async function deployment(): Promise<DeploymentResponse> {
+    const catalogue = currentCatalogue();
     const flags = await options.store.runtimeFlags.listActive();
     const d = options.store.descriptor;
     return {
@@ -385,8 +423,8 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
       deploymentId: options.sessions.deployment.deployment,
       packageIds: [...options.sessions.deployment.packageIds],
       gatewayVersion,
-      catalogueDigest,
-      toolCount: options.catalogue.toolIds.length,
+      catalogueDigest: digestOf(catalogue),
+      toolCount: catalogue.toolIds.length,
       store: { kind: d.kind, label: d.label, ephemeral: d.ephemeral },
       identityProviderKind: options.identityProviderKind,
       killFlags: flags.map((f) => ({
@@ -415,7 +453,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     throw new ApiRefusal(
       'NOT_FOUND',
       `${url.pathname} is not an /api/v1 endpoint.`,
-      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, and /admin/users for identity admins. Agents reach tools through /mcp only.',
+      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, /admin/users for identity admins, and POST /admin/catalogue/reload for super admins. Agents reach tools through /mcp only.',
     );
   }
 
@@ -432,6 +470,10 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
           await handleAdmin(req, res, adminRoute, correlationId);
           return;
         }
+        if (isCatalogueReloadPath(url.pathname)) {
+          await handleReload(req, res, correlationId);
+          return;
+        }
         const decisionFor = decisionPathApprovalId(url.pathname);
         const gate = options.approvals;
         if (decisionFor !== undefined && gate !== undefined && req.method === 'POST') {
@@ -441,11 +483,11 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
           const decided = await decideApproval(
             {
               store: options.store,
-              catalogue: options.catalogue,
+              catalogue: currentCatalogue(),
               gate,
               gatewayVersion,
               now,
-              superAdminGroups: options.superAdminGroups ?? [],
+              superAdminGroups: currentSuperAdminGroups(),
             },
             viewer,
             decisionFor,
@@ -476,18 +518,61 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
                 'The read API could not complete this request.',
                 `Report correlationId ${correlationId} to the MCPForge operator; nothing was changed by this request.`,
               );
-        const payload: ApiError = {
+        const payload: ApiError | CatalogueReloadRefusal = {
           error: {
             code: refusal.code,
             message: refusal.message,
             next: refusal.next,
             correlationId,
           },
+          // W0-P33c: a refused load carries every failure, not just the first.
+          ...(refusal instanceof CatalogueReloadRefused ? { reload: refusal.reload } : {}),
         };
         send(res, STATUS_BY_CODE[refusal.code] ?? 500, payload);
       }
     },
   };
+
+  /**
+   * W0-P33c — `POST /api/v1/admin/catalogue/reload`. The front door runs
+   * first, before the method is even checked, exactly as for the reads. No
+   * body is read: the request cannot name what is loaded.
+   */
+  async function handleReload(
+    req: IncomingMessage,
+    res: ServerResponse,
+    correlationId: string,
+  ): Promise<void> {
+    const viewer = await authenticate(req, correlationId);
+    if (req.method !== 'POST') {
+      res.setHeader('allow', 'POST');
+      throw new ApiRefusal(
+        'METHOD_NOT_ALLOWED',
+        `${req.method ?? 'This method'} is not served on ${CATALOGUE_RELOAD_PATH}.`,
+        'Use POST, with no body, to reload the gateway catalogue from the definitions clone.',
+      );
+    }
+    const reloader = options.catalogueReload;
+    if (reloader === undefined) {
+      throw new ApiRefusal(
+        'NOT_FOUND',
+        'Catalogue reload is not served by this gateway.',
+        'Restart the gateway to pick up merged definitions; this gateway was started without the reload seam.',
+      );
+    }
+    const reloaded = await reloadCatalogue(
+      {
+        store: options.store,
+        reloader,
+        superAdminGroups: currentSuperAdminGroups(),
+        digest: digestOf,
+        gatewayVersion,
+        now,
+      },
+      { session: viewer.session, subject: viewer.subject, correlationId },
+    );
+    send(res, 200, reloaded);
+  }
 
   /**
    * W0-P28 — `/api/v1/admin/users` (GET list, POST create) and

@@ -79,11 +79,31 @@ import { CapsRuntime, loadEffectiveCaps } from './caps/index.js';
 import { createPolledRuntimeFlagSource } from './flags/index.js';
 import {
   createCallExecution,
+  createCatalogueReloader,
   createServedSurface,
   createSessionAssembly,
   loadRuntimeCatalogue,
+  type PreparedSurfaceDefinitions,
   type RuntimeCatalogue,
+  type SessionAssembly,
+  type SurfaceDefinitionsInput,
 } from './assembly/index.js';
+
+/**
+ * W0-P33c — one catalogue generation's parts: the catalogue and everything
+ * the launch assembly derives from it and the rest of the definitions root.
+ */
+interface DefinitionsParts {
+  readonly catalogue: RuntimeCatalogue;
+  readonly sessions: SessionAssembly;
+  readonly superAdminGroups: readonly string[];
+  readonly surface: SurfaceDefinitionsInput;
+}
+
+/** A generation the reloader holds: its parts, plus the surface definitions checked against them. */
+interface DefinitionsGeneration extends DefinitionsParts {
+  readonly prepared: PreparedSurfaceDefinitions;
+}
 
 /**
  * W0-P28 — the user-admin half the read API needs: the local store, and who
@@ -332,14 +352,6 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     const flags = createPolledRuntimeFlagSource(store.runtimeFlags);
     await flags.refreshNow();
 
-    const sessions = createSessionAssembly({
-      repoRoot: defsRoot,
-      runtimeRoot: repoRoot,
-      deployment,
-      identity,
-      flags,
-    });
-
     const capsLoaded = loadEffectiveCaps(join(defsRoot, 'overlays', deployment, 'caps.yaml'));
     if (!capsLoaded.ok) {
       throw new Error(
@@ -348,45 +360,99 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
     }
     const caps = capsLoaded.caps;
 
-    const executor = createFunctionExecutor({
-      client: routedAisClient(defsRoot, deployment, catalogue, secretStore),
-      grants: executionGrantCheck(keys.executionGrant),
-    });
-
     // The ONE approval gate: stage 6g raises through it and the /api/v1
     // decision path (W0-P25) decides through it. There is no second instance.
     const approvals = approvalGate({ queue: store.approvals, keyring: keys.confirm });
+    // ONE rate limiter for the life of the process, shared by every catalogue
+    // generation (W0-P33c): a reload must never hand anyone fresh rate-limit
+    // windows or concurrency slots.
+    const rateLimiter = new CapsRuntime(caps);
 
-    const scopeHoursFor = (toolId: string): number | undefined =>
-      catalogue.tools.get(toolId)?.view.writeSafety?.idempotencyScopeHours ?? undefined;
-    const runtime: PolicyRuntime = {
-      rateLimiter: new CapsRuntime(caps),
-      argumentValidator: catalogue.argumentValidator,
-      guardrails: guardrailEvaluator({}),
-      writeGate: confirmWriteGate({
-        writeSafetyFor: (id) => catalogue.writeSafetyFor(id),
-        dryRun: functionDryRunner({
-          executor,
-          keyring: keys.executionGrant,
-          descriptorFor: (id) => catalogue.dryRunDescriptorFor(id),
-          validatorFor: (id) => catalogue.schemaValidatorFor(id),
-          registry: validatePairEvidence(repoRoot),
+    /**
+     * W0-P33c — everything derived from ONE runtime catalogue, built the same
+     * way at startup and on every reload. Constructs, never serves: what it
+     * returns is swapped in only by the reloader's commit. Throws on any
+     * problem (the session assembly's and the AIS overlay's own refusals).
+     */
+    function generationFor(catalogue: RuntimeCatalogue): DefinitionsParts {
+      const sessions = createSessionAssembly({
+        repoRoot: defsRoot,
+        runtimeRoot: repoRoot,
+        deployment,
+        identity,
+        flags,
+      });
+      const executor = createFunctionExecutor({
+        client: routedAisClient(defsRoot, deployment, catalogue, secretStore),
+        grants: executionGrantCheck(keys.executionGrant),
+      });
+      const scopeHoursFor = (toolId: string): number | undefined =>
+        catalogue.tools.get(toolId)?.view.writeSafety?.idempotencyScopeHours ?? undefined;
+      const runtime: PolicyRuntime = {
+        rateLimiter,
+        argumentValidator: catalogue.argumentValidator,
+        guardrails: guardrailEvaluator({}),
+        writeGate: confirmWriteGate({
+          writeSafetyFor: (id) => catalogue.writeSafetyFor(id),
+          dryRun: functionDryRunner({
+            executor,
+            keyring: keys.executionGrant,
+            descriptorFor: (id) => catalogue.dryRunDescriptorFor(id),
+            validatorFor: (id) => catalogue.schemaValidatorFor(id),
+            registry: validatePairEvidence(repoRoot),
+          }),
+          keyring: keys.confirm,
+          approval: approvals,
         }),
-        keyring: keys.confirm,
-        approval: approvals,
-      }),
-      idempotency: idempotencyGate({ store, scopeHoursFor }),
-      executionGrantKeyring: keys.executionGrant,
-    };
+        idempotency: idempotencyGate({ store, scopeHoursFor }),
+        executionGrantKeyring: keys.executionGrant,
+      };
+      const calls = createCallExecution({ store, catalogue, executor, caps });
+      return {
+        catalogue,
+        sessions,
+        // W0-P32 — who may approve their own request (flagged), and W0-P33c —
+        // who may reload: git, like the rest, as of this generation.
+        superAdminGroups: superAdminGroups(
+          loadDeploymentGroupRoleMapping(join(defsRoot, 'overlays'), deployment),
+        ),
+        surface: { catalogue, runtime, execute: calls.execute, record: calls.record },
+      };
+    }
 
-    const calls = createCallExecution({ store, catalogue, executor, caps });
-    const surface = createServedSurface({
-      repoRoot: defsRoot,
-      catalogue,
-      runtime,
-      execute: calls.execute,
-      record: calls.record,
+    const first = generationFor(catalogue);
+    const surface = createServedSurface({ repoRoot: defsRoot, ...first.surface });
+
+    const reloader = createCatalogueReloader<DefinitionsGeneration>({
+      initial: { ...first, prepared: surface.definitions },
+      async build() {
+        // Re-run the startup loader on the definitions root, then build every
+        // derived part and check the discovery artefacts against it. Nothing
+        // here is served until `commit`.
+        const parts = generationFor(await loadRuntimeCatalogue({ repoRoot: defsRoot }));
+        return { ...parts, prepared: surface.prepare(parts.surface) };
+      },
+      commit(next) {
+        surface.install(next.prepared);
+      },
+      notify: () => surface.notifyToolListChanged(),
     });
+
+    // The sessions the transport and the read API use: always the serving
+    // generation's assembly. A live session is re-verified on every request
+    // (W0-P15), so after a reload its next request is scoped by the new
+    // role scopes, mapping, consumer authorizations and probe report.
+    const sessions: SessionAssembly = {
+      get deployment() {
+        return reloader.current().sessions.deployment;
+      },
+      get warnings() {
+        return reloader.current().sessions.warnings;
+      },
+      establish: (input) => reloader.current().sessions.establish(input),
+      reverify: (session, request, correlationId) =>
+        reloader.current().sessions.reverify(session, request, correlationId),
+    };
 
     // Kill switch -> `list_changed` to every live session, on every poll where
     // the active flag set changed (02 §4.7, §5.8).
@@ -412,7 +478,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       repoRoot,
       definitionsRoot: defsRoot,
       store,
-      catalogue,
+      catalogue: () => reloader.current().catalogue,
       consumerAuth,
       sessions,
       consumers: registry,
@@ -421,10 +487,11 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       // W0-P28 — who may administer local users is git: `identityAdmins:` in
       // this deployment's group mapping, read once here like the grants.
       userAdmin: userAdminFor(defsRoot, deployment, users),
-      // W0-P32 — who may approve their own request (flagged): git, like the rest.
-      superAdminGroups: superAdminGroups(
-        loadDeploymentGroupRoleMapping(join(defsRoot, 'overlays'), deployment),
-      ),
+      // W0-P32 — who may approve their own request (flagged): git, like the
+      // rest, read from the generation serving each request.
+      superAdminGroups: () => reloader.current().superAdminGroups,
+      // W0-P33c — the reload endpoint: super admin only, audited, all or nothing.
+      catalogueReload: reloader,
     });
     const gateway = createGatewayHttpTransport({
       consumerAuth,
@@ -457,7 +524,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       store,
       identity,
       mintedKeys: keys.minted,
-      warnings: [...sessions.warnings, ...catalogue.warnings.map((w) => w.message)],
+      warnings: [...first.sessions.warnings, ...catalogue.warnings.map((w) => w.message)],
       async close() {
         for (const cleanup of cleanups) await cleanup();
         if (portal) {

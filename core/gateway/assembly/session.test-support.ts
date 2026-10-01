@@ -16,6 +16,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ConsumerRecord } from '../consumer/index.js';
+import type { IdentityProvider } from '../identity/types.js';
 import {
   inMemoryRuntimeFlags,
   staticProbeStatuses,
@@ -139,6 +140,8 @@ export interface SessionWorld {
   readonly handles: SessionHandle<unknown>[];
   /** The runtime-flags source the sessions read (kill switches). */
   readonly flags: ReturnType<typeof inMemoryRuntimeFlags>;
+  /** W0-P33c: the identity provider, so a test can build a second (reloaded) assembly. */
+  readonly identity: IdentityProvider;
   tokenFor(subject: string): Promise<string>;
   /** Deactivate a user in the local store (their already-issued tokens still verify). */
   removeUser(subject: string): void;
@@ -225,6 +228,7 @@ export async function startSessionWorld(input: {
     keypair,
     handles,
     flags,
+    identity,
     tokenFor: async (subject) => (await identity.issueToken(subject, ['pwd'], 'test')).token,
     removeUser: (subject) => {
       const i = users.findIndex((u) => u.subject === subject);

@@ -51,8 +51,15 @@ import {
 import { killSwitchRefusalError } from '../flags/checks.js';
 import { createReadApi } from '../api/v1/read-api.js';
 import { changeNext } from '../api/v1/user-admin.js';
+import { reloadCatalogue } from '../api/v1/catalogue-reload.js';
+import { createCatalogueReloader } from '../assembly/reload.js';
+import type { RuntimeCatalogue } from '../assembly/catalogue.js';
+import type { EstablishedSession } from '../assembly/session.js';
 import { ADMIN_USER_ACTIONS } from '@mcpforge/shared/api/v1';
-import { ConsumerAuthenticator, readConsumerPresentation } from '../transport/consumer-auth/index.js';
+import {
+  ConsumerAuthenticator,
+  readConsumerPresentation,
+} from '../transport/consumer-auth/index.js';
 import { constructReversingCall } from '../reversal/construct.js';
 import {
   approvalGate,
@@ -568,9 +575,8 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       "adapters/function/src/errors.ts's targetTimeout() branches its next on descriptor.write — driven here through the REAL executor + a real timing-out in-process AIS fake, write branch (a write tool must never be told to retry blind).",
     dynamicCheck: async () => {
       const { createFunctionExecutor } = await import('@mcpforge/adapter-function');
-      const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } = await import(
-        '@mcpforge/adapter-function/testing'
-      );
+      const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } =
+        await import('@mcpforge/adapter-function/testing');
       const client = createMockAisServer({ hang: true });
       const executor = createFunctionExecutor({ grants: TEST_GRANTS, client });
       const descriptor = {
@@ -584,7 +590,8 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       };
       const validate = Object.assign(() => true, { errors: null });
       try {
-        await executor.execute(descriptor as never, { executionGrant: TEST_EXECUTION_GRANT,
+        await executor.execute(descriptor as never, {
+          executionGrant: TEST_EXECUTION_GRANT,
           args: {},
           correlationId: 'req_enum_timeout',
           validate: validate as never,
@@ -601,9 +608,8 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       "adapters/function/src/errors.ts's responseTooLarge() branches its next on descriptor.write — driven here through the REAL executor + a real oversized in-process AIS fake, non-write branch.",
     dynamicCheck: async () => {
       const { createFunctionExecutor } = await import('@mcpforge/adapter-function');
-      const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } = await import(
-        '@mcpforge/adapter-function/testing'
-      );
+      const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } =
+        await import('@mcpforge/adapter-function/testing');
       const client = createMockAisServer({ bodyBytes: 1000 });
       const executor = createFunctionExecutor({ grants: TEST_GRANTS, client });
       const descriptor = {
@@ -617,7 +623,8 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       };
       const validate = Object.assign(() => true, { errors: null });
       try {
-        await executor.execute(descriptor as never, { executionGrant: TEST_EXECUTION_GRANT,
+        await executor.execute(descriptor as never, {
+          executionGrant: TEST_EXECUTION_GRANT,
           args: {},
           correlationId: 'req_enum_cap',
           validate: validate as never,
@@ -683,7 +690,96 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
       return nexts.reduce((a, b) => (a.length <= b.length ? a : b));
     },
   },
+  {
+    match: (s) => basename(s.file) === 'reload.ts' && s.raw.startsWith('added.length > 0'),
+    description:
+      'assembly/reload.ts (W0-P33c) picks one of two fixed sentences for a successful reload: run forge probe when a tool was added or changed, else no probe needed. Both branches are driven through the REAL reloader; the shorter is returned.',
+    dynamicCheck: async () =>
+      (await reloadSuccessNexts()).reduce((a, b) => (a.length <= b.length ? a : b)),
+  },
+  {
+    match: (s) => basename(s.file) === 'catalogue-reload.ts' && s.raw === 'outcome.next',
+    description:
+      "api/v1/catalogue-reload.ts (W0-P33c) forwards a successful reload's next from assembly/reload.ts unchanged. Driven through the REAL endpoint function, as a super admin through a writing, human-in-the-loop consumer, over the REAL reloader.",
+    dynamicCheck: async () => {
+      const reloader = createCatalogueReloader({
+        initial: { catalogue: enumCatalogue([]) },
+        build: () => Promise.resolve({ catalogue: enumCatalogue([]) }),
+        commit: () => undefined,
+        notify: () => Promise.resolve(),
+      });
+      const store = {
+        transaction: <T>(fn: () => Promise<T>) => fn(),
+        audit: { append: () => Promise.resolve({ id: 'call-enum' }) },
+      };
+      const response = await reloadCatalogue(
+        {
+          store: store as never,
+          reloader,
+          superAdminGroups: ['supers'],
+          digest: () => 'sha256:enum',
+          gatewayVersion: 'test',
+          now: () => new Date('2026-10-01T00:00:00Z'),
+        },
+        { session: enumReloadSession(), subject: 'u-0001', correlationId: 'req_enum_reload' },
+      );
+      return response.next;
+    },
+  },
 ];
+
+/** A catalogue with just the fields the reloader reads. */
+function enumCatalogue(ids: readonly string[], version = '1.0.0'): RuntimeCatalogue {
+  return {
+    toolIds: [...ids],
+    tools: new Map(
+      ids.map((id) => [
+        id,
+        {
+          toolId: id,
+          manifestSha256: `${id}@${version}`,
+          manifestFile: `${id}.tool.yaml`,
+          view: { version },
+        },
+      ]),
+    ),
+  } as unknown as RuntimeCatalogue;
+}
+
+async function reloadSuccessNexts(): Promise<string[]> {
+  const out: string[] = [];
+  for (const incoming of [enumCatalogue(['a.b.c.get']), enumCatalogue([])]) {
+    const reloader = createCatalogueReloader({
+      initial: { catalogue: enumCatalogue([]) },
+      build: () => Promise.resolve({ catalogue: incoming }),
+      commit: () => undefined,
+      notify: () => Promise.resolve(),
+    });
+    const { outcome } = await reloader.reload(() => Promise.resolve(undefined));
+    if (!outcome.ok) throw new Error('expected the reload to succeed');
+    out.push(outcome.next);
+  }
+  return out;
+}
+
+function enumReloadSession(): EstablishedSession {
+  const scopeSession = {
+    principal: { subject: 'u-0001', groups: ['supers'] },
+    heldRoleIds: ['super-admin'],
+    consumer: {
+      consumerId: 'portal-local',
+      authorizations: { writeAllowed: true },
+      attestation: { humanInTheLoop: true },
+    },
+    consumerSession: { recordSha: 'sha', authMethod: 'private-key-jwt', consumerSessionId: 'cs' },
+  };
+  return {
+    sessionId: 's-enum',
+    principal: scopeSession.principal,
+    scopeSession,
+    scopeAt: () => ({ deployment: { deploymentId: 'local' } }),
+  } as unknown as EstablishedSession;
+}
 
 async function readApiRefusalNext(): Promise<string> {
   const authenticator = new ConsumerAuthenticator({
@@ -730,9 +826,8 @@ async function echoRefusalNext(
   principalSubject: string | undefined = 'bikash',
 ): Promise<string> {
   const { createFunctionExecutor } = await import('@mcpforge/adapter-function');
-  const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } = await import(
-        '@mcpforge/adapter-function/testing'
-      );
+  const { createMockAisServer, TEST_GRANTS, TEST_EXECUTION_GRANT } =
+    await import('@mcpforge/adapter-function/testing');
   const client = createMockAisServer(behaviour);
   const executor = createFunctionExecutor({ grants: TEST_GRANTS, client });
   const descriptor = {
@@ -747,7 +842,8 @@ async function echoRefusalNext(
   };
   const validate = Object.assign(() => true, { errors: null });
   try {
-    await executor.execute(descriptor as never, { executionGrant: TEST_EXECUTION_GRANT,
+    await executor.execute(descriptor as never, {
+      executionGrant: TEST_EXECUTION_GRANT,
       args: {},
       correlationId: 'req_enum_echo',
       validate: validate as never,

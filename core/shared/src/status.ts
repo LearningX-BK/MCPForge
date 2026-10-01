@@ -95,7 +95,8 @@ export const PROBE_STATUS: Readonly<Record<ProbeStatus, StatusEntry>> = {
   disabled_kill_switch: {
     token: 'status-danger',
     label: 'Disabled — kill switch',
-    srLabel: 'Probe status: disabled. A kill switch is active for this tool, server, binding type, consumer or deployment.',
+    srLabel:
+      'Probe status: disabled. A kill switch is active for this tool, server, binding type, consumer or deployment.',
     icon: 'Power',
   },
 } as const;
@@ -142,7 +143,8 @@ export const CHANGE_STATE: Readonly<Record<ChangeState, StatusEntry>> = {
   validating: {
     token: 'status-neutral',
     label: 'Validating',
-    srLabel: 'Change state: validating. CI is running forge validate, codegen and the budget gates.',
+    srLabel:
+      'Change state: validating. CI is running forge validate, codegen and the budget gates.',
     icon: 'Loader',
   },
   invalid: {
@@ -178,7 +180,8 @@ export const CHANGE_STATE: Readonly<Record<ChangeState, StatusEntry>> = {
   deployed: {
     token: 'status-ok',
     label: 'Deployed',
-    srLabel: 'Change state: deployed. In the running catalogue artefact; see the probe status for whether it is callable.',
+    srLabel:
+      'Change state: deployed. In the running catalogue artefact; see the probe status for whether it is callable.',
     icon: 'Rocket',
   },
   withdrawn: {
@@ -229,11 +232,20 @@ export const BINDING_TYPE: Readonly<Record<BindingType, StatusEntry>> = {
 
 // ---------------------------------------------------------------------------
 // CALL_PHASE — 02 §4.6's audit `phase` column: plan | execute | reject | reverse,
-// plus `approve` (W0-P25, owner decision 30 Sep 2026) and `identity` (W0-P28,
-// owner decision 30 Sep 2026).
+// plus `approve` (W0-P25, owner decision 30 Sep 2026), `identity` (W0-P28,
+// owner decision 30 Sep 2026) and `catalogue` (W0-P33c, decision C of the
+// approved W0-P33 design note, 30 Sep 2026: the audited catalogue reload).
 // ---------------------------------------------------------------------------
 
-export const CALL_PHASES = ['plan', 'execute', 'reject', 'reverse', 'approve', 'identity'] as const;
+export const CALL_PHASES = [
+  'plan',
+  'execute',
+  'reject',
+  'reverse',
+  'approve',
+  'identity',
+  'catalogue',
+] as const;
 export type CallPhase = (typeof CALL_PHASES)[number];
 
 export const CALL_PHASE: Readonly<Record<CallPhase, StatusEntry>> = {
@@ -274,6 +286,13 @@ export const CALL_PHASE: Readonly<Record<CallPhase, StatusEntry>> = {
     srLabel:
       'Call phase: identity. An identity admin changed a local user account, or was refused; nothing reached a target system.',
     icon: 'UserCog',
+  },
+  catalogue: {
+    token: 'status-platform',
+    label: 'Catalogue',
+    srLabel:
+      'Call phase: catalogue. A super admin reloaded the gateway catalogue from the definitions clone, or was refused; nothing reached a target system.',
+    icon: 'RefreshCw',
   },
 } as const;
 
@@ -318,7 +337,8 @@ export const CALL_OUTCOME: Readonly<Record<CallOutcome, StatusEntry>> = {
   timeout: {
     token: 'status-danger',
     label: 'Timeout',
-    srLabel: 'Call outcome: timeout. The target exceeded its declared timeout; the outcome is unknown.',
+    srLabel:
+      'Call outcome: timeout. The target exceeded its declared timeout; the outcome is unknown.',
     icon: 'Clock',
   },
 } as const;
@@ -343,13 +363,15 @@ export const ERROR_CODE: Readonly<Record<ErrorCode, StatusEntry>> = {
   IDENTITY_UNRESOLVED: {
     token: 'status-danger',
     label: 'Identity unresolved',
-    srLabel: 'Error: identity unresolved. No target-identity mapping exists for this subject. There is no fallback.',
+    srLabel:
+      'Error: identity unresolved. No target-identity mapping exists for this subject. There is no fallback.',
     icon: 'UserX',
   },
   TOOL_NOT_IN_SCOPE: {
     token: 'status-danger',
     label: 'Not in scope',
-    srLabel: 'Error: tool not in scope. The tool is not in the resolved scope of any role you hold.',
+    srLabel:
+      'Error: tool not in scope. The tool is not in the resolved scope of any role you hold.',
     icon: 'Ban',
   },
   TOOL_DISABLED: {
@@ -367,7 +389,8 @@ export const ERROR_CODE: Readonly<Record<ErrorCode, StatusEntry>> = {
   APPROVAL_REQUIRED: {
     token: 'status-write',
     label: 'Approval required',
-    srLabel: 'Error: approval required. The write requires an out-of-band human approval before a confirm token is minted.',
+    srLabel:
+      'Error: approval required. The write requires an out-of-band human approval before a confirm token is minted.',
     icon: 'UserCheck',
   },
   PLAN_REQUIRED: {
@@ -385,13 +408,15 @@ export const ERROR_CODE: Readonly<Record<ErrorCode, StatusEntry>> = {
   PLAN_ARGUMENT_MISMATCH: {
     token: 'status-danger',
     label: 'Plan argument mismatch',
-    srLabel: 'Error: plan argument mismatch. The arguments do not match the canonical argument hash the confirm token was bound to.',
+    srLabel:
+      'Error: plan argument mismatch. The arguments do not match the canonical argument hash the confirm token was bound to.',
     icon: 'FileWarning',
   },
   TARGET_PRECONDITION_FAILED: {
     token: 'status-write',
     label: 'Precondition failed',
-    srLabel: 'Error: target precondition failed. The target system refused because a business precondition does not hold.',
+    srLabel:
+      'Error: target precondition failed. The target system refused because a business precondition does not hold.',
     icon: 'ListChecks',
   },
   TARGET_ERROR: {
@@ -403,7 +428,8 @@ export const ERROR_CODE: Readonly<Record<ErrorCode, StatusEntry>> = {
   TARGET_TIMEOUT: {
     token: 'status-danger',
     label: 'Target timeout',
-    srLabel: 'Error: target timeout. The target exceeded its declared timeout; the outcome is unknown.',
+    srLabel:
+      'Error: target timeout. The target exceeded its declared timeout; the outcome is unknown.',
     icon: 'Clock',
   },
   TARGET_UNAVAILABLE: {
@@ -415,13 +441,15 @@ export const ERROR_CODE: Readonly<Record<ErrorCode, StatusEntry>> = {
   ROW_CAP_EXCEEDED: {
     token: 'status-write',
     label: 'Row cap exceeded',
-    srLabel: 'Error: row cap exceeded. The result set exceeded the mandatory row cap for this binding.',
+    srLabel:
+      'Error: row cap exceeded. The result set exceeded the mandatory row cap for this binding.',
     icon: 'Rows3',
   },
   RATE_LIMITED: {
     token: 'status-write',
     label: 'Rate limited',
-    srLabel: 'Error: rate limited. The consumer or session exceeded its declared calls or writes limit for the window.',
+    srLabel:
+      'Error: rate limited. The consumer or session exceeded its declared calls or writes limit for the window.',
     icon: 'Gauge',
   },
   INTERNAL: {
@@ -433,25 +461,29 @@ export const ERROR_CODE: Readonly<Record<ErrorCode, StatusEntry>> = {
   CONSUMER_UNREGISTERED: {
     token: 'status-danger',
     label: 'Consumer unregistered',
-    srLabel: 'Error: consumer unregistered. The presenting consumer has no registration record, or none matching its credential.',
+    srLabel:
+      'Error: consumer unregistered. The presenting consumer has no registration record, or none matching its credential.',
     icon: 'UserRoundX',
   },
   CONSUMER_SUSPENDED: {
     token: 'status-danger',
     label: 'Consumer suspended',
-    srLabel: 'Error: consumer suspended. The consumer is registered but currently suspended, expired or retired.',
+    srLabel:
+      'Error: consumer suspended. The consumer is registered but currently suspended, expired or retired.',
     icon: 'UserRoundMinus',
   },
   CONSUMER_NOT_AUTHORIZED: {
     token: 'status-danger',
     label: 'Consumer not authorized',
-    srLabel: "Error: consumer not authorized. The consumer's own declared authorizations do not permit this call.",
+    srLabel:
+      "Error: consumer not authorized. The consumer's own declared authorizations do not permit this call.",
     icon: 'ShieldOff',
   },
   ELEVATED_GRANT_REQUIRED: {
     token: 'status-write',
     label: 'Elevated grant required',
-    srLabel: "Error: elevated grant required. The tool is elevated posture and the caller's role or consumer holds no binding grant for it.",
+    srLabel:
+      "Error: elevated grant required. The tool is elevated posture and the caller's role or consumer holds no binding grant for it.",
     icon: 'KeyRound',
   },
 } as const;
@@ -464,19 +496,22 @@ export const REVERSAL_CLASS: Readonly<Record<ReversalClass, StatusEntry>> = {
   'native-reverse': {
     token: 'status-ok',
     label: 'Native reverse',
-    srLabel: 'Reversal class: native reverse. The target system has a first-class reversal for this exact operation.',
+    srLabel:
+      'Reversal class: native reverse. The target system has a first-class reversal for this exact operation.',
     icon: 'RotateCcw',
   },
   'compensating-tool': {
     token: 'status-platform',
     label: 'Compensating tool',
-    srLabel: 'Reversal class: compensating tool. Reversal is a different tool in the catalogue, with a stated window and preconditions.',
+    srLabel:
+      'Reversal class: compensating tool. Reversal is a different tool in the catalogue, with a stated window and preconditions.',
     icon: 'Wrench',
   },
   transactional: {
     token: 'status-read',
     label: 'Transactional',
-    srLabel: 'Reversal class: transactional. The whole unit of work is one transaction the wrapper controls and can roll back before commit.',
+    srLabel:
+      'Reversal class: transactional. The whole unit of work is one transaction the wrapper controls and can roll back before commit.',
     icon: 'Undo2',
   },
   irreversible: {

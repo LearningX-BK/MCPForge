@@ -35,6 +35,7 @@
 // executor (W0-P16/P17/P11 own those, and the execution-grant tripwire in
 // tests/policy/escalation.trust-boundary.test.ts still lists no constructor).
 
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -108,6 +109,12 @@ export interface ResolvedTool {
   readonly toolId: string;
   /** Repo-relative path of the source manifest. */
   readonly manifestFile: string;
+  /**
+   * W0-P33c — codegen's `manifest-sha256` of the manifest's bytes. A reload
+   * compares it across catalogues: a tool whose bytes changed must also have
+   * changed its version, because the version is what a confirm token binds.
+   */
+  readonly manifestSha256: string;
   /** Codegen's own view of the manifest. */
   readonly view: ToolView;
   readonly entry: PolicyCatalogueEntry;
@@ -324,7 +331,12 @@ async function resolveTool(
   // --- the registration agrees with the manifest, field by field.
   let registration: GeneratedRegistration;
   try {
-    const mod = (await import(pathToFileURL(toolTsPath).href)) as {
+    // W0-P33c: the module URL carries the file's own content hash. An ES
+    // module is cached by URL for the life of the process, so without it a
+    // catalogue RELOADED after `forge codegen` rewrote tool.ts would be checked
+    // against the registration imported at startup, not the committed file.
+    const contentKey = createHash('sha256').update(toolTsText).digest('hex').slice(0, 16);
+    const mod = (await import(`${pathToFileURL(toolTsPath).href}?content=${contentKey}`)) as {
       toolRegistration?: GeneratedRegistration;
     };
     if (mod.toolRegistration === undefined) throw new Error('no toolRegistration export');
@@ -361,6 +373,7 @@ async function resolveTool(
     return Object.freeze({
       toolId: id,
       manifestFile,
+      manifestSha256: sha,
       view,
       entry,
       writeSafety,
