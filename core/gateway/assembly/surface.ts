@@ -39,8 +39,10 @@
 //                    executes anything itself.
 //
 // `notifications/tools/list_changed` fires on activation (through W0-G4's
-// notifier seam, to this session's server) and on kill-switch changes
-// (`watchFlags`, one watcher broadcasting to every live session), 02 §5.8.
+// notifier seam, to this session's server), on kill-switch changes
+// (`watchFlags`, one watcher broadcasting to every live session), 02 §5.8,
+// and after a catalogue reload installs new definitions (W0-P33c, `install`
+// then `notifyToolListChanged`).
 
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -130,9 +132,48 @@ export interface ServedSurfaceOptions {
   readonly now?: () => Date;
 }
 
+/**
+ * W0-P33c — everything the surface serves that is derived from ONE runtime
+ * catalogue: the catalogue, the stage 6c–6h seams built over it, the executor
+ * seams, and the discovery artefacts and definitions read against it. A
+ * reload replaces all of it together or none of it.
+ */
+export interface SurfaceDefinitionsInput {
+  readonly catalogue: RuntimeCatalogue;
+  readonly runtime: PolicyRuntime;
+  readonly execute: ProceedHandler;
+  readonly record: DecisionRecordHandler;
+}
+
+/** A fully built, checked set of surface definitions, ready to install. Opaque to callers. */
+export interface PreparedSurfaceDefinitions {
+  readonly catalogue: RuntimeCatalogue;
+  readonly runtime: PolicyRuntime;
+  readonly execute: ProceedHandler;
+  readonly record: DecisionRecordHandler;
+  readonly artefacts: SurfaceArtefacts;
+  readonly resident: ReadonlyMap<string, ServedToolDefinition>;
+  readonly details: ReadonlyMap<string, MetaToolDetail>;
+}
+
 export interface ServedSurface {
   /** The transport's `createServer`: one server per established session. */
   createServer(handle?: SessionHandle<unknown>): McpServer;
+  /**
+   * W0-P33c — build and cross-check the discovery artefacts against a new
+   * catalogue WITHOUT serving them. Throws `SurfaceArtefactsUnavailable` on
+   * any problem, and the served surface is untouched.
+   */
+  prepare(next: SurfaceDefinitionsInput): PreparedSurfaceDefinitions;
+  /**
+   * W0-P33c — swap the prepared definitions in for every live and future
+   * session, in one assignment. A call already in flight finishes on the
+   * definitions it started with: each request reads one snapshot, never a
+   * mix. The caller then sends `list_changed` (`notifyToolListChanged`).
+   */
+  install(prepared: PreparedSurfaceDefinitions): void;
+  /** The definitions currently served. */
+  readonly definitions: PreparedSurfaceDefinitions;
   /** Emit `list_changed` to every live session (probe change, bundle deploy, role-grant change). */
   notifyToolListChanged(): Promise<void>;
   /**
@@ -248,20 +289,37 @@ function isEstablishedSession(value: unknown): value is EstablishedSession {
 
 /** Build the served surface, or throw `SurfaceArtefactsUnavailable` at startup. */
 export function createServedSurface(options: ServedSurfaceOptions): ServedSurface {
-  const artefacts: SurfaceArtefacts = loadSurfaceArtefacts(options.repoRoot, options.catalogue);
   const now = options.now ?? (() => new Date());
   const live = new Set<McpServer>();
 
   // Resident definitions and full descriptions are codegen's own builders over
   // codegen's own view of each manifest: the shapes the token-budget gate
-  // measured (02 §5.3(b), (c)). Built once; the manifests do not change under
-  // a running gateway.
-  const resident = new Map<string, ServedToolDefinition>();
-  const details = new Map<string, MetaToolDetail>();
-  for (const [id, tool] of options.catalogue.tools) {
-    resident.set(id, buildResidentDefinition(tool.view) as unknown as ServedToolDefinition);
-    details.set(id, Object.freeze(buildDescribeResponse(tool.view)));
+  // measured (02 §5.3(b), (c)). Built once per catalogue: at startup, and
+  // again only when a reload installs a new one (W0-P33c).
+  function prepare(next: SurfaceDefinitionsInput): PreparedSurfaceDefinitions {
+    const artefacts = loadSurfaceArtefacts(options.repoRoot, next.catalogue);
+    const resident = new Map<string, ServedToolDefinition>();
+    const details = new Map<string, MetaToolDetail>();
+    for (const [id, tool] of next.catalogue.tools) {
+      resident.set(id, buildResidentDefinition(tool.view) as unknown as ServedToolDefinition);
+      details.set(id, Object.freeze(buildDescribeResponse(tool.view)));
+    }
+    return Object.freeze({
+      catalogue: next.catalogue,
+      runtime: next.runtime,
+      execute: next.execute,
+      record: next.record,
+      artefacts,
+      resident,
+      details,
+    });
   }
+
+  // The ONE mutable reference. Every request reads it once, at its start, and
+  // works from that snapshot to the end; `install` replaces it in a single
+  // assignment. There is no field-by-field update a request could observe
+  // half done.
+  let served: PreparedSurfaceDefinitions = prepare(options);
 
   const broadcaster: ToolListChangedNotifier = {
     async sendToolListChanged() {
@@ -293,42 +351,45 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
       return current;
     }
 
-    function policyContext(s: EstablishedSession): PolicyContext {
+    // Every function below takes the request's snapshot `d` explicitly, so a
+    // reload that lands mid-request cannot change what that request reads.
+    function policyContext(d: PreparedSurfaceDefinitions, s: EstablishedSession): PolicyContext {
       const base = s.scopeAt(now());
       const scope: ScopeContext = { ...base, session: { ...base.session, activation } };
       return {
         scope,
-        catalogue: options.catalogue.entries,
-        roles: artefacts.roles,
-        consumerBindingGrants: artefacts.consumerBindingGrantsFor(
+        catalogue: d.catalogue.entries,
+        roles: d.artefacts.roles,
+        consumerBindingGrants: d.artefacts.consumerBindingGrantsFor(
           s.scopeSession.consumer.consumerId,
         ),
-        runtime: options.runtime,
+        runtime: d.runtime,
       };
     }
 
-    function metaContext(policy: PolicyContext): MetaContext {
+    function metaContext(d: PreparedSurfaceDefinitions, policy: PolicyContext): MetaContext {
       return {
-        index: artefacts.index,
+        index: d.artefacts.index,
         policy,
-        cards: { cardFor: artefacts.cardFor },
-        details: { detailFor: (id) => details.get(id) ?? null },
+        cards: { cardFor: d.artefacts.cardFor },
+        details: { detailFor: (id) => d.details.get(id) ?? null },
         probeMessages: options.probeMessages ?? { agentMessageFor: () => null },
         ...(options.approvers === undefined ? {} : { approvers: options.approvers }),
         notifier,
       };
     }
 
-    function residentIds(ctx: MetaContext): readonly string[] {
+    function residentIds(d: PreparedSurfaceDefinitions, ctx: MetaContext): readonly string[] {
       const listable = resolveDiscovery(ctx).listable;
       if (activation.mode === 'explicit') return listable;
-      const held = ctx.policy.scope.session.heldRoleIds.filter((r) => artefacts.coreTools.has(r));
+      const held = ctx.policy.scope.session.heldRoleIds.filter((r) => d.artefacts.coreTools.has(r));
       if (held.length !== 1) return [];
-      const core = new Set(artefacts.coreTools.get(held[0] as string));
+      const core = new Set(d.artefacts.coreTools.get(held[0] as string));
       return listable.filter((id) => core.has(id));
     }
 
     async function decide(
+      d: PreparedSurfaceDefinitions,
       s: EstablishedSession,
       policy: PolicyContext,
       call: EntryPointCall & { readonly entryPoint: PolicyEntryPoint },
@@ -337,13 +398,13 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
       try {
         switch (decision.outcome) {
           case 'refused':
-            await options.record({ call, ctx: policy, decision });
+            await d.record({ call, ctx: policy, decision });
             return toolError(decision.error);
           case 'responded':
-            await options.record({ call, ctx: policy, decision });
+            await d.record({ call, ctx: policy, decision });
             return toolResult(decision.response);
           case 'proceed':
-            return await options.execute({ call, decision, policy, session: s });
+            return await d.execute({ call, decision, policy, session: s });
         }
       } finally {
         releaseConcurrency(call, policy, decision);
@@ -355,9 +416,10 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
       args: Readonly<Record<string, unknown>>,
     ): Promise<CallToolResult> {
       const correlationId = randomUUID();
+      const d = served;
       const s = session();
-      const policy = policyContext(s);
-      const ctx = metaContext(policy);
+      const policy = policyContext(d, s);
+      const ctx = metaContext(d, policy);
 
       switch (name) {
         case FORGE_FIND: {
@@ -393,6 +455,7 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
               ? invoke.arguments
               : { ...invoke.arguments, confirm: invoke.confirm };
           return decide(
+            d,
             s,
             policy,
             { toolId: invoke.toolId, args: callArgs, correlationId, entryPoint: 'forge.invoke' },
@@ -402,17 +465,18 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
         default: {
           const call = { toolId: name, args, correlationId };
           const decision = await callThroughToolsCall(call, policy);
-          return decide(s, policy, { ...call, entryPoint: 'tools/call' }, decision);
+          return decide(d, s, policy, { ...call, entryPoint: 'tools/call' }, decision);
         }
       }
     }
 
     const server: McpServer = createGatewayMcpServer(options.serverInfo, {
       listTools() {
-        const ctx = metaContext(policyContext(session()));
+        const d = served;
+        const ctx = metaContext(d, policyContext(d, session()));
         const tools: ServedToolDefinition[] = [...META_TOOL_DEFINITIONS];
-        for (const id of residentIds(ctx)) {
-          const definition = resident.get(id);
+        for (const id of residentIds(d, ctx)) {
+          const definition = d.resident.get(id);
           if (definition !== undefined) tools.push(definition);
         }
         return tools;
@@ -445,6 +509,13 @@ export function createServedSurface(options: ServedSurfaceOptions): ServedSurfac
 
   return {
     createServer,
+    prepare,
+    install(prepared) {
+      served = prepared;
+    },
+    get definitions() {
+      return served;
+    },
     notifyToolListChanged: () => Promise.resolve(broadcaster.sendToolListChanged()),
     watchFlags: (source) => {
       const handle = watchForKillSwitchChanges(source, broadcaster);

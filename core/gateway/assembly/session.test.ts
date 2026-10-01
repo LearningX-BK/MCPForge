@@ -11,6 +11,7 @@ import { loadDeploymentConfig, DeploymentConfigInvalid } from './deployment.js';
 import { createSessionAssembly, SessionAssemblyUnavailable } from './session.js';
 import {
   CLERK,
+  allResolved,
   NO_ROLE_USER,
   REPO_ROOT,
   consumerHeader,
@@ -315,5 +316,56 @@ describe('W0-P15 — startup reads committed artefacts and fails closed', () => 
     expect(() => createSessionAssembly({ repoRoot, deployment: 'local', identity, flags })).toThrow(
       /declares deployment "prod"/,
     );
+  });
+});
+
+describe('W0-P33c — a reloaded assembly re-reads the consumer on every re-verification', () => {
+  it('a consumer suspended or narrowed by the reloaded definitions is refused or narrowed on its next request', async () => {
+    const w = await world([{ consumerId: 'test-agent', writeAllowed: true }], ['test-agent']);
+    const r = await initialize(w, {
+      ...consumerHeader(await w.assertion('test-agent')),
+      authorization: `Bearer ${await w.tokenFor(CLERK.subject)}`,
+    });
+    expect(r.status).toBe(200);
+    const live = sessionOf(w);
+    expect(live.scopeSession.consumer.authorizations.writeAllowed).toBe(true);
+    const request = new Request(w.url, {
+      headers: { authorization: `Bearer ${await w.tokenFor(CLERK.subject)}` },
+    });
+
+    // The merged change narrows the consumer to read-only: the reloaded
+    // assembly re-verifies the SAME live session with the narrowed view.
+    const narrowedRepo = sessionRepo([{ consumerId: 'test-agent', writeAllowed: false }]);
+    repos.push(narrowedRepo);
+    const narrowed = createSessionAssembly({
+      repoRoot: narrowedRepo,
+      deployment: 'local',
+      identity: w.identity,
+      flags: w.flags,
+      probe: allResolved(w.catalogue),
+    });
+    const again = await narrowed.reverify(live, request, 'corr-p33c-1');
+    expect(again.ok).toBe(true);
+    if (again.ok)
+      expect(again.session.scopeSession.consumer.authorizations.writeAllowed).toBe(false);
+
+    // ...and one that suspends it refuses the live session outright.
+    const suspendedRepo = sessionRepo([
+      { consumerId: 'test-agent', writeAllowed: true, effectiveStatus: 'suspended' },
+    ]);
+    repos.push(suspendedRepo);
+    const suspended = createSessionAssembly({
+      repoRoot: suspendedRepo,
+      deployment: 'local',
+      identity: w.identity,
+      flags: w.flags,
+      probe: allResolved(w.catalogue),
+    });
+    const refused = await suspended.reverify(live, request, 'corr-p33c-2');
+    expect(refused.ok).toBe(false);
+    if (!refused.ok) {
+      expect(refused.error.code).toBe('CONSUMER_SUSPENDED');
+      expect(refused.error.next.length).toBeGreaterThan(0);
+    }
   });
 });

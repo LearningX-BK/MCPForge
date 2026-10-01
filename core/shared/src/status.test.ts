@@ -42,9 +42,10 @@ function assertWellFormed(map: Readonly<Record<string, StatusEntry>>) {
     expect(entry.label.trim().length, `${key}.label must be non-empty`).toBeGreaterThan(0);
     expect(entry.srLabel.trim().length, `${key}.srLabel must be non-empty`).toBeGreaterThan(0);
     expect(entry.icon.trim().length, `${key}.icon must be non-empty`).toBeGreaterThan(0);
-    expect(VALID_TOKENS.has(entry.token), `${key}.token "${entry.token}" is not one of the six semantic status tokens`).toBe(
-      true,
-    );
+    expect(
+      VALID_TOKENS.has(entry.token),
+      `${key}.token "${entry.token}" is not one of the six semantic status tokens`,
+    ).toBe(true);
   }
 }
 
@@ -67,8 +68,8 @@ describe('status.ts — one vocabulary, two products (03 §13.5)', () => {
     assertWellFormed(BINDING_TYPE);
   });
 
-  it('CALL_PHASE covers all 6 audit phases (02 §4.6 + W0-P25 + W0-P28): plan | execute | reject | reverse | approve | identity', () => {
-    expect(CALL_PHASES).toHaveLength(6);
+  it('CALL_PHASE covers all 7 audit phases (02 §4.6 + W0-P25 + W0-P28 + W0-P33c): plan | execute | reject | reverse | approve | identity | catalogue', () => {
+    expect(CALL_PHASES).toHaveLength(7);
     expect(Object.keys(CALL_PHASE).sort()).toEqual([...CALL_PHASES].sort());
     assertWellFormed(CALL_PHASE);
   });

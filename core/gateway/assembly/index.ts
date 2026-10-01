@@ -25,11 +25,24 @@ export {
 // W0-P16 — the served surface: meta-tools, scoped tools/list, tools/call -> the chain.
 export {
   createServedSurface,
+  type PreparedSurfaceDefinitions,
   type ProceedHandler,
   type ProceedInput,
   type ServedSurface,
   type ServedSurfaceOptions,
+  type SurfaceDefinitionsInput,
 } from './surface.js';
+// W0-P33c — catalogue reload: all or nothing, plans bound to the version.
+export {
+  createCatalogueReloader,
+  unversionedChanges,
+  type CatalogueReloader,
+  type CatalogueReloaderOptions,
+  type DefinitionsGenerationBase,
+  type ReloadOutcome,
+  type ReloadRefusal,
+  type ReloadSuccess,
+} from './reload.js';
 export {
   loadSurfaceArtefacts,
   SurfaceArtefactsUnavailable,

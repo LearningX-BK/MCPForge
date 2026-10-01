@@ -75,6 +75,7 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 
 /** `approve` (W0-P25): a human deciding a runtime approval request, or a refused attempt to. */
 /** `identity` (W0-P28): an identity admin changing a local user, or a refused attempt to. */
+/** `catalogue` (W0-P33c): a super admin reloading the gateway catalogue, or a refused attempt to. */
 export const AUDIT_PHASES = [
   'plan',
   'execute',
@@ -82,6 +83,7 @@ export const AUDIT_PHASES = [
   'reverse',
   'approve',
   'identity',
+  'catalogue',
 ] as const;
 export const AUDIT_OUTCOMES = [
   'ok',
@@ -553,3 +555,56 @@ export const adminUserChangeResponseSchema = z.object({
   next: z.string().min(1),
 });
 export type AdminUserChangeResponse = z.infer<typeof adminUserChangeResponseSchema>;
+
+// --- catalogue reload (W0-P33c) ------------------------------------------------
+//
+// Decision C of the approved W0-P33 design note (owner, 30 Sep 2026): "Reload
+// endpoint (Recommended)". A super admin, through a consumer that allows
+// writes and has a human in its loop, asks the gateway to re-load its runtime
+// catalogue from the definitions clone. The new catalogue is swapped in only
+// if it loads cleanly; otherwise the old one keeps serving and the refusal
+// says why. Every attempt is a hash-chained `catalogue` audit row.
+
+export const CATALOGUE_RELOAD_PATH = `${API_V1_PREFIX}/admin/catalogue/reload`;
+
+/** One reason a reload was refused, shaped like a `forge validate` failure. */
+export const catalogueLoadFailureSchema = z.object({
+  ruleId: z.string().min(1),
+  file: z.string(),
+  message: z.string().min(1),
+  fix: z.string().min(1),
+});
+export type CatalogueLoadFailureView = z.infer<typeof catalogueLoadFailureSchema>;
+
+/** `POST /api/v1/admin/catalogue/reload`, when the new catalogue is serving. */
+export const catalogueReloadResponseSchema = z.object({
+  asOf: z.string(),
+  /** 1 at gateway start; +1 per successful reload. */
+  generation: z.number().int().min(1),
+  previousGeneration: z.number().int().min(1),
+  /** sha256 over the served catalogue's tool ids and manifest bytes (as /deployment). */
+  catalogueDigest: z.string(),
+  toolCount: z.number().int().min(0),
+  added: z.array(z.string()),
+  removed: z.array(z.string()),
+  changed: z.array(z.string()),
+  /** The hash-chained `catalogue` audit row this reload wrote. */
+  auditCallId: z.string(),
+  next: z.string().min(1),
+});
+export type CatalogueReloadResponse = z.infer<typeof catalogueReloadResponseSchema>;
+
+/**
+ * The refusal when the definitions did not load: an ordinary `ApiError`
+ * (code `CATALOGUE_LOAD_REFUSED`, HTTP 409) plus every failure, so the portal
+ * can show why without a second request.
+ */
+export const catalogueReloadRefusalSchema = apiErrorSchema.extend({
+  reload: z.object({
+    /** The generation still serving: nothing changed. */
+    generation: z.number().int().min(1),
+    failures: z.array(catalogueLoadFailureSchema).min(1),
+    auditCallId: z.string(),
+  }),
+});
+export type CatalogueReloadRefusal = z.infer<typeof catalogueReloadRefusalSchema>;

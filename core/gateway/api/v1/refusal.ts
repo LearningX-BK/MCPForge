@@ -1,7 +1,8 @@
 // MCPForge — the one refusal shape `/api/v1/**` answers with. W0-P3a, W0-P25.
 //
 // Shared by the read handlers (./read-api.ts), the decision write
-// (./approval-decision.ts) and user administration (./user-admin.ts, W0-P28),
+// (./approval-decision.ts), user administration (./user-admin.ts, W0-P28)
+// and the catalogue reload (./catalogue-reload.ts, W0-P33c),
 // so all three render through the same `ApiError` body
 // and the same status table. `next` is a constructor argument, never optional
 // (non-negotiable 5).
@@ -29,5 +30,7 @@ export const STATUS_BY_CODE: Readonly<Record<string, number>> = {
   METHOD_NOT_ALLOWED: 405,
   APPROVAL_REQUIRED: 409,
   PLAN_EXPIRED: 409,
+  // W0-P33c: the definitions did not load; the old catalogue keeps serving.
+  CATALOGUE_LOAD_REFUSED: 409,
   INPUT_INVALID: 400,
 };

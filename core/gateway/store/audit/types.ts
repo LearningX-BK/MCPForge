@@ -33,8 +33,12 @@ export interface AuditCredentialRef {
  * migration is needed; the value is covered by the row hash like any other.
  * `identity` (W0-P28, owner decision 30 Sep 2026): an identity admin changing a
  * local user, or a refused attempt to. The row never carries a password.
+ * `catalogue` (W0-P33c, design decision C, 30 Sep 2026): a super admin
+ * reloading the gateway catalogue from the definitions clone, or a refused
+ * attempt to. Free text in both dialects, so again no migration.
  */
-export type AuditPhase = 'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity';
+export type AuditPhase =
+  'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue';
 
 /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
 export type AuditOutcome = 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';

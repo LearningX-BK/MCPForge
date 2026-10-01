@@ -291,34 +291,9 @@ export function createSessionAssembly(options: SessionAssemblyOptions): SessionA
       // [2a] already passed. The consumer's COMPILED authorizations are what
       // scope intersects with; a registered record with no compiled artefact
       // authorizes nothing and holds no session.
-      const consumerId = auth.consumer.record.id;
-      const consumer = consumers.get(consumerId);
-      if (consumer === undefined) {
-        return {
-          ok: false,
-          error: forgeError(
-            'CONSUMER_UNREGISTERED',
-            `Consumer ${consumerId} is registered but has no compiled authorization, so it may hold no session.`,
-            correlationId,
-            {
-              next: `Ask the MCPForge operator to run forge codegen so generated/consumers/${consumerId}.authorization.json exists, then reconnect.`,
-            },
-          ),
-        };
-      }
-      if (consumer.effectiveStatus !== 'active') {
-        return {
-          ok: false,
-          error: forgeError(
-            'CONSUMER_SUSPENDED',
-            `Consumer ${consumerId}'s compiled registration is ${consumer.effectiveStatus}.`,
-            correlationId,
-            {
-              next: `This client's registration is ${consumer.effectiveStatus}. Contact the consumer's steward to renew or reinstate it; no session was established.`,
-            },
-          ),
-        };
-      }
+      const compiled = compiledConsumer(auth.consumer.record.id, correlationId);
+      if (!compiled.ok) return compiled;
+      const consumer = compiled.consumer;
 
       // [2] + [3] — the human. Refused here means no session, no tools/list.
       const human = await authenticateHuman(request, correlationId);
@@ -353,17 +328,60 @@ export function createSessionAssembly(options: SessionAssemblyOptions): SessionA
           ),
         };
       }
+      // W0-P33c: the consumer's compiled authorization is read again from THIS
+      // assembly, not carried from the one the session was established on. A
+      // catalogue reload builds a new assembly, so a consumer narrowed,
+      // suspended or removed by the merged change is narrowed, suspended or
+      // refused on its next request, exactly like a human's group removal.
+      const compiled = compiledConsumer(session.scopeSession.consumer.consumerId, correlationId);
+      if (!compiled.ok) return compiled;
       return {
         ok: true,
         session: buildSession(
           session.sessionId,
           human.principal,
           human.roles,
-          session.scopeSession.consumer,
+          compiled.consumer,
           session.scopeSession.consumerSession,
           session.scopeSession.activation,
         ),
       };
     },
   };
+
+  function compiledConsumer(
+    consumerId: string,
+    correlationId: string,
+  ):
+    | { readonly ok: true; readonly consumer: ConsumerAuthorizationView }
+    | { readonly ok: false; readonly error: ForgeError } {
+    const consumer = consumers.get(consumerId);
+    if (consumer === undefined) {
+      return {
+        ok: false,
+        error: forgeError(
+          'CONSUMER_UNREGISTERED',
+          `Consumer ${consumerId} is registered but has no compiled authorization, so it may hold no session.`,
+          correlationId,
+          {
+            next: `Ask the MCPForge operator to run forge codegen so generated/consumers/${consumerId}.authorization.json exists, then reconnect.`,
+          },
+        ),
+      };
+    }
+    if (consumer.effectiveStatus !== 'active') {
+      return {
+        ok: false,
+        error: forgeError(
+          'CONSUMER_SUSPENDED',
+          `Consumer ${consumerId}'s compiled registration is ${consumer.effectiveStatus}.`,
+          correlationId,
+          {
+            next: `This client's registration is ${consumer.effectiveStatus}. Contact the consumer's steward to renew or reinstate it; no session was established.`,
+          },
+        ),
+      };
+    }
+    return { ok: true, consumer };
+  }
 }
