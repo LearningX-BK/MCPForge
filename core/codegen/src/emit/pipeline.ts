@@ -132,9 +132,10 @@ export async function runCodegen(repoRoot: string): Promise<CodegenReport> {
     writeGeneratedFile(join(toolDir, 'tool.ts'), toolTs);
     filesWritten.push(toPosix(relative(repoRoot, join(toolDir, 'tool.ts'))));
 
-    // 3. handler.generated.ts — validation, two-phase dispatch, guardrails,
-    // result-key extraction, audit call sites, error mapping (regenerated
-    // wholesale every run — 02 §2.4).
+    // 3. handler.generated.ts — the Args/Ctx/Result types binding.custom.ts
+    // imports, plus pure manifest-derived helpers (validation, argument-only
+    // guardrails, result-key extraction). NOT a call path: no confirm, no
+    // idempotency, no audit (W0-P18). Regenerated wholesale every run (02 §2.4).
     const handlerTs = await buildHandlerTs(tool, provenance, repoRoot);
     writeGeneratedFile(join(toolDir, 'handler.generated.ts'), handlerTs);
     filesWritten.push(toPosix(relative(repoRoot, join(toolDir, 'handler.generated.ts'))));
@@ -144,12 +145,11 @@ export async function runCodegen(repoRoot: string): Promise<CodegenReport> {
     writeGeneratedFile(join(toolDir, 'unit.test.ts'), unitTestTs);
     filesWritten.push(toPosix(relative(repoRoot, join(toolDir, 'unit.test.ts'))));
 
-    // 4b. contract.test.ts — full two-phase contract round trips (W0-B7): happy
-    // path, every declared error, and, for write tools, dry-run shape,
-    // confirm-token binding, argument-mismatch refusal, idempotent replay and
-    // the reversal round trip. See `templates/tests/contract-test.ts` for the
-    // documented scope boundary against unit.test.ts and the read/write emit
-    // judgment call.
+    // 4b. contract.test.ts — what this tool's committed artefacts own (W0-B7,
+    // narrowed by W0-P18): no call path in the handler, schema acceptance, the
+    // two-phase confirm input, the custom body's exports and the reversal
+    // argMap. The two-phase round trips are proven on the SERVED path by
+    // core/gateway's own suites. See `templates/tests/contract-test.ts`.
     const contractTestTs = await buildContractTestTs(tool, provenance, repoRoot);
     writeGeneratedFile(join(toolDir, 'contract.test.ts'), contractTestTs);
     filesWritten.push(toPosix(relative(repoRoot, join(toolDir, 'contract.test.ts'))));

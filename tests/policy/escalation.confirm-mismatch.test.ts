@@ -15,10 +15,10 @@
 // the fourth — an end-to-end mint-then-confirm round trip — is W0-F2's to add
 // here:
 //
-//   1. the REAL generated handler (produced by running the REAL codegen over
-//      the REAL `jde.ap.voucher.create` fixture manifest) binds the confirm
-//      token to a canonical hash that EXCLUDES `confirm`, and refuses with
-//      PLAN_ARGUMENT_MISMATCH when verification fails — the W0-B7 fix;
+//   1. the SERVED confirm hash (`core/gateway/policy/confirm/hash.ts`) binds
+//      the token to a canonical hash that EXCLUDES `confirm` and names the
+//      altered field; and (W0-P18) the generated handler, which used to carry
+//      its own unserved copy of this check, now carries none;
 //   2. the REAL policy chain fails closed on a `PLAN_ARGUMENT_MISMATCH` verdict
 //      at 6g and never reaches the idempotency lookup, so a mismatched confirm
 //      can never be replayed into an execution;
@@ -44,6 +44,10 @@ import {
   role,
   TOOLS,
 } from '../../core/gateway/policy/policy.fixtures.js';
+import {
+  argsCanonicalHash,
+  changedArgumentNames,
+} from '../../core/gateway/policy/confirm/hash.js';
 import type { WriteGateVerdict } from '../../core/gateway/policy/types.js';
 import { idempotencyKeyFor } from '../../core/gateway/store/runtime/idempotency.js';
 import { expectFailsClosed } from './harness.js';
@@ -58,7 +62,28 @@ afterEach(() => {
 });
 
 describe('W0-E8 case 4 — confirming a plan with altered arguments', () => {
-  it('the generated handler binds the confirm token to the business arguments, EXCLUDING confirm', async () => {
+  // W0-P18 (owner decision of 25 Sep 2026, "Path A only"). This case used to
+  // read the GENERATED handler's own canonicaliser and confirm-verify call
+  // sites. That handler was never served, and W0-P18 stripped its confirm and
+  // audit from codegen. The property is now asserted where it is enforced:
+  // the SERVED confirm hash (`core/gateway/policy/confirm/hash.ts`, the one 6g
+  // mints and verifies with). And the generated artefact is proven to carry
+  // no second copy of it, so there is exactly one implementation to attack.
+  it('the SERVED confirm hash binds the business arguments, EXCLUDING confirm, and names the altered field', () => {
+    const planned = { supplier_number: '4242', amount: 100, currency: 'GBP', company: '00100' };
+    const atPlan = argsCanonicalHash(planned);
+    // Plan time (no confirm) and execute time (confirm present) hash equal, so
+    // a legitimate confirmation can match at all…
+    expect(argsCanonicalHash({ ...planned, confirm: 'plan_token_for_amount_100' })).toBe(atPlan);
+    expect(argsCanonicalHash({ ...planned, confirm: null })).toBe(atPlan);
+    // …and the altered argument set does NOT, whatever token rides along.
+    const altered = { ...planned, amount: 100000, confirm: 'plan_token_for_amount_100' };
+    expect(argsCanonicalHash(altered)).not.toBe(atPlan);
+    // The refusal can name exactly what changed (non-negotiable #5: no dead end).
+    expect(changedArgumentNames(planned, altered)).toEqual(['amount']);
+  });
+
+  it('the generated handler carries NO second confirm path to bypass the served one (W0-P18)', async () => {
     const repoRoot = mkdtempSync(join(tmpdir(), 'mcpforge-w0e8-confirm-'));
     tmpDirs.push(repoRoot);
     cpSync(join(codegenFixtureRepo, 'manifests'), join(repoRoot, 'manifests'), { recursive: true });
@@ -71,28 +96,10 @@ describe('W0-E8 case 4 — confirming a plan with altered arguments', () => {
       join(repoRoot, 'generated', 'tools', 'jde.ap.voucher.create', 'handler.generated.ts'),
       'utf-8',
     );
-
-    // The W0-B7 fix, read out of the artefact rather than assumed: the
-    // canonicaliser strips `confirm` before hashing, so the plan-time hash and
-    // the execute-time hash are comparable at all…
-    expect(handler).toMatch(/const \{ confirm: _confirm, \.\.\.business \} = args/);
-    // …and a token that does not verify against THIS argument set is refused,
-    // rather than the arguments being trusted because a token was present.
-    // Whitespace-tolerant because the emitted file is prettier-formatted and
-    // this call wraps across lines; the ORDERED parts are what is being
-    // asserted — the presented token is verified AGAINST the hash of the
-    // presented arguments, not merely checked for presence.
-    expect(handler).toMatch(
-      /ctx\.confirmTokens\.verify\(\{\s*toolId,\s*token:\s*String\(args\.confirm\),\s*argsCanonicalHash,?\s*\}\)/,
-    );
-    expect(handler).toMatch(/if \(!verified\.ok\) \{[\s\S]*?PLAN_ARGUMENT_MISMATCH/);
-
-    // And the execution branch is downstream of that check — the binding is
-    // never reached when the hash does not match.
-    const verifyAt = handler.indexOf('confirmTokens.verify');
-    const executeAt = handler.indexOf('customBinding.execute');
-    expect(verifyAt).toBeGreaterThan(-1);
-    expect(executeAt).toBeGreaterThan(verifyAt);
+    expect(handler).not.toMatch(/export (async )?function handle\b/);
+    expect(handler).not.toContain('confirmTokens');
+    expect(handler).not.toContain('customBinding');
+    expect(handler).not.toContain('audit.record');
   });
 
   it('the policy chain FAILS CLOSED on a hash mismatch at 6g, and never reaches the idempotency lookup', async () => {

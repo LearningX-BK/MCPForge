@@ -1,7 +1,9 @@
 // MCPForge — W0-B7 tests. Every clause of the task's `done:` criterion,
 // proven against the `jde.ap.voucher.create` fixture (the `bindingCustom:
-// true` variant at `../../emit/fixtures-custom`, shared with W0-B5/B6,
-// since the handler must demonstrably dispatch into `binding.custom.ts`).
+// true` variant at `../../emit/fixtures-custom`, shared with W0-B5/B6).
+// W0-P18 narrowed the generated contract test to what the committed
+// artefacts own; the two-phase round trips are proven on the served path
+// by core/gateway's suites (see the generator's header).
 //
 // Two layers of proof, matching the rigor W0-B6's own `templates.test.ts`
 // used for the generated handler:
@@ -23,6 +25,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runCodegen } from '../../emit/pipeline.js';
 import { readGeneratedFile } from '../../emit/writer.js';
+import { HANDLER_RUNTIME_EXPORTS } from '../handler.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // core/codegen/src/emit/fixtures-custom — the bindingCustom: true fixture.
@@ -64,55 +67,51 @@ describe('W0-B7 DONE CRITERION: contract.test.ts is generated for a write tool',
   });
 });
 
-describe('W0-B7 DONE CRITERION: every one of the seven concerns is demonstrably present in the generated source', () => {
-  it('covers happy path, every declared error, dry-run shape, confirm-token binding, argument-mismatch refusal, idempotent replay and the reversal round trip', async () => {
+describe('W0-B7 (narrowed by W0-P18): the generated contract test proves what the committed artefacts own', () => {
+  it('pins the handler export list, the schema, the two-phase input, the custom body and the reversal argMap', async () => {
     const repoRoot = freshInRepoRoot(fixturesRepoRoot);
     await runCodegen(repoRoot);
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/contract.test.ts`.split('/')));
 
-    // 1. Happy path.
-    expect(source).toContain('happy path: plan then execute with a valid confirmToken succeeds');
-    expect(source).toContain("status: 'confirm_required'");
+    // 1. The handler artefact is not a call path: its exact runtime export list.
+    expect(source).toContain('the handler artefact is not a call path');
+    expect(source).toContain('Object.keys(handlerModule).sort()');
+    for (const name of HANDLER_RUNTIME_EXPORTS) expect(source).toContain(`'${name}'`);
 
-    // 2. Every declared error path — INPUT_INVALID, POLICY_GUARDRAIL_BREACH
-    // (this fixture declares a maxNumeric guardrail on `amount`),
-    // PLAN_ARGUMENT_MISMATCH, and TARGET_ERROR (via the mocked binding) —
-    // each asserted with a non-empty `next`.
-    expect(source).toContain('declared error: INPUT_INVALID on schema violation');
-    expect(source).toContain("code: 'INPUT_INVALID'");
-    expect(source).toContain('declared error: POLICY_GUARDRAIL_BREACH');
-    expect(source).toContain("code: 'POLICY_GUARDRAIL_BREACH'");
-    expect(source).toContain('declared error: PLAN_ARGUMENT_MISMATCH');
-    expect(source).toContain('declared error: an unmapped target failure maps to TARGET_ERROR');
-    expect(source).toContain("code: 'TARGET_ERROR'");
-    // Every one of those assertions carries a non-empty next.
-    expect((source.match(/next: expect\.stringMatching\(\/\\S\//g) ?? []).length).toBeGreaterThanOrEqual(4);
+    // 2. Schema acceptance and INPUT_INVALID with a non-empty next.
+    expect(source).toContain('a valid argument set passes the published schema');
+    expect(source).toContain('declared error: INPUT_INVALID when "supplier_number" is missing');
+    expect(source).toContain('ERROR_TAXONOMY.INPUT_INVALID.next.trim().length');
 
-    // 3. Dry-run shape.
-    expect(source).toContain('dry-run shape: the plan-phase response carries status/plan/confirmToken/expiresAt/next');
-    expect(source).toContain('confirmToken: expect.any(String)');
-    expect(source).toContain('expiresAt: expect.any(String)');
+    // 3. The two-phase confirm input on a write tool (02 §3.1.1).
+    expect(source).toContain('two-phase input: the schema carries confirm as optional string|null');
 
-    // 4. Confirm-token binding.
-    expect(source).toContain('confirm-token binding: a token minted for one argument set is refused against a different one');
+    // 4. The hand-owned body's exports.
+    expect(source).toContain('the hand-owned binding body exports execute and dryRun');
 
-    // 5. Argument-mismatch refusal (explicit and separately assertable, per the done criterion's own wording).
-    expect(source).toContain('argument-mismatch refusal: execute is refused, not silently re-planned');
-
-    // 6. Idempotent replay.
-    expect(source).toContain('idempotent replay: executing twice with the same confirmToken returns the original result with replayed: true');
-    expect(source).toContain('replayed).toBe(true)');
-
-    // 7. Reversal round trip (this fixture's writeSafety.reversal.class is compensating-tool, tool jde.ap.voucher.cancel).
+    // 5. Reversal round trip (compensating-tool, jde.ap.voucher.cancel).
     expect(source).toContain('reversal round trip');
     expect(source).toContain('jde.ap.voucher.cancel');
     expect(source).toContain('ARG_MAP');
     expect(source).toContain('document_number');
   });
+
+  it('W0-P18: never re-implements the served two-phase path — no handle(), no mock confirm signer, idempotency map or audit list', async () => {
+    const repoRoot = freshInRepoRoot(fixturesRepoRoot);
+    await runCodegen(repoRoot);
+    const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/contract.test.ts`.split('/')));
+    expect(source).not.toMatch(/\bhandle\(ctx/);
+    expect(source).not.toMatch(/import \{ handle\b/);
+    expect(source).not.toContain('makeCtx');
+    expect(source).not.toContain('confirmTokens');
+    expect(source).not.toContain('recordBeforeInvoke');
+    expect(source).not.toContain('auditRecords');
+    expect(source).not.toContain("vi.mock('./binding.custom.js'");
+  });
 });
 
 describe('W0-B7 DONE CRITERION: generated unit.test.ts asserts every declared error path returns a non-empty next', () => {
-  it('carries an explicit assertion over every error code this handler is generated to throw', async () => {
+  it('carries an explicit assertion over every error code a call to this tool can be refused with', async () => {
     const repoRoot = freshInRepoRoot(fixturesRepoRoot);
     await runCodegen(repoRoot);
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/unit.test.ts`.split('/')));
@@ -127,22 +126,21 @@ describe('W0-B7 DONE CRITERION: generated unit.test.ts asserts every declared er
   });
 });
 
-describe('W0-B7 JUDGMENT CALL: a non-custom-binding tool still gets a contract.test.ts, scoped to what its stub body supports', () => {
-  it('omits the binding-dispatch-specific cases (happy path against a real target, TARGET_ERROR, reversal round trip) that a Wave-1-scope placeholder body cannot meaningfully drive', async () => {
+describe('W0-B7 JUDGMENT CALL: a non-custom-binding tool still gets a contract.test.ts', () => {
+  it('covers the same artefact-owned checks, without a hand-owned body to import', async () => {
     const repoRoot = freshInRepoRoot(nonCustomFixturesRepoRoot);
     const report = await runCodegen(repoRoot);
     expect(report.filesWritten).toEqual(
       expect.arrayContaining([`${TOOL_DIR}/contract.test.ts`.replace(/\\/g, '/')]),
     );
     const source = readGeneratedFile(join(repoRoot, ...`${TOOL_DIR}/contract.test.ts`.split('/')));
-    // Still covers the write-safety two-phase mechanics, which do not depend
-    // on a real target dispatch.
-    expect(source).toContain('dry-run shape');
-    expect(source).toContain('confirm-token binding');
-    expect(source).toContain('idempotent replay');
+    expect(source).toContain('the handler artefact is not a call path');
+    expect(source).toContain('two-phase input');
     expect(source).toContain('declared error: INPUT_INVALID');
-    // No mocked binding module exists for a non-custom tool.
-    expect(source).not.toContain("vi.mock('./binding.custom.js'");
+    expect(source).toContain('reversal round trip');
+    // No hand-owned binding module exists for a non-custom tool.
+    expect(source).not.toContain("from './binding.custom.js'");
+    expect(source).not.toContain('the hand-owned binding body');
   });
 });
 
