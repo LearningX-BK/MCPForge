@@ -1312,7 +1312,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
     - arjun (finance-ap-clerks): pill Business only; Kill disabled with the §3 refusal and no command; Approve records "Approved by Arjun Mehta (local:…)".
   - **Changed test, stated:** the Playwright keyboard approve spec runs with no gateway, so nobody is signed in; it now expects the signed-out refusal on `role="alert"`, and the signed-in outcome is covered by `approval-decision.test.tsx`. Playwright specs were **not run** this session. `/sign-in` was added to the axe route list. A few touched files carry prettier reflow beyond their edits (`app-shell.tsx`, `role-editor.tsx`); it is formatting only.
 
-- [ ] **W0-P6** — The module-server inventory surface
+- [x] **W0-P6** — The module-server inventory surface
   - model: sonnet
   - deps: none
   - wave: 0
@@ -1320,6 +1320,7 @@ Added 24 Sep 2026 after a full-source audit the user asked for ("any orphan API 
   - touches: core/portal/src/app/environments/**
   - context: The three module servers (`jde-fin-ap`, `jde-fin-gl`, `jde-scm-po`, all in `manifests/_servers/`) appear in the portal **only** as bare names inside package cards on `/environments/packages` and as targets in the kill-switch scope picker. A developer asking "what MCP servers exist and where does my new tool go?" has no screen that answers, and the user raised exactly that question on 24 Sep 2026. Smallest task in the track and probably part of the answer to the still-open "build is not very clear yet" complaint.
   - done: a server inventory reading `manifests/_servers/*.server.yaml` for real (not a fixture) and showing per server: id, mode (A in-process / B own process), version, owner, tool count with a link into a filtered Catalog, binding types in use, probe status and kill-switch state; reachable from `/environments`; every route's a11y gates (stages 14-17) still pass.
+  - result (1 Oct 2026): `/environments/servers` (a fourth Environments tab) lists each module server read for real from `manifests/_servers/*.server.yaml`: id, mode (A in-process / B own process), version, owner, tool count linking to `/catalog?server=<id>`, binding types in use (chips), probe status (per-status chip counts plus a not-probed count) and kill-switch state (server, deployment-wide and per-tool flags). Definitions and tool counts come from git (the W0-P3c/P3e pattern; no gateway import added, `portal-http-boundary` unchanged); probe status and kill flags come from the existing `/api/v1/enablement` and `/api/v1/deployment` reads, so no new endpoint. A failed runtime read shows `Unknown` plus the live-state notice, distinct from `not probed` and from `Not killed`; nothing on the page can say `verified`. `/environments/servers` added to the axe route list.
 
 - [x] **W0-P7** — The portal HTTP-boundary regression: 11 in-process gateway imports
   - model: opus

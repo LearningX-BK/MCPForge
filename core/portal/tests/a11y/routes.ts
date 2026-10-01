@@ -20,6 +20,7 @@ export const ROUTES: readonly string[] = [
   '/requests',
   '/environments',
   '/environments/enablement',
+  '/environments/servers',
   '/environments/packages',
   '/governance',
   '/governance/policy',
