@@ -13,7 +13,13 @@ export {
 } from './status.js';
 export type { ProbeStatus, CheckFailureStatus } from './status.js';
 
-export { ENVIRONMENT_CLASSES, isEnvironmentClass, isProductionTarget } from './target.js';
+export {
+  ENVIRONMENT_CLASSES,
+  isEnvironmentClass,
+  isProductionTarget,
+  PORTAL_PROBE_ENVIRONMENT_CLASSES,
+  mayProbeFromPortal,
+} from './target.js';
 export type { EnvironmentClass, ProbeTarget } from './target.js';
 
 export {
@@ -38,7 +44,12 @@ export type {
 
 export * from './identity/index.js';
 
-export { runProbe, MutatingCheckRefused, deriveCarriage, IDENTITY_CONSTRAINT_CHECK } from './run/runner.js';
+export {
+  runProbe,
+  MutatingCheckRefused,
+  deriveCarriage,
+  IDENTITY_CONSTRAINT_CHECK,
+} from './run/runner.js';
 export type { ProbeRunInput, ProbeToolInput } from './run/runner.js';
 
 export {
@@ -93,6 +104,13 @@ export type { CompiledBindingGrant, DatabaseGrantSource } from './reconcile/bind
 export { probeInputsFromCatalogue, UnknownBindingType } from './catalogue.js';
 // W0-P21 — the `function` executor wired per module server from the AIS overlay.
 export { wireFunctionProbe } from './run/function-wiring.js';
+// W0-P33d — one deployment probe, shared by `forge probe` and the portal's.
+export { probeDeployment } from './run/deployment.js';
+export type {
+  DeploymentProbeInput,
+  DeploymentProbeOutcome,
+  DeploymentProbeRefusalCode,
+} from './run/deployment.js';
 export type {
   FunctionProbeTool,
   FunctionProbeWiring,

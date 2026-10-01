@@ -41,3 +41,20 @@ export interface ProbeTarget {
 export function isProductionTarget(target: ProbeTarget): boolean {
   return target.environmentClass === 'prod';
 }
+
+/**
+ * W0-P33d — the environment classes in which a super admin may START a probe
+ * from the portal. Decision D of the approved W0-P33 design note (owner, 30 Sep
+ * 2026: "Local and dev only (Recommended)"); for every other class the probe
+ * "stays a CLI act, because the probe runs checks against a real instance".
+ *
+ * Only `local`: 02 §7.1's "dev" row IS this class ("dev (local, Windows +
+ * WSL2/Docker) — Mocks only"); the enum named it `local`. `probe` is "a real
+ * non-production Oracle instance", so it is a CLI act like staging and prod.
+ * An allow-list, so a class added later is refused until someone adds it here.
+ */
+export const PORTAL_PROBE_ENVIRONMENT_CLASSES: readonly EnvironmentClass[] = ['local'];
+
+export function mayProbeFromPortal(environmentClass: EnvironmentClass): boolean {
+  return PORTAL_PROBE_ENVIRONMENT_CLASSES.includes(environmentClass);
+}

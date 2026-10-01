@@ -52,6 +52,7 @@ import { killSwitchRefusalError } from '../flags/checks.js';
 import { createReadApi } from '../api/v1/read-api.js';
 import { changeNext } from '../api/v1/user-admin.js';
 import { reloadCatalogue } from '../api/v1/catalogue-reload.js';
+import { runPortalProbe } from '../api/v1/probe-run.js';
 import { createCatalogueReloader } from '../assembly/reload.js';
 import type { RuntimeCatalogue } from '../assembly/catalogue.js';
 import type { EstablishedSession } from '../assembly/session.js';
@@ -724,6 +725,55 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
         { session: enumReloadSession(), subject: 'u-0001', correlationId: 'req_enum_reload' },
       );
       return response.next;
+    },
+  },
+  {
+    match: (s) => basename(s.file) === 'probe-run.ts' && s.raw.startsWith('reload.served'),
+    description:
+      "api/v1/probe-run.ts (W0-P33d) picks one of two sentences after a completed portal probe: the new report is served by the reloaded catalogue, or the reload was refused and the previous statuses still serve (followed by the reload refusal's own next). Both branches are driven through the REAL endpoint function as a super admin through a writing, human-in-the-loop consumer in a local deployment; the shorter is returned.",
+    dynamicCheck: async () => {
+      const nexts: string[] = [];
+      for (const served of [true, false]) {
+        const response = await runPortalProbe(
+          {
+            store: {
+              transaction: <T>(fn: () => Promise<T>) => fn(),
+              audit: { append: () => Promise.resolve({ id: 'call-enum' }) },
+            } as never,
+            prober: {
+              environmentClass: 'local',
+              targetId: 'local',
+              run: () =>
+                Promise.resolve({
+                  ok: true,
+                  report: {
+                    target: { id: 'local', environmentClass: 'local', deploymentId: 'local' },
+                    finishedAt: '2026-10-01T00:00:00Z',
+                    summary: { toolCount: 1, byStatus: { resolved: 1 } },
+                  },
+                } as never),
+              write: () => undefined,
+            },
+            superAdminGroups: ['supers'],
+            reload: () =>
+              Promise.resolve(
+                served
+                  ? { served: true, generation: 2, auditCallId: 'call-reload' }
+                  : {
+                      served: false,
+                      generation: 1,
+                      auditCallId: 'call-reload',
+                      reloadNext: 'Nothing changed: catalogue generation 1 is still serving.',
+                    },
+              ),
+            gatewayVersion: 'test',
+            now: () => new Date('2026-10-01T00:00:00Z'),
+          },
+          { session: enumReloadSession(), subject: 'u-0001', correlationId: 'req_enum_probe' },
+        );
+        nexts.push(response.next);
+      }
+      return nexts.reduce((a, b) => (a.length <= b.length ? a : b));
     },
   },
 ];

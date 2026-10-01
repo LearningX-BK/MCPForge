@@ -237,7 +237,7 @@ const EXTRA_OPTIONS: Readonly<
     {
       flags: '--root <dir>',
       description:
-        'Repository root to read generated/index/catalogue-index.json from and write .mcpforge/probe-report.json into. Default: the working directory.',
+        'One root for both halves: read the definitions (generated/index, manifests, overlays) from it and write .mcpforge/probe-report.json into it. Default: definitions from MCPFORGE_DEFINITIONS_ROOT (else the working directory); the vault and the report under the working directory.',
     },
     {
       flags: '--deployment <id>',
