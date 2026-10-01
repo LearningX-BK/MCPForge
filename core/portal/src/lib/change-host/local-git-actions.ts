@@ -291,10 +291,10 @@ export async function changeHostDiff(id: string): Promise<ActionResult<ChangeDif
 }
 
 /**
- * W0-P33b — Approve a proposed definitional change. Who may: the existing
- * gate (an admin; an admin approving their own proposal is allowed and
- * recorded `selfApproved`, owner decisions W0-P4 §9-3 and W0-P32). The
- * approver is the session, never an argument.
+ * W0-P33b — Approve a proposed definitional change. Who may: an admin
+ * approves another's proposal; only a super admin (git `superAdmins:` group,
+ * decided as for Merge) approves their own, recorded `selfApproved` (W0-P34,
+ * owner decision 30 Sep 2026). The approver is the session, never an argument.
  */
 export async function changeHostApprove(id: string): Promise<ActionResult<ChangeProposal>> {
   return runAction(async () => {
@@ -302,7 +302,11 @@ export async function changeHostApprove(id: string): Promise<ActionResult<Change
     const host = await ensureHost();
     const proposal = await host.getProposal(id);
     if (proposal === undefined) return host.approve({ id, approver: '', selfApproved: false });
-    const gate = gateApproveDefinitional(viewer, proposal.author);
+    const gate = gateApproveDefinitional(
+      viewer,
+      proposal.author,
+      viewer !== null && holdsSuperAdmin(viewer.groups),
+    );
     if (!gate.allowed || viewer === null) {
       throw new ChangeHostError(
         viewer === null ? 'CHANGE_SIGN_IN_REQUIRED' : 'CHANGE_NOT_PERMITTED',

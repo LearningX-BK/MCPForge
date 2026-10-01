@@ -48,31 +48,51 @@ describe('Discard', () => {
 });
 
 describe('Approve a definitional change', () => {
-  it('an admin may approve another’s proposal', () => {
-    expect(gateApproveDefinitional(viewer('local:meera', ['admin']), 'local:priya')).toEqual({
-      allowed: true,
-      selfApproved: false,
-    });
+  const SELF_REFUSAL = {
+    allowed: false,
+    message: 'You proposed this change, so you cannot approve it.',
+    next: 'Ask another admin to review it, or a super admin (a member of a superAdmins group in the git mapping); the proposal stays open.',
+  };
+
+  it('an admin may approve another’s proposal (unchanged), super admin or not', () => {
+    for (const superAdmin of [false, true]) {
+      expect(
+        gateApproveDefinitional(viewer('local:meera', ['admin']), 'local:priya', superAdmin),
+      ).toEqual({ allowed: true, selfApproved: false });
+    }
   });
 
-  it('an admin may approve their own, and it is flagged selfApproved (owner, 26 Sep 2026)', () => {
-    expect(gateApproveDefinitional(viewer('local:meera', ['admin']), 'local:meera')).toEqual({
-      allowed: true,
-      selfApproved: true,
-    });
+  it('W0-P34: an admin who is NOT a super admin is refused approving their own, with a next', () => {
+    expect(
+      gateApproveDefinitional(viewer('local:meera', ['admin', 'developer', 'business']), 'local:meera', false),
+    ).toEqual(SELF_REFUSAL);
   });
 
-  it('a non-admin proposer is refused with the note’s copy', () => {
-    expect(gateApproveDefinitional(viewer('local:priya', ['developer']), 'local:priya')).toEqual({
-      allowed: false,
-      message: 'You proposed this change, so you cannot approve it.',
-      next: 'Ask another approver to review it; the proposal stays open.',
-    });
+  it('W0-P34: a super admin may approve their own, flagged selfApproved, whatever persona', () => {
+    for (const personas of [['admin'], []] as const) {
+      expect(gateApproveDefinitional(viewer('local:super', personas), 'local:super', true)).toEqual({
+        allowed: true,
+        selfApproved: true,
+      });
+    }
+  });
+
+  it('a non-admin proposer is refused with the same copy', () => {
+    expect(gateApproveDefinitional(viewer('local:priya', ['developer']), 'local:priya', false)).toEqual(
+      SELF_REFUSAL,
+    );
   });
 
   it('a non-admin who did not propose is refused too, naming who can', () => {
-    const result = gateApproveDefinitional(viewer('local:arjun', ['business']), 'local:priya');
+    const result = gateApproveDefinitional(viewer('local:arjun', ['business']), 'local:priya', false);
     expect(result).toMatchObject({ allowed: false, next: expect.stringMatching(/admin/) });
+  });
+
+  it('signed out is refused with a next', () => {
+    expect(gateApproveDefinitional(null, 'local:priya', true)).toMatchObject({
+      allowed: false,
+      next: expect.stringMatching(/Sign in/),
+    });
   });
 });
 
@@ -129,12 +149,14 @@ describe('the selected persona pill cannot widen a grant', () => {
         };
         const baseline = viewer('local:x', held);
         expect(gateKill(withLens)).toEqual(gateKill(baseline));
-        expect(gateApproveDefinitional(withLens, 'local:y')).toEqual(
-          gateApproveDefinitional(baseline, 'local:y'),
-        );
-        expect(gateApproveDefinitional(withLens, 'local:x')).toEqual(
-          gateApproveDefinitional(baseline, 'local:x'),
-        );
+        for (const superAdmin of [false, true]) {
+          expect(gateApproveDefinitional(withLens, 'local:y', superAdmin)).toEqual(
+            gateApproveDefinitional(baseline, 'local:y', superAdmin),
+          );
+          expect(gateApproveDefinitional(withLens, 'local:x', superAdmin)).toEqual(
+            gateApproveDefinitional(baseline, 'local:x', superAdmin),
+          );
+        }
         expect(gateDiscard(withLens, 'local:y')).toEqual(gateDiscard(baseline, 'local:y'));
         expect(gateSaveOrPropose(withLens)).toEqual(gateSaveOrPropose(baseline));
       });
@@ -151,6 +173,18 @@ describe('the selected persona pill cannot widen a grant', () => {
       sessionExpiresAt: '2099-01-01T00:00:00.000Z',
     };
     expect(gateKill(crafted).allowed).toBe(false);
-    expect(gateApproveDefinitional(crafted, 'local:y').allowed).toBe(false);
+    expect(gateApproveDefinitional(crafted, 'local:y', false).allowed).toBe(false);
+  });
+
+  it('W0-P34: the admin persona, held and on the pill, does not grant self-approval', () => {
+    const adminLens: Viewer = {
+      subject: 'local:x',
+      displayName: 'X',
+      groups: [],
+      personas: ['admin', 'developer', 'business'],
+      persona: 'admin',
+      sessionExpiresAt: '2099-01-01T00:00:00.000Z',
+    };
+    expect(gateApproveDefinitional(adminLens, 'local:x', false).allowed).toBe(false);
   });
 });

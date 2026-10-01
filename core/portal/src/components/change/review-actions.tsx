@@ -6,7 +6,8 @@
 // The two acts after Propose. Approve is offered while the change is
 // `in_review`, Merge once it is `approved`. Neither button decides anything:
 // the server actions behind `ChangeHost.approve` / `.merge` hold the gates (an
-// admin approves, a super admin merges) and run `forge codegen` and
+// admin approves another's change, only a super admin approves their own
+// (W0-P34), a super admin merges) and run `forge codegen` and
 // `forge validate` before any merge. Every refusal is shown verbatim with its
 // `next`. Merged is not deployed (03 §6.1), and the copy says so.
 import * as React from 'react';

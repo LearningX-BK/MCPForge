@@ -58,15 +58,25 @@ export type DefinitionalApproval =
 
 /**
  * Approve a definitional change (a role, consumer, binding grant, package or
- * manifest): an admin. The owner's decision (W0-P4 §9 decision 3): *"Admin can
- * do though as both."* An admin may approve their own proposal, and the record
- * then says so (`selfApproved: true`); anyone else who proposed a change may
- * not approve it. Runtime writes are not governed here: the gateway's approval
- * gate still refuses approver == requester for every runtime write.
+ * manifest).
+ *
+ * - Someone else's proposal: the `admin` persona (W0-P4 §3), unchanged.
+ * - Your own proposal: a SUPER ADMIN only, and the record then says so
+ *   (`selfApproved: true`). W0-P34, on the owner's decision of 30 Sep 2026
+ *   (W0-P22's `done:`): the super admin replaces the `admin` persona of W0-P4
+ *   §9 decision 3 here, because "a persona is a lens, never a grant".
+ *   `isSuperAdmin` is decided by the caller exactly as for `gateMerge`: the
+ *   viewer's gateway-verified groups against the git `superAdmins:` list
+ *   (`holdsSuperAdmin`), never from a persona. `forge validate`'s
+ *   `policy.approval-not-self-approved` is the backstop at Merge.
+ *
+ * Runtime writes are not governed here: the gateway's approval gate decides
+ * those (W0-P32).
  */
 export function gateApproveDefinitional(
   viewer: GateViewer | null,
   requestedBy: string,
+  isSuperAdmin: boolean,
 ): DefinitionalApproval {
   if (viewer === null) {
     return {
@@ -75,16 +85,16 @@ export function gateApproveDefinitional(
       next: 'Sign in, then review the proposal again; it stays open.',
     };
   }
-  const isAdmin = viewer.personas.includes('admin');
   const isProposer = viewer.subject === requestedBy;
-  if (isAdmin) return { allowed: true, selfApproved: isProposer };
   if (isProposer) {
+    if (isSuperAdmin) return { allowed: true, selfApproved: true };
     return {
       allowed: false,
       message: 'You proposed this change, so you cannot approve it.',
-      next: 'Ask another approver to review it; the proposal stays open.',
+      next: 'Ask another admin to review it, or a super admin (a member of a superAdmins group in the git mapping); the proposal stays open.',
     };
   }
+  if (viewer.personas.includes('admin')) return { allowed: true, selfApproved: false };
   return {
     allowed: false,
     message: 'Approving a definitional change needs the admin persona.',
