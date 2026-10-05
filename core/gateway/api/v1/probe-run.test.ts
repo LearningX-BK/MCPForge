@@ -18,7 +18,7 @@ import {
 
 function session(groups: readonly string[] = ['supers']): EstablishedSession {
   const scopeSession = {
-    principal: { subject: 'u-super', groups },
+    principal: { subject: 'local:u-super', groups },
     heldRoleIds: ['super-admin'],
     consumer: {
       consumerId: 'portal-local',
@@ -71,7 +71,7 @@ function world(options: {
         events.push('write');
       },
     },
-    superAdminGroups: ['supers'],
+    superAdminGroups: ['local:supers'],
     reload: (): Promise<ProbeReloadResult> => {
       events.push('reload');
       return Promise.resolve(

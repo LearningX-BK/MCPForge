@@ -84,9 +84,14 @@ export async function signOutAction(): Promise<void> {
   const id = await sessionIdFromCookies();
   if (id !== undefined) {
     const session = deleteSession(id);
-    if (session !== undefined) {
-      // Best effort: the portal session is gone either way, and a gateway that
-      // is down cannot renew the token anyway.
+    // Best effort: the portal session is gone either way, and a gateway that is
+    // down cannot renew the token anyway. Only the local provider's refresh token
+    // lives at the gateway. An OIDC provider's was held only here and is dropped
+    // with the session (the portal does not call a provider's revocation endpoint).
+    if (
+      session?.grant.principal.providerId === 'local' &&
+      session.grant.refreshToken !== undefined
+    ) {
       await gatewaySignOut(session.grant.refreshToken).catch(() => undefined);
     }
   }

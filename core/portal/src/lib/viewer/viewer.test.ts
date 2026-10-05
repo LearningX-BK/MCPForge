@@ -36,7 +36,7 @@ function grant(overrides: Partial<GatewayGrant> = {}, refreshToken = 'mfr_one'):
   };
 }
 
-const personasFor = (groups: readonly string[]) =>
+const personasFor = ({ groups }: { subject: string; groups: readonly string[] }) =>
   groups.includes('mcpforge-admins') ? (['developer', 'admin'] as const) : ([] as const);
 
 beforeEach(() => resetSessionStoreForTests());
@@ -68,7 +68,7 @@ describe('resolveViewer', () => {
     const refresh = vi.fn().mockResolvedValue(grant({ accessToken: 'access-2' }, 'mfr_two'));
     const viewer = await resolveViewer(id, { now: () => NOW, refresh, personasFor });
     expect(viewer?.subject).toBe('local:meera');
-    expect(refresh).toHaveBeenCalledWith('mfr_one');
+    expect(refresh).toHaveBeenCalledWith(expect.objectContaining({ refreshToken: 'mfr_one' }));
     expect(readSession(id)?.grant.refreshToken).toBe('mfr_two');
   });
 

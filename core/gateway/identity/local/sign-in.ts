@@ -26,6 +26,7 @@ import type { AuthSessionRecord, RuntimeStore } from '../../store/index.js';
 import type { LocalIdentityProvider } from '../local.js';
 import type { IdentityProviderKind } from '../types.js';
 import type { LocalSignIn, LocalUserStore } from './store.js';
+import { LOCAL_PROVIDER_ID } from '../config.js';
 
 /** W0-P4 §9 decision 6: 8 hours idle. */
 export const DEFAULT_SESSION_IDLE_SECONDS = 8 * 60 * 60;
@@ -35,8 +36,8 @@ export const DEFAULT_SESSION_ABSOLUTE_SECONDS = 12 * 60 * 60;
 export const REFRESH_TOKEN_PREFIX = 'mfr_' as const;
 const REFRESH_TOKEN_BYTES = 32;
 
-/** The provider id sessions from this module carry. */
-export const LOCAL_PROVIDER_ID = 'local' as const;
+/** The provider id sessions from this module carry (one definition, ../config.ts). */
+export { LOCAL_PROVIDER_ID } from '../config.js';
 
 export interface SessionLimits {
   readonly idleSeconds: number;

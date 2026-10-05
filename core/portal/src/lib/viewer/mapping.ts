@@ -18,6 +18,7 @@ import path from 'node:path';
 
 import {
   isSuperAdmin,
+  type MappingMember,
   loadDeploymentGroupRoleMapping,
   personasForPrincipal,
 } from '@mcpforge/gateway/identity/group-role-mapping';
@@ -25,13 +26,15 @@ import {
 import { resolveRepoRoot } from '../../app/build/_lib/repo-root';
 import type { Persona } from './personas';
 
-export function deploymentId(env: Readonly<Record<string, string | undefined>> = process.env): string {
+export function deploymentId(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
   const d = env['MCPFORGE_DEPLOYMENT'];
   return d !== undefined && d.length > 0 ? d : 'local';
 }
 
 export function heldPersonas(
-  groups: readonly string[],
+  member: MappingMember,
   options: { readonly repoRoot?: string; readonly deployment?: string } = {},
 ): readonly Persona[] {
   try {
@@ -39,20 +42,20 @@ export function heldPersonas(
       path.join(options.repoRoot ?? resolveRepoRoot(), 'overlays'),
       options.deployment ?? deploymentId(),
     );
-    return personasForPrincipal(mapping, { groups });
+    return personasForPrincipal(mapping, member);
   } catch {
     return [];
   }
 }
 
 /**
- * W0-P33b — whether `groups` include a `superAdmins:` group of this
- * deployment's git mapping (W0-P31). Fails closed: an unreadable mapping is
+ * W0-P33b — whether the member holds a `superAdmins:` group of its OWN provider in
+ * this deployment's git mapping (W0-P31, keyed per provider by W0-P23). Fails closed: an unreadable mapping is
  * `false`. Decides who may MERGE a definitional change in the portal; the
  * groups come from the gateway-verified session, never from a component.
  */
 export function holdsSuperAdmin(
-  groups: readonly string[],
+  member: MappingMember,
   options: { readonly repoRoot?: string; readonly deployment?: string } = {},
 ): boolean {
   try {
@@ -60,7 +63,7 @@ export function holdsSuperAdmin(
       path.join(options.repoRoot ?? resolveRepoRoot(), 'overlays'),
       options.deployment ?? deploymentId(),
     );
-    return isSuperAdmin(mapping, groups);
+    return isSuperAdmin(mapping, member);
   } catch {
     return false;
   }

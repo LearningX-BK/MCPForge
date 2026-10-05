@@ -58,6 +58,8 @@ import { parseSecretRef } from './secrets/index.js';
 import {
   DEFAULT_LOCAL_AUDIENCE,
   DEFAULT_LOCAL_ISSUER,
+  buildMultiProviderIdentity,
+  loadIdentityConfig,
   localIdentityProvider,
   localSignInService,
   localTokenIssuer,
@@ -70,7 +72,10 @@ import { createReadApi } from './api/v1/read-api.js';
 import { resolveGatewayKeys } from './identity/keys.js';
 import {
   identityAdminGroups,
+  identityAdminGroupsFor,
   loadDeploymentGroupRoleMapping,
+  mappedGroupsFor,
+  mappedProviderIds,
   superAdminGroups,
 } from './identity/group-role-mapping.js';
 import type { LocalUserStore } from './identity/local/index.js';
@@ -126,11 +131,16 @@ function userAdminFor(
   users: LocalUserStore,
 ): Omit<UserAdminDeps, 'store' | 'gatewayVersion' | 'now'> {
   const mapping = loadDeploymentGroupRoleMapping(join(repoRoot, 'overlays'), deployment);
-  const mappedGroups = new Set<string>();
-  for (const doc of mapping) for (const g of Object.keys(doc.groups)) mappedGroups.add(g);
-  const admins = identityAdminGroups(mapping);
-  for (const g of admins) mappedGroups.add(g);
-  return { users, identityAdminGroups: admins, mappedGroups };
+  // W0-P23: the accounts administered here are LOCAL, so their groups are the
+  // local provider's; the actor may come from any configured provider.
+  const admins = identityAdminGroupsFor(mapping, 'local');
+  const mappedGroups = new Set<string>([...mappedGroupsFor(mapping, 'local'), ...admins]);
+  return {
+    users,
+    identityAdminGroups: admins,
+    identityAdminActorGroups: identityAdminGroups(mapping),
+    mappedGroups,
+  };
 }
 
 /** The closed, two-value vocabulary 02 §6.5 names. Nothing else is a mode. */
@@ -210,8 +220,8 @@ export interface LaunchOptions {
   readonly secretStore?: SecretStore;
   /**
    * Sign-in session limits (W0-P4 §9 decision 6; defaults 8 h idle, 12 h
-   * absolute). An overlay home for these values arrives with the
-   * multi-provider `identity.providers` block (W0-P23).
+   * absolute). Their overlay home is `identity.sessionLimits` in
+   * `overlays/<deployment>/identity.yaml` (W0-P23); a value here overrides it.
    */
   readonly sessionLimits?: Partial<SessionLimits>;
   /** Kill-switch poll interval (02 §4.7, default 5 s). */
@@ -375,13 +385,31 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       }),
       source: users.principalSource(),
     });
-    // W0-P5a — the gateway as the local provider's token endpoint (W0-P4 §2).
-    const localSignIn = localSignInService({
-      store,
-      users,
-      provider: identity,
-      ...(options.sessionLimits === undefined ? {} : { limits: options.sessionLimits }),
-    });
+    // W0-P23 — `identity.providers` (overlays/<d>/identity.yaml): every
+    // configured provider, local and OIDC, behind one router. OIDC discovery
+    // runs here, so an unreachable or misconfigured IdP refuses startup.
+    const identityConfig = loadIdentityConfig(join(defsRoot, 'overlays'), deployment);
+    const humans = await buildMultiProviderIdentity(identityConfig, { local: identity });
+    const localConfigured = identityConfig.providers.some((p) => p.kind === 'local');
+    // W0-P5a — the gateway as the local provider's token endpoint (W0-P4 §2),
+    // only when a local provider is configured. Session limits come from the
+    // overlay (W0-P23); LaunchOptions may still override them (tests).
+    const localSignIn = localConfigured
+      ? localSignInService({
+          store,
+          users,
+          provider: identity,
+          limits: { ...identityConfig.sessionLimits, ...options.sessionLimits },
+        })
+      : undefined;
+    const identityWarnings = mappedProviderIds(
+      loadDeploymentGroupRoleMapping(join(defsRoot, 'overlays'), deployment),
+    )
+      .filter((id) => humans.provider(id) === undefined)
+      .map(
+        (id) =>
+          `overlays/${deployment}/mappings names identity provider "${id}", which overlays/${deployment}/identity.yaml does not configure; its entries grant nobody anything`,
+      );
 
     // ¬KillSwitched — polled from the store (02 §4.7).
     const flags = createPolledRuntimeFlagSource(store.runtimeFlags);
@@ -414,7 +442,7 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
         repoRoot: defsRoot,
         runtimeRoot: repoRoot,
         deployment,
-        identity,
+        identity: humans,
         flags,
       });
       const executor = createFunctionExecutor({
@@ -517,11 +545,13 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       consumerAuth,
       sessions,
       consumers: registry,
-      identityProviderKind: 'local',
+      // W0-P23: the configured kinds, e.g. `local` or `local+oidc`.
+      identityProviderKind: [...new Set(identityConfig.providers.map((p) => p.kind))].join('+'),
       approvals,
       // W0-P28 — who may administer local users is git: `identityAdmins:` in
-      // this deployment's group mapping, read once here like the grants.
-      userAdmin: userAdminFor(defsRoot, deployment, users),
+      // this deployment's group mapping, read once here like the grants. Only
+      // when there are local accounts to administer (W0-P23).
+      ...(localConfigured ? { userAdmin: userAdminFor(defsRoot, deployment, users) } : {}),
       // W0-P32 — who may approve their own request (flagged): git, like the
       // rest, read from the generation serving each request.
       superAdminGroups: () => reloader.current().superAdminGroups,
@@ -555,7 +585,9 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       consumerAuth,
       readApi,
       sessions,
-      localSignIn,
+      ...(localSignIn === undefined ? {} : { localSignIn }),
+      // W0-P23 — which providers to offer, and who an OIDC token is.
+      identityRoutes: { identity: humans, config: identityConfig },
       createServer: (handle) => surface.createServer(handle),
     });
     const { port } = await gateway.listen(options.gatewayPort ?? 0, options.gatewayHost);
@@ -582,7 +614,11 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
       store,
       identity,
       mintedKeys: keys.minted,
-      warnings: [...first.sessions.warnings, ...catalogue.warnings.map((w) => w.message)],
+      warnings: [
+        ...first.sessions.warnings,
+        ...identityWarnings,
+        ...catalogue.warnings.map((w) => w.message),
+      ],
       async close() {
         for (const cleanup of cleanups) await cleanup();
         if (portal) {

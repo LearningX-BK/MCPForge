@@ -16,14 +16,31 @@ afterAll(() => {
 describe('heldPersonas', () => {
   it('reads the committed local mapping', () => {
     const repoRoot = resolveRepoRoot();
-    expect(heldPersonas(['mcpforge-admins'], { repoRoot, deployment: 'local' })).toEqual([
-      'developer',
-      'admin',
-    ]);
-    expect(heldPersonas(['finance-ap-clerks'], { repoRoot, deployment: 'local' })).toEqual([
-      'business',
-    ]);
-    expect(heldPersonas(['a-group-nobody-maps'], { repoRoot, deployment: 'local' })).toEqual([]);
+    expect(
+      heldPersonas(
+        { subject: 'local:a', groups: ['mcpforge-admins'] },
+        { repoRoot, deployment: 'local' },
+      ),
+    ).toEqual(['developer', 'admin']);
+    expect(
+      heldPersonas(
+        { subject: 'local:a', groups: ['finance-ap-clerks'] },
+        { repoRoot, deployment: 'local' },
+      ),
+    ).toEqual(['business']);
+    expect(
+      heldPersonas(
+        { subject: 'local:a', groups: ['a-group-nobody-maps'] },
+        { repoRoot, deployment: 'local' },
+      ),
+    ).toEqual([]);
+    // W0-P23: the same group name from another provider is another namespace.
+    expect(
+      heldPersonas(
+        { subject: 'entra:a', groups: ['mcpforge-admins'] },
+        { repoRoot, deployment: 'local' },
+      ),
+    ).toEqual([]);
   });
 
   it('a mapping the gateway would refuse yields no personas, never a default', () => {
@@ -32,9 +49,13 @@ describe('heldPersonas', () => {
     mkdirSync(path.join(root, 'overlays', 'broken', 'mappings'), { recursive: true });
     writeFileSync(
       path.join(root, 'overlays', 'broken', 'mappings', 'groups-to-roles.yaml'),
-      'apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: broken\ngroups: {}\npersonas:\n  g:\n    personas: [superuser]\n',
+      'apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: broken\ngroups: {}\npersonas:\n  local:\n    g:\n      personas: [superuser]\n',
     );
-    expect(heldPersonas(['g'], { repoRoot: root, deployment: 'broken' })).toEqual([]);
-    expect(heldPersonas(['g'], { repoRoot: root, deployment: 'absent' })).toEqual([]);
+    expect(
+      heldPersonas({ subject: 'local:a', groups: ['g'] }, { repoRoot: root, deployment: 'broken' }),
+    ).toEqual([]);
+    expect(
+      heldPersonas({ subject: 'local:a', groups: ['g'] }, { repoRoot: root, deployment: 'absent' }),
+    ).toEqual([]);
   });
 });

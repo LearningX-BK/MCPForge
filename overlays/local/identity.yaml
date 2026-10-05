@@ -1,0 +1,40 @@
+# MCPForge — the identity providers of the "local" deployment. W0-P23, 02 §4.4.
+#
+# W0-P4 §2.1 and §9 decisions 1 and 6 (owner, 25-26 Sep 2026): sign-in is
+# multi-mode, and several providers may be active at once (local, Entra ID,
+# OCI IAM, Agentis). Each entry is values only. Every subject a provider
+# resolves is qualified with its `id` (`<id>:<sub>`), so an id is IMMUTABLE once
+# a row exists; changing one is a `forge identity remap`.
+#
+# kind: local — the gateway's own issuer and user store. At most one, id `local`.
+# kind: oidc  — any OIDC provider. Fields: issuer, discoveryUrl, audience (this
+#               gateway as Resource Server: the `aud` its access tokens must
+#               carry), clientId (the portal's PUBLIC client there: authorization
+#               code + PKCE, no client secret anywhere), and optionally scopes
+#               (default openid profile email offline_access), groupsClaim,
+#               nameClaim, displayName. The provider's client registration and
+#               its redirect URI (<portal origin>/sign-in/oidc/callback) are made
+#               by a human at that provider. Example, not enabled here:
+#
+#   - id: entra
+#     kind: oidc
+#     displayName: LTM (Entra ID)
+#     issuer: https://login.microsoftonline.com/<tenant-id>/v2.0
+#     discoveryUrl: https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration
+#     audience: api://mcpforge-gateway
+#     clientId: <portal application (client) id>
+#     scopes: [openid, profile, email, offline_access, api://mcpforge-gateway/access]
+#
+# sessionLimits — W0-P4 §9 decision 6: after 8 hours idle or 12 hours in all,
+# the viewer signs in again. Seconds.
+apiVersion: mcpforge/v1
+kind: Identity
+deployment: local
+identity:
+  providers:
+    - id: local
+      kind: local
+      displayName: MCPForge account
+  sessionLimits:
+    idleSeconds: 28800
+    absoluteSeconds: 43200

@@ -63,7 +63,9 @@ export class ViewerAuthError extends Error {
  * `MCPFORGE_GATEWAY_PORT` the gateway's own entrypoint reads (default 3939),
  * on loopback.
  */
-export function gatewayBaseUrl(env: Readonly<Record<string, string | undefined>> = process.env): string {
+export function gatewayBaseUrl(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string {
   const explicit = env['MCPFORGE_GATEWAY_URL'];
   if (explicit !== undefined && explicit.length > 0) return explicit.replace(/\/+$/, '');
   return `http://127.0.0.1:${env['MCPFORGE_GATEWAY_PORT'] ?? '3939'}`;
@@ -149,4 +151,91 @@ export async function gatewaySignOut(
 ): Promise<void> {
   const response = await post('/auth/local/signout', { refreshToken }, options);
   if (!response.ok) refusal(await response.json().catch(() => undefined), response.status);
+}
+
+// ---------------------------------------------------------------------------
+// W0-P23 — which providers to offer, and who an OIDC access token is.
+// ---------------------------------------------------------------------------
+
+const publicProviderSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(['local', 'oidc']),
+  displayName: z.string(),
+  issuer: z.string().optional(),
+  authorizationEndpoint: z.string().optional(),
+  tokenEndpoint: z.string().optional(),
+  clientId: z.string().optional(),
+  scopes: z.array(z.string()).optional(),
+});
+
+const providersSchema = z.object({
+  providers: z.array(publicProviderSchema),
+  sessionLimits: z.object({
+    idleSeconds: z.number().positive(),
+    absoluteSeconds: z.number().positive(),
+  }),
+});
+
+export type PublicProvider = z.infer<typeof publicProviderSchema>;
+export type ProvidersResponse = z.infer<typeof providersSchema>;
+
+async function get(
+  path: string,
+  headers: Record<string, string>,
+  options: GatewayAuthOptions,
+): Promise<Response> {
+  const url = `${options.baseUrl ?? gatewayBaseUrl()}${path}`;
+  const doFetch = options.fetch ?? ((input, init) => fetch(input, init));
+  try {
+    return await doFetch(url, {
+      method: 'GET',
+      headers,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw new ViewerAuthError(
+      'GATEWAY_UNREACHABLE',
+      'The MCPForge gateway is not reachable, so nobody can sign in right now.',
+      `Start the gateway (it listens on ${options.baseUrl ?? gatewayBaseUrl()}), then sign in again.`,
+    );
+  }
+}
+
+/** The providers the deployment configures, public facts only (`GET /auth/providers`). */
+export async function fetchProviders(options: GatewayAuthOptions = {}): Promise<ProvidersResponse> {
+  const response = await get('/auth/providers', {}, options);
+  const json: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) return refusal(json, response.status);
+  const parsed = providersSchema.safeParse(json);
+  if (parsed.success) return parsed.data;
+  throw new ViewerAuthError(
+    'GATEWAY_ERROR',
+    'The gateway answered with a provider list the portal does not understand.',
+    'Check that the portal and gateway come from the same MCPForge build, then sign in again.',
+  );
+}
+
+/**
+ * Who `accessToken` is, according to the gateway, the only verifier (against the
+ * provider's own JWKS, issuer and audience). The portal interprets no token.
+ */
+export async function fetchPrincipal(
+  accessToken: string,
+  options: GatewayAuthOptions = {},
+): Promise<GatewayPrincipal> {
+  const response = await get(
+    '/auth/principal',
+    { authorization: `Bearer ${accessToken}` },
+    options,
+  );
+  const json: unknown = await response.json().catch(() => undefined);
+  if (!response.ok) return refusal(json, response.status);
+  const parsed = z.object({ principal: principalSchema }).safeParse(json);
+  if (parsed.success) return parsed.data.principal;
+  throw new ViewerAuthError(
+    'GATEWAY_ERROR',
+    'The gateway answered with a principal the portal does not understand.',
+    'Check that the portal and gateway come from the same MCPForge build, then sign in again.',
+  );
 }

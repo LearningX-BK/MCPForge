@@ -76,7 +76,11 @@ export interface SessionAssemblyOptions {
   readonly runtimeRoot?: string;
   /** The overlay directory name under `overlays/`. */
   readonly deployment: string;
-  readonly identity: IdentityProvider;
+  /**
+   * Who the human is. One provider, or (W0-P23) the deployment's
+   * multi-provider router: the session needs only these two methods either way.
+   */
+  readonly identity: Pick<IdentityProvider, 'authenticate' | 'resolveGroups'>;
   readonly flags: RuntimeFlagSource;
   /** Defaults to `.mcpforge/probe-report.json`, or no report (nothing visible). */
   readonly probe?: ProbeStatusSource;
@@ -208,7 +212,10 @@ export function createSessionAssembly(options: SessionAssemblyOptions): SessionA
   // almost certainly means the mapping and roles/ disagree, so it is surfaced.
   const mappedRoles = new Set<string>();
   for (const doc of mapping) {
-    for (const entry of Object.values(doc.groups)) entry.roles.forEach((r) => mappedRoles.add(r));
+    for (const providerGroups of Object.values(doc.groups)) {
+      for (const entry of Object.values(providerGroups))
+        entry.roles.forEach((r) => mappedRoles.add(r));
+    }
     for (const entry of Object.values(doc.subjectOverrides ?? {})) {
       entry.roles.forEach((r) => mappedRoles.add(r));
     }

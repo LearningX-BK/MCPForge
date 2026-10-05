@@ -7,8 +7,8 @@
 
 import { cookies } from 'next/headers';
 
-import { gatewayRefresh } from './gateway-auth';
 import { heldPersonas } from './mapping';
+import { refreshGrant } from './refresh';
 import { resolveViewer, type Viewer } from './viewer';
 
 /** The session cookie. Its value is an opaque id; see `./session-store.ts`. */
@@ -22,8 +22,8 @@ export async function getViewer(): Promise<Viewer | null> {
   const id = await sessionIdFromCookies();
   if (id === undefined || id.length === 0) return null;
   return resolveViewer(id, {
-    refresh: (refreshToken) => gatewayRefresh(refreshToken),
-    personasFor: (groups) => heldPersonas(groups),
+    refresh: (grant) => refreshGrant(grant),
+    personasFor: (member) => heldPersonas(member),
   });
 }
 

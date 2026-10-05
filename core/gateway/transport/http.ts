@@ -53,6 +53,11 @@ import {
   type SessionHandle,
 } from './session-binding.js';
 import { handleSignInRequest, isSignInPath } from './sign-in-routes.js';
+import {
+  handleIdentityRoute,
+  isIdentityRoutePath,
+  type IdentityRoutes,
+} from './identity-routes.js';
 import type { LocalSignInService } from '../identity/index.js';
 import type { ReadApi } from '../api/v1/read-api.js';
 
@@ -137,6 +142,12 @@ export interface GatewayHttpTransportOptions {
    * local provider is configured. Absent, those paths are a plain 404.
    */
   readonly localSignIn?: LocalSignInService;
+  /**
+   * W0-P23 — `GET /auth/providers` and `GET /auth/principal` (see
+   * `./identity-routes.ts`): the configured providers, and who a bearer token
+   * is. Absent, those paths are a plain 404.
+   */
+  readonly identityRoutes?: IdentityRoutes;
   /**
    * W0-P3a — the read-only governance API (`/api/v1/**`, W0-P2 §7). It runs
    * the same `[2a]` gate and session establishment as `/mcp` on every request.
@@ -336,6 +347,15 @@ export function createGatewayHttpTransport(
       res
         .writeHead(200, { 'content-type': 'application/json' })
         .end(JSON.stringify(assertNoRegistrationEndpoint(metadata.document)));
+      return;
+    }
+
+    const identityRoutes = options.identityRoutes;
+    if (identityRoutes !== undefined && isIdentityRoutePath(url.pathname)) {
+      handleIdentityRoute(req, res, url.pathname, identityRoutes).catch(() => {
+        if (!res.headersSent) res.writeHead(500);
+        res.end();
+      });
       return;
     }
 

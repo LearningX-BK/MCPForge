@@ -41,24 +41,53 @@ describe('checkOverlayFileTypes', () => {
         'kind: GroupRoleMapping',
         'deployment: local',
         'groups:',
-        '  finance-ap-clerks:',
-        '    roles:',
-        '      - p2p-ap-clerk',
+        '  local:',
+        '    finance-ap-clerks:',
+        '      roles:',
+        '        - p2p-ap-clerk',
         'subjectOverrides: {}',
         // W0-P5b and W0-P28: declared by the gateway's mapping reader.
         'personas:',
-        '  finance-ap-clerks:',
-        '    personas: [business]',
+        '  local:',
+        '    finance-ap-clerks:',
+        '      personas: [business]',
         'identityAdmins:',
-        '  - mcpforge-admins',
+        '  local:',
+        '    - mcpforge-admins',
         // W0-P31 and W0-P22.
         'superAdmins:',
-        '  - mcpforge-superadmins',
+        '  local:',
+        '    - mcpforge-superadmins',
         'superAdminSubjects:',
         '  - local:0192aaaa-0000-7000-8000-000000000001',
       ].join('\n'),
     );
     expect(checkOverlayFileTypes(repoRoot)).toEqual([]);
+  });
+
+  it('W0-P23: accepts an Identity overlay and refuses an undeclared key, a secret above all', () => {
+    repoRoot = makeRepoRoot();
+    const identity = (extra: string) =>
+      [
+        'apiVersion: mcpforge/v1',
+        'kind: Identity',
+        'deployment: local',
+        'identity:',
+        '  providers:',
+        '    - id: entra',
+        '      kind: oidc',
+        '      issuer: https://login.example/t/v2.0',
+        '      clientId: abc',
+        extra,
+        '  sessionLimits:',
+        '    idleSeconds: 60',
+      ].join('\n');
+    writeFile(repoRoot, 'overlays/local/identity.yaml', identity('      scopes: [openid]'));
+    expect(checkOverlayFileTypes(repoRoot)).toEqual([]);
+    writeFile(repoRoot, 'overlays/local/identity.yaml', identity('      clientSecret: hunter2'));
+    const violations = checkOverlayFileTypes(repoRoot);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]!.message).toContain('clientSecret');
   });
 
   it('fails on a .ts file under overlays/**, naming the file', () => {
@@ -210,7 +239,11 @@ describe('checkForLeakedSecrets', () => {
 
   it('fails, naming the file and line, on a literal password: value', () => {
     repoRoot = makeRepoRoot();
-    writeFile(repoRoot, 'overlays/local/config.yaml', 'apiVersion: mcpforge/v1\npassword: hunter2\n');
+    writeFile(
+      repoRoot,
+      'overlays/local/config.yaml',
+      'apiVersion: mcpforge/v1\npassword: hunter2\n',
+    );
     const violations = checkForLeakedSecrets(repoRoot);
     expect(violations).toHaveLength(1);
     expect(violations[0]!.file).toBe('overlays/local/config.yaml');

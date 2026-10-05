@@ -25,7 +25,7 @@ import {
 } from '@mcpforge/gateway/store/server';
 import { localUserStore } from '@mcpforge/gateway/identity';
 import {
-  identityAdminGroups,
+  identityAdminGroupsFor,
   loadDeploymentGroupRoleMapping,
 } from '@mcpforge/gateway/identity/group-role-mapping';
 import { findDefinitionsRoot } from '@mcpforge/ci';
@@ -87,8 +87,11 @@ export async function runBootstrapAdminCommand(
   const root = opts.root ?? findDefinitionsRoot(env);
   let admins: readonly string[];
   try {
-    admins = identityAdminGroups(
+    // W0-P23: the account created here is a LOCAL one, so only the `local`
+    // provider's identityAdmins groups can apply to it.
+    admins = identityAdminGroupsFor(
       loadDeploymentGroupRoleMapping(path.join(root, 'overlays'), deployment),
+      'local',
     );
   } catch (error) {
     return emit(

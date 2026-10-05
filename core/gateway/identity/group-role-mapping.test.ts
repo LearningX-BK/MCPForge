@@ -40,8 +40,9 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  finance-ap-clerks:
-    roles: [p2p-ap-clerk]
+  local:
+    finance-ap-clerks:
+      roles: [p2p-ap-clerk]
 subjectOverrides:
   local:jdoe:
     roles: [p2p-admin]
@@ -52,8 +53,9 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  "CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com":
-    roles: [p2p-ap-clerk, p2p-ap-approver]
+  ltm-ad:
+    "CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com":
+      roles: [p2p-ap-clerk, p2p-ap-approver]
 `;
 
 describe('parseGroupRoleMappingFile', () => {
@@ -63,8 +65,8 @@ describe('parseGroupRoleMappingFile', () => {
     expect(local.ok).toBe(true);
     expect(ad.ok).toBe(true);
     if (!local.ok || !ad.ok) return;
-    expect(local.doc.groups['finance-ap-clerks']).toEqual({ roles: ['p2p-ap-clerk'] });
-    expect(ad.doc.groups['CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com']).toEqual({
+    expect(local.doc.groups['local']?.['finance-ap-clerks']).toEqual({ roles: ['p2p-ap-clerk'] });
+    expect(ad.doc.groups['ltm-ad']?.['CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com']).toEqual({
       roles: ['p2p-ap-clerk', 'p2p-ap-approver'],
     });
   });
@@ -99,7 +101,7 @@ describe('parseGroupRoleMappingFile', () => {
   it('rejects a groups entry missing roles', () => {
     const result = parseGroupRoleMappingFile(
       'bad.yaml',
-      'apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  g1: {}\n',
+      'apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  local:\n    g1: {}\n',
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -202,9 +204,11 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  mcpforge-superadmins:
-    roles: [super-admin]
-superAdmins: [mcpforge-superadmins]
+  local:
+    mcpforge-superadmins:
+      roles: [super-admin]
+superAdmins:
+  local: [mcpforge-superadmins]
 superAdminSubjects: [local:jdoe, local:other]
 `,
     );
@@ -221,7 +225,7 @@ superAdminSubjects: [local:jdoe, local:other]
     expect(reparsed.ok).toBe(true);
     if (!reparsed.ok) return;
     expect(reparsed.doc.superAdminSubjects).toEqual(['local:other', 'oidc:jdoe']);
-    expect(reparsed.doc.superAdmins).toEqual(['mcpforge-superadmins']);
+    expect(reparsed.doc.superAdmins).toEqual({ local: ['mcpforge-superadmins'] });
     expect(reparsed.doc.subjectOverrides).toBeUndefined();
   });
 
@@ -249,18 +253,20 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  finance-ap-clerks:
-    roles: [p2p-ap-clerk]
-  mcpforge-admins:
-    roles: [p2p-admin]
+  local:
+    finance-ap-clerks:
+      roles: [p2p-ap-clerk]
+    mcpforge-admins:
+      roles: [p2p-admin]
 subjectOverrides:
   local:jdoe:
     roles: [p2p-ap-approver]
 personas:
-  mcpforge-admins:
-    personas: [admin, developer]
-  finance-ap-clerks:
-    personas: [business]
+  local:
+    mcpforge-admins:
+      personas: [admin, developer]
+    finance-ap-clerks:
+      personas: [business]
 `;
 
   it('parses the personas block keyed by group', () => {
@@ -268,8 +274,10 @@ personas:
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.doc.personas).toEqual({
-      'mcpforge-admins': { personas: ['admin', 'developer'] },
-      'finance-ap-clerks': { personas: ['business'] },
+      local: {
+        'mcpforge-admins': { personas: ['admin', 'developer'] },
+        'finance-ap-clerks': { personas: ['business'] },
+      },
     });
   });
 
@@ -287,12 +295,20 @@ personas:
     const result = parseGroupRoleMappingFile('x.yaml', WITH_PERSONAS);
     if (!result.ok) throw new Error('fixture must parse');
     expect(
-      personasForPrincipal([result.doc], { groups: ['finance-ap-clerks', 'mcpforge-admins'] }),
+      personasForPrincipal([result.doc], {
+        subject: 'local:a',
+        groups: ['finance-ap-clerks', 'mcpforge-admins'],
+      }),
     ).toEqual(['developer', 'business', 'admin']);
-    expect(personasForPrincipal([result.doc], { groups: ['nobody-maps-this'] })).toEqual([]);
-    expect(personasForPrincipal([result.doc], { groups: ['__proto__', 'constructor'] })).toEqual(
-      [],
-    );
+    expect(
+      personasForPrincipal([result.doc], { subject: 'local:a', groups: ['nobody-maps-this'] }),
+    ).toEqual([]);
+    expect(
+      personasForPrincipal([result.doc], {
+        subject: 'local:a',
+        groups: ['__proto__', 'constructor'],
+      }),
+    ).toEqual([]);
   });
 
   it('personas never change the roles a principal holds', () => {
@@ -317,7 +333,7 @@ personas:
     const file = writeMapping('local', WITH_PERSONAS);
     remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
     const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
-    expect(reparsed.ok && reparsed.doc.personas?.['mcpforge-admins']?.personas).toEqual([
+    expect(reparsed.ok && reparsed.doc.personas?.['local']?.['mcpforge-admins']?.personas).toEqual([
       'admin',
       'developer',
     ]);
@@ -330,28 +346,32 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  mcpforge-admins:
-    roles: [p2p-admin]
-  finance-ap-clerks:
-    roles: [p2p-ap-clerk]
+  local:
+    mcpforge-admins:
+      roles: [p2p-admin]
+    finance-ap-clerks:
+      roles: [p2p-ap-clerk]
 subjectOverrides:
   local:jdoe:
     roles: [p2p-ap-approver]
 identityAdmins:
-  - mcpforge-admins
-  - mcpforge-admins
+  local:
+    - mcpforge-admins
+    - mcpforge-admins
 `;
 
   it('parses the list, de-duplicated and sorted', () => {
     const result = parseGroupRoleMappingFile('x.yaml', WITH_ADMINS);
-    expect(result.ok && result.doc.identityAdmins).toEqual(['mcpforge-admins']);
+    expect(result.ok && result.doc.identityAdmins).toEqual({ local: ['mcpforge-admins'] });
+    expect(result.ok && identityAdminGroups([result.doc])).toEqual(['local:mcpforge-admins']);
   });
 
   it('refuses a list that is not of non-empty group names', () => {
     for (const bad of [
       'identityAdmins: mcpforge-admins',
-      "identityAdmins: ['']",
-      'identityAdmins: [1]',
+      'identityAdmins: [mcpforge-admins]',
+      "identityAdmins: { local: [''] }",
+      'identityAdmins: { local: [1] }',
     ]) {
       const result = parseGroupRoleMappingFile(
         'x.yaml',
@@ -367,14 +387,21 @@ identityAdmins:
     const result = parseGroupRoleMappingFile('x.yaml', LOCAL_ONLY);
     if (!result.ok) throw new Error('fixture must parse');
     expect(identityAdminGroups([result.doc])).toEqual([]);
-    expect(isIdentityAdmin([result.doc], ['finance-ap-clerks'])).toBe(false);
+    expect(
+      isIdentityAdmin([result.doc], { subject: 'local:a', groups: ['finance-ap-clerks'] }),
+    ).toBe(false);
   });
 
   it('answers by group membership only, and grants no role', () => {
     const result = parseGroupRoleMappingFile('x.yaml', WITH_ADMINS);
     if (!result.ok) throw new Error('fixture must parse');
-    expect(isIdentityAdmin([result.doc], ['mcpforge-admins'])).toBe(true);
-    expect(isIdentityAdmin([result.doc], ['finance-ap-clerks', '__proto__'])).toBe(false);
+    const member = (subject: string, groups: string[]) => ({ subject, groups });
+    expect(isIdentityAdmin([result.doc], member('local:a', ['mcpforge-admins']))).toBe(true);
+    expect(
+      isIdentityAdmin([result.doc], member('local:a', ['finance-ap-clerks', '__proto__'])),
+    ).toBe(false);
+    // The same group name from another provider is another namespace.
+    expect(isIdentityAdmin([result.doc], member('entra:a', ['mcpforge-admins']))).toBe(false);
     const without = parseGroupRoleMappingFile(
       'x.yaml',
       WITH_ADMINS.slice(0, WITH_ADMINS.indexOf('identityAdmins:')),
@@ -390,7 +417,7 @@ identityAdmins:
     const file = writeMapping('local', WITH_ADMINS);
     remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
     const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
-    expect(reparsed.ok && reparsed.doc.identityAdmins).toEqual(['mcpforge-admins']);
+    expect(reparsed.ok && reparsed.doc.identityAdmins).toEqual({ local: ['mcpforge-admins'] });
   });
 });
 
@@ -400,18 +427,24 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  mcpforge-superadmins:
-    roles: [super-admin]
+  local:
+    mcpforge-superadmins:
+      roles: [super-admin]
 superAdmins:
-  - mcpforge-superadmins
+  local:
+    - mcpforge-superadmins
 `;
 
   it('parses the list and answers by group membership only', () => {
     const result = parseGroupRoleMappingFile('x.yaml', WITH_SUPER);
     if (!result.ok) throw new Error('fixture must parse');
-    expect(superAdminGroups([result.doc])).toEqual(['mcpforge-superadmins']);
-    expect(isSuperAdmin([result.doc], ['mcpforge-superadmins'])).toBe(true);
-    expect(isSuperAdmin([result.doc], ['finance-ap-clerks', '__proto__'])).toBe(false);
+    const member = (subject: string, groups: string[]) => ({ subject, groups });
+    expect(superAdminGroups([result.doc])).toEqual(['local:mcpforge-superadmins']);
+    expect(isSuperAdmin([result.doc], member('local:a', ['mcpforge-superadmins']))).toBe(true);
+    expect(isSuperAdmin([result.doc], member('local:a', ['finance-ap-clerks', '__proto__']))).toBe(
+      false,
+    );
+    expect(isSuperAdmin([result.doc], member('entra:a', ['mcpforge-superadmins']))).toBe(false);
   });
 
   it('refuses a malformed list and is empty when absent (fail closed)', () => {
@@ -432,6 +465,61 @@ superAdmins:
     );
     remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'oidc:jdoe');
     const reparsed = parseGroupRoleMappingFile(file, readFileSync(file, 'utf-8'));
-    expect(reparsed.ok && reparsed.doc.superAdmins).toEqual(['mcpforge-superadmins']);
+    expect(reparsed.ok && reparsed.doc.superAdmins).toEqual({ local: ['mcpforge-superadmins'] });
+  });
+});
+
+describe('per-provider keying (W0-P23)', () => {
+  const TWO = `
+apiVersion: mcpforge/v1
+kind: GroupRoleMapping
+deployment: local
+groups:
+  local:
+    admins:
+      roles: [p2p-admin]
+  entra:
+    admins:
+      roles: [p2p-ap-clerk]
+`;
+
+  it('looks a group up only under the provider its subject is qualified with', () => {
+    const r = parseGroupRoleMappingFile('x.yaml', TWO);
+    if (!r.ok) throw new Error('fixture must parse');
+    expect(rolesForPrincipal([r.doc], { subject: 'local:a', groups: ['admins'] })).toEqual([
+      'p2p-admin',
+    ]);
+    expect(rolesForPrincipal([r.doc], { subject: 'entra:a', groups: ['admins'] })).toEqual([
+      'p2p-ap-clerk',
+    ]);
+    expect(rolesForPrincipal([r.doc], { subject: 'oci:a', groups: ['admins'] })).toEqual([]);
+    expect(rolesForPrincipal([r.doc], { subject: 'a', groups: ['admins'] })).toEqual([]);
+  });
+
+  it('refuses a flat (pre-P23) block with the shape it should have', () => {
+    const flat = parseGroupRoleMappingFile(
+      'x.yaml',
+      'apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  admins:\n    roles: [p2p-admin]\n',
+    );
+    expect(flat.ok).toBe(false);
+    if (flat.ok) return;
+    expect(flat.error.message).toContain('<providerId>');
+  });
+
+  it('refuses an unqualified subject in subjectOverrides and superAdminSubjects', () => {
+    const o = parseGroupRoleMappingFile(
+      'x.yaml',
+      `${TWO}subjectOverrides:\n  jdoe:\n    roles: [p2p-admin]\n`,
+    );
+    expect(o.ok).toBe(false);
+    const s = parseGroupRoleMappingFile('x.yaml', `${TWO}superAdminSubjects: [jdoe]\n`);
+    expect(s.ok).toBe(false);
+  });
+
+  it('refuses a remap to an unqualified subject', () => {
+    writeMapping('local', LOCAL_ONLY);
+    expect(() => remapSubjectAcrossMappingFiles(root, 'local:jdoe', 'jdoe')).toThrow(
+      /issuer-qualified/,
+    );
   });
 });

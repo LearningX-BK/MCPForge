@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
 export default async function EnablementPage(): Promise<React.ReactElement> {
   const [result, viewer] = await Promise.all([readEnablement(), getViewer()]);
   const probeRun =
-    viewer !== null && holdsSuperAdmin(viewer.groups) ? (
+    viewer !== null && holdsSuperAdmin(viewer) ? (
       <ProbeRunPanel action={runProbeAction} />
     ) : undefined;
   return result.kind === 'ok' ? (

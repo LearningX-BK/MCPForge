@@ -35,6 +35,7 @@ import type { RuntimeCatalogue } from '../../assembly/catalogue.js';
 import type { ReloadOutcome } from '../../assembly/reload.js';
 import type { AppendAuditCallInput, AuditCallRecord } from '../../store/audit/types.js';
 import type { RuntimeStore } from '../../store/repository.js';
+import { holdsQualifiedGroup } from '../../identity/subject.js';
 import { ApiRefusal } from './refusal.js';
 
 /** The tool id a `catalogue` audit row names: reloading touches no one tool. */
@@ -115,8 +116,8 @@ export async function reloadCatalogue(
   }
 
   // 2. The human half.
-  const groups = actor.session.principal.groups;
-  if (!groups.some((g) => deps.superAdminGroups.includes(g))) {
+  // W0-P23: `<providerId>:<group>`, held only under the actor's own provider.
+  if (!holdsQualifiedGroup(actor.session.principal, deps.superAdminGroups)) {
     await appendRow(
       deps,
       refusedRow(deps, actor, 'catalogue.not_super_admin', 'TOOL_NOT_IN_SCOPE', {

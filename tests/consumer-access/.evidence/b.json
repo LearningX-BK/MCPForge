@@ -7,7 +7,7 @@
     "consumerId": "claude-desktop-coe",
     "killScope": "consumer",
     "killTarget": "claude-desktop-coe",
-    "killAuditCallId": "01a0d935-663d-73b6-855d-f6eda018e3ca",
+    "killAuditCallId": "01a10d62-ebd4-76d0-b541-65c7519fccd7",
     "pollIntervalMs": 5000,
     "preKillOutcome": "proceed",
     "postKillPrePollOutcome": "proceed",
@@ -17,5 +17,5 @@
     "postPollRefusalNext": "This client's registration is suspended (reason: W0-N14(b) checkpoint evidence — credential suspected compromised). Ask the consumer's steward to clear the kill switch for claude-desktop-coe; no tool is visible to it until then.",
     "realMechanism": "core/gateway/flags/kill.ts applyKill + core/gateway/flags/poller.ts createPolledRuntimeFlagSource (real SQLite-backed runtime_flags) + core/gateway/scope/predicates.ts notKillSwitchedPredicate (consumer scope) + core/gateway/policy/stages.ts stage6b — the same mechanism tests/policy/escalation.consumer.test.ts (W0-E8 case 6) exercises."
   },
-  "capturedAt": "2026-09-25T15:35:50.608Z"
+  "capturedAt": "2026-10-05T18:45:49.253Z"
 }

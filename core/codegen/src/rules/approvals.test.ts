@@ -41,9 +41,11 @@ function writeMapping(superAdminSubjects: readonly string[] | undefined): void {
     'kind: GroupRoleMapping',
     'deployment: local',
     'groups:',
-    '  mcpforge-superadmins:',
-    '    roles: [super-admin]',
-    'superAdmins: [mcpforge-superadmins]',
+    '  local:',
+    '    mcpforge-superadmins:',
+    '      roles: [super-admin]',
+    'superAdmins:',
+    '  local: [mcpforge-superadmins]',
   ];
   if (superAdminSubjects !== undefined) {
     lines.push(
