@@ -181,8 +181,11 @@ describe('compileConsumerDraft — the live compile is the real compiler', () =>
 
   it('an expiry inside 30 days is chipped --status-write off the REAL compiled grant', async () => {
     const record = baseRecord();
-    // 20 days from the pinned `today`. The compiler calls it live; the 30-day
-    // presentation threshold is what turns it amber.
+    // 20 days from the REAL today, because the compiler judges expiry against the
+    // real clock (the pinned `today` only drives presentation). A fixed date here
+    // silently rots into "expired" once the calendar passes it.
+    const realToday = new Date().toISOString().slice(0, 10);
+    const inTwentyDays = new Date(Date.now() + 20 * 86_400_000).toISOString().slice(0, 10);
     const soon = yamlFor({
       ...record,
       authorizations: { ...record.authorizations, bindingTypes: ['plsql'] },
@@ -192,14 +195,14 @@ describe('compileConsumerDraft — the live compile is the real compiler', () =>
           names: ['MCPFORGE_WRAP.AP_VOUCHER'],
           approvalRef: 'APR-W0N12-SOON',
           approver: 'named.approver',
-          expiresAt: '2026-09-30',
+          expiresAt: inTwentyDays,
         },
       ],
     });
-    const draft = await compileConsumerDraft(ID, soon, '', TODAY);
+    const draft = await compileConsumerDraft(ID, soon, '', realToday);
     expect(draft.error).toBeUndefined();
     const grant = draft.grants[0]!;
-    expect(grant.expiresAt).toBe('2026-09-30');
+    expect(grant.expiresAt).toBe(inTwentyDays);
     expect(grant.expiry.state).toBe('expiring');
     expect(grant.expiry.token).toBe('status-write');
     expect(grant.expiry.daysRemaining).toBe(20);
