@@ -378,6 +378,9 @@ export function ToolDetail({ tool, data, onOpenAgentView }: ToolDetailProps) {
         <Link href={`/activity?tool=${encodeURIComponent(m.id)}`} className="text-[13px] underline decoration-dotted underline-offset-2">
           View in Activity
         </Link>
+        <Link href={`/activity/consumption?pivot=tool#tool-node-${encodeURIComponent(m.id)}`} className="text-[13px] underline decoration-dotted underline-offset-2">
+          View in Consumption graph
+        </Link>
       </Section>
     </article>
   );

@@ -1741,7 +1741,7 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
 
 **Lesson carried from Track P, applied to every `done:` below:** each one requires the feature to be **reachable from a real entry point and fed by real data**. Rendering and passing axe is not enough.
 
-- [ ] **W0-Q1** — The Consumption Graph: `/activity/consumption`
+- [x] **W0-Q1** — The Consumption Graph: `/activity/consumption`
   - model: sonnet
   - deps: W0-P3
   - wave: 0
@@ -1749,6 +1749,12 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
   - touches: core/portal/src/app/activity/consumption/**
   - context: The console's Consumption Graph promised *"for every MCP server and tool, know every registered agent that calls it"*. 03 §5.2 specifies the route and roadmap G9 @ M1 makes it an exit criterion (*"every tool → consuming agent, platform, scope, call count"*), but no task built it. The data already exists: since Phase 5, every audit row carries an authenticated `consumer_id`, which is what makes G9 provable (01 §11). The closest existing surface is the per-consumer usage panel in `/activity/consumers`, and that one is organised by consumer, not by tool.
   - done: `/activity/consumption` renders tool → consumer edges with consumer class, the scope each consumer was granted, call count and last call for a chosen window, all read from W0-P3's `/api/v1/**` seam (never a fixture); it can pivot from tool to consumers and from consumer to tools; a tool with zero consumers is shown as such, not hidden, because that is G9's sprawl signal; it is reachable from the Activity nav and from a tool's Catalog drawer; the gateway-down state from W0-P3 applies; the a11y gates (stages 14–17) pass.
+  - **Done 6 Oct 2026, branch `forge/W0-Q1-consumption-graph`.** `OPUS_GUARDED_PATHS`: none touched.
+    - `/activity/consumption` (`graph.ts`, `load.ts`, `consumption-view.tsx`, `page.tsx`). Edges are counted from `/api/v1/calls` as the signed-in viewer (paged, cap 10 x 200, so counts say "calls you may read" and "at least" at the cap); the tool universe is every committed tool manifest and each consumer's class and granted scope (roles, packages, binding types, sensitivity ceiling, write allowed) come from `consumers/` via `loadConsumerRegistry`. Window 24h / 7d / 30d and pivot tool / consumer are links (`?pivot=&window=`); each row cross-links to the other pivot. A tool with no consumer is listed with its own "no consumer" line and a count; an unregistered consumer id is shown as `unregistered`, never dropped. A failed read on page 0 renders W0-P3's `LiveStateNotice` (gateway-down, signed-out, refused), never an empty graph.
+    - **Edits outside `touches:`, required by `done:`'s reachability clause:** a link row in `activity/activity-view.tsx` (there was no Activity sub-navigation at all, so `/activity/consumers` is now linked there too) and a "View in Consumption graph" link in `catalog/_components/tool-detail.tsx`. Both are one small hunk each.
+    - **Verified:** new `consumption.test.tsx` 9/9 (reducers, both pivots, zero-consumer, unregistered, page-cap lower bound, gateway-down, axe serious/critical on both pivots). Portal tests for `activity`, `catalog`, `components`: 47 files, 376 passed. Portal `tsc --noEmit` clean, `eslint` clean on `activity` and `catalog`, prettier clean, `forge validate` exit 0, `portal-http-boundary` 22/22.
+    - **Not run:** the Playwright E2E and the full stage 14–17 a11y gates (not run here; only the per-view axe test above). No live gateway walkthrough, so the page is proven against injected `calls` only. Keycloak / Postgres legs are not relevant to this task and were not run.
+    - **Gap, not closed:** the granted scope shown is the consumer's *registered authorizations*, not a per-tool grant (there is no per-tool grant record in git). `/api/v1/calls` is the only edge source, so the graph is bounded by the viewer's read authority; an admin sees the whole graph, a narrower viewer a subset, and the page says so.
 
 - [ ] **W0-Q2** — Module-server detail and drill-down: `/catalog/servers/[serverId]`
   - model: sonnet
