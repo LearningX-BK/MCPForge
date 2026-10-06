@@ -65,9 +65,32 @@ interface AuthoringModel {
 - Provenance (§5) records which provider and model produced each accepted field.
 - Provider kinds planned: `blueverse` (default), `anthropic`, and `openai-compatible` (one generic adapter covering any OpenAI-style endpoint, including a local one). All sit behind the same `AuthoringModel` interface and share the fake used by tests.
 
-### 2.2 What is missing: the BlueVerse contract (`needs_human`)
+### 2.2 The BlueVerse contract (supplied by the owner, 6 Oct 2026)
 
-Nothing in this repository describes BlueVerse's API: endpoint, authentication scheme, how a model is selected or listed, request and response shape, and whether it already does the multi-LLM routing itself (in which case the adapter has one provider, and "switching" is BlueVerse's model parameter rather than our provider list). Per CLAUDE.md §8 I am not guessing it. **Needed from you:** BlueVerse's API reference or an example call. W0-Q9 will build the interface, the fake, the multi-provider overlay and the `openai-compatible` and `anthropic` adapters without it, and will leave the `blueverse` adapter as the one named gap until the contract is supplied; it must not be stubbed to look working.
+Source: the WILL app's `core/llm_client.py` (`C:\GenAIGenerated\LTM\WL\Aap\WILL App\Re-Engineer\WILL_App_Fixed`), read as a reference only. Owner instruction, verbatim: *"just use ltm.com instead of ltimindtree.com from API link."* The adapter therefore targets `https://blueverse-foundry.ltm.com/chatservice/chat`. **That host rename is the owner's statement; I have not called it** (no token was used), so W0-Q9's first live check is a human act.
+
+What the contract is:
+
+| Aspect | BlueVerse |
+|---|---|
+| Call | `POST <baseUrl>` (default `https://blueverse-foundry.ltm.com/chatservice/chat`), JSON body `{ "query": <text>, "space_name": <space>, "flowId": <flow> }` |
+| Auth | `Authorization: Bearer <token>` |
+| Model selection | **None in the request.** There is no `model` or `system` field: the LLM is chosen inside the BlueVerse flow. "Switching" within BlueVerse means choosing a different `space_name` + `flowId` |
+| System prompt | Not supported separately: the adapter prepends the instructions to `query` |
+| Response | Free-shaped JSON; the WILL client tries `output`, `answer`, `response`, `text`, `result`, `message`, `content`, the same keys under `data` and `result`, then `choices[0].message.content` |
+| Timeout used | 60 s |
+
+So a BlueVerse **provider entry** in the overlay is `{ id, kind: blueverse, baseUrl, spaceName, flowId, keyRef, allowedSensitivities }`; two BlueVerse flows (e.g. a copy-writing flow and a stricter one) are simply two entries. Multi-LLM switching across kinds (`blueverse`, `anthropic`, `openai-compatible`) is as §2.1.
+
+What W0-Q9 deliberately does **not** copy from that client:
+
+1. **The key in a plaintext `config.json`.** Here the key is a `secretRef://` (§3), dereferenced only in `adapters/model/**`.
+2. **Errors returned as text** (`"⚠️ LLM error: ..."`). A string like that would flow into a draft field. Here a failure is a closed-taxonomy result with a `next` and writes nothing.
+3. **The last-resort `json.dumps(data)` fallback.** If no known key yields a non-empty string the adapter fails with a `next` ("BlueVerse returned a shape this adapter does not recognise"), rather than handing a JSON blob to the §5 gate as if it were copy.
+4. **Tenant identifiers as code defaults.** `space_name` and `flowId` identify the WILL app's own space; MCPForge does not ship them. They come from the overlay, empty until set.
+5. **Unbounded prompt content.** Only the §4 payload is sent.
+
+Remaining unknowns, all small and answerable at first live use: whether the response ever streams, BlueVerse's own rate limits, and which `space_name`/`flowId` MCPForge should use (a space and flow for copy drafting must be created or named by the owner; **that is a human-supplied value**, not something to reuse from the WILL app).
 
 ## 3. (c) Key handling
 
@@ -120,7 +143,7 @@ The feature is **absent, not broken**:
 ## 8. What W0-Q9 builds, in order
 
 1. `AuthoringModel` interface, multi-provider overlay and selection (no silent fallback), the closed `AllowedField` list, the deterministic fake, `applySuggestion` and its refusal test.
-2. `adapters/model/` adapters (`openai-compatible`, `anthropic`; `blueverse` once §2.2 is supplied) behind `SecretStore`; lint rule coverage confirmed.
+2. `adapters/model/` adapters (`openai-compatible`, `anthropic`; `blueverse`, contract in §2.2) behind `SecretStore`; lint rule coverage confirmed.
 3. Overlay block + schema (values only); the "show what will be sent" payload builder with its never-sent list tested.
 4. Gate pipeline (§5 steps 3, 6, 7): token budgets, provenance on the proposal.
 5. Reachable from Build's draft editor and from `/requests` → draft (W0-Q5 provides the request side; if Q5 has not landed, Build only).
@@ -130,7 +153,7 @@ The feature is **absent, not broken**:
 
 | # | Question | Decision |
 |---|---|---|
-| D1 | Default provider and model | **BlueVerse as default, with multi-LLM switching** (§2.1). The BlueVerse API contract is still needed (§2.2) |
+| D1 | Default provider and model | **BlueVerse as default, with multi-LLM switching** (§2.1). BlueVerse contract recorded in §2.2 |
 | D2 | Does non-negotiable 8's four-part test apply to this key? | Yes, out of scope of the four-part test (as recommended); scope and rotation still apply |
 | D3 | May `planTemplate` be drafted by a model? | **Yes**, human-accepted per field |
 | D4 | Default for `personal` / `financial` tools | Agreed (off by default), "but should be there": a per-provider overlay setting that can enable it (§4) |
