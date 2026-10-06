@@ -50,7 +50,9 @@ function idFromYaml(yaml: string): string | undefined {
 async function toDraft(host: DraftHost, proposal: ChangeProposal): Promise<BuildDraft | undefined> {
   const diff = await host.diff(proposal.id);
   if (!diff.ok) return undefined;
-  const path = diff.value.manifest.find((f) => f.path.endsWith('.tool.yaml'))?.path;
+  const path = diff.value.manifest.find(
+    (f) => f.path.endsWith('.tool.yaml') || f.path.endsWith('.server.yaml'),
+  )?.path;
   if (path === undefined) return undefined;
   const text = await host.readFile(proposal.id, path);
   if (!text.ok || text.value === undefined) return undefined;
@@ -59,6 +61,7 @@ async function toDraft(host: DraftHost, proposal: ChangeProposal): Promise<Build
     title: proposal.title,
     branch: proposal.branch,
     state: proposal.state,
+    kind: path.endsWith('.server.yaml') ? 'server' : 'tool',
     toolId: idFromYaml(text.value) ?? proposal.branch.slice(BUILD_BRANCH_PREFIX.length),
     yaml: text.value,
     manifestPath: path,
@@ -70,7 +73,7 @@ const isOpenBuildDraft = (p: ChangeProposal): boolean =>
 
 /**
  * Every open Build draft: a proposal on a `forge/build-*` branch that is a
- * draft or in review and changes a tool manifest. A merged one is not listed:
+ * draft or in review and changes a tool or module-server manifest (W0-Q3). A merged one is not listed:
  * it is on the base branch now, and the Catalog shows it.
  */
 export async function listBuildDrafts(host: DraftHost = serverChangeHost): Promise<DraftListResult> {

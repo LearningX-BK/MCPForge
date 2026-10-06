@@ -12,6 +12,8 @@ export interface BuildDraft {
   readonly title: string;
   readonly branch: string;
   readonly state: ChangeState;
+  /** W0-Q3 — a module-server draft carries its server id here and `kind: 'server'`. */
+  readonly kind?: 'tool' | 'server' | undefined;
   readonly toolId: string;
   /** The ONLY source of truth for this draft. Every pane derives from this text. */
   readonly yaml: string;
