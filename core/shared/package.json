@@ -9,7 +9,8 @@
     "./manifest": "./src/manifest/index.ts",
     "./errors": "./src/errors/index.ts",
     "./tokens": "./src/tokens/index.ts",
-    "./api/v1": "./src/api/v1/index.ts"
+    "./api/v1": "./src/api/v1/index.ts",
+    "./request": "./src/request/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --build --force",

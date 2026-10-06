@@ -6,10 +6,12 @@
 // gateway. Status is DERIVED (./derive-state.ts) except `declined`/`withdrawn`.
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { z } from 'zod';
 
-export const REQUEST_ID_PATTERN = /^req-\d{8}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const TOOL_ID_PATTERN = /^[a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+\.[a-z0-9_]+$/;
+import { requestSchema, type RequestFile } from '@mcpforge/shared/request';
+
+// W0-Q5b: the schema lives in core/shared so `forge validate` checks requests
+// against the same definition this module parses with. Re-exported unchanged.
+export { REQUEST_ID_PATTERN, requestSchema, type RequestFile } from '@mcpforge/shared/request';
 
 export const requestPath = (id: string): string => `requests/${id}.request.yaml`;
 /** The branch a submission lands on. Stable per request. */
@@ -17,61 +19,6 @@ export const requestBranch = (id: string): string => `forge/${id}`;
 /** The branch Build's Save draft uses for a tool id (`draft-editor.tsx`'s `branchFor`). */
 export const draftBranchForTool = (toolId: string): string =>
   `forge/build-${toolId.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
-
-const matchSchema = z.object({ toolId: z.string().min(1), score: z.number() });
-
-export const requestSchema = z.object({
-  apiVersion: z.literal('mcpforge/v1'),
-  kind: z.literal('Request'),
-  id: z.string().regex(REQUEST_ID_PATTERN),
-  /** `Principal.subject`. Never defaulted (non-negotiable 1). */
-  requestedBy: z.string().min(1),
-  requestedAt: z.string().min(1),
-  ask: z.string().min(1),
-  business: z.object({
-    does: z.string().min(1),
-    app: z.string().min(1),
-    module: z.string().min(1),
-    access: z.enum(['read', 'write']),
-    inputs: z.array(z.string()).default([]),
-    goodAnswer: z.string().default(''),
-    whoMayRun: z.string().default(''),
-  }),
-  /** Snapshot at submit time, so a later gate can tell a stale verdict (note §5). */
-  verdictAtSubmit: z.object({
-    tier: z.enum(['exists', 'near_miss', 'new']),
-    indexDigest: z.string().min(1),
-    matches: z.array(matchSchema),
-    decision: z
-      .union([
-        z.object({ kind: z.literal('merge'), into: z.string().min(1) }),
-        z.object({ kind: z.literal('justify'), text: z.string().min(1) }),
-      ])
-      .optional(),
-  }),
-  /** The triager's half. Absent until triage. */
-  governance: z
-    .object({
-      owner: z.string().min(1),
-      steward: z.string().min(1),
-      sensitivity: z.string().min(1),
-      processTag: z.string().default(''),
-      expectedVolume: z.string().default(''),
-      intendedToolId: z.string().regex(TOOL_ID_PATTERN),
-      server: z.string().min(1),
-    })
-    .optional(),
-  /** The only two stored states: they have no other artefact (note §1). */
-  closed: z
-    .object({
-      state: z.enum(['declined', 'withdrawn']),
-      by: z.string().min(1),
-      at: z.string().min(1),
-      reason: z.string().min(1),
-    })
-    .optional(),
-});
-export type RequestFile = z.infer<typeof requestSchema>;
 
 export type ParseResult =
   | { readonly ok: true; readonly request: RequestFile }

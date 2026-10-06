@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { requestSchema as sharedRequestSchema } from '@mcpforge/shared/request';
 import { describe, expect, it } from 'vitest';
 
 import { buildRequestFile, submitRequestInputSchema } from './build-request';
@@ -12,6 +13,7 @@ import {
   parseRequestYaml,
   requestBranch,
   requestPath,
+  requestSchema,
   requestYaml,
   type RequestFile,
 } from './request-file';
@@ -94,6 +96,11 @@ describe('request file', () => {
       NOW,
     );
     expect(r.verdictAtSubmit.decision).toEqual({ kind: 'justify', text: 'different company code' });
+  });
+
+  // W0-Q5b: `forge validate` checks requests against this same object.
+  it('parses with the one shared schema forge validate uses (no fork)', () => {
+    expect(requestSchema).toBe(sharedRequestSchema);
   });
 });
 
