@@ -44,11 +44,11 @@ describe('scaffoldTool', () => {
 
   it('writes: scaffolds a complete writeSafety skeleton with a real dry-run and a reversal class', () => {
     const r = ok({ id: 'jde.ap.supplier_note.create', server: 'jde-fin-ap', write: true, bindingType: 'function' });
-    const ws = (parseYaml(r.yaml) as { writeSafety: Record<string, any> }).writeSafety;
-    expect(ws['dryRun'].strategy).toBe('validate-pair');
-    expect(ws['dryRun'].strategy).not.toBe('none');
-    expect(ws['confirm'].required).toBe(true);
-    expect(ws['reversal'].class).toBe('compensating-tool');
+    const ws = (parseYaml(r.yaml) as { writeSafety: Record<string, Record<string, unknown>> }).writeSafety;
+    expect(ws['dryRun']?.['strategy']).toBe('validate-pair');
+    expect(ws['dryRun']?.['strategy']).not.toBe('none');
+    expect(ws['confirm']?.['required']).toBe(true);
+    expect(ws['reversal']?.['class']).toBe('compensating-tool');
     expect(ws['idempotency']).toBeDefined();
     expect(r.humanFields).toEqual(
       expect.arrayContaining(['writeSafety.confirm.planTemplate', 'writeSafety.reversal.tool']),

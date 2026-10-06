@@ -26,12 +26,10 @@ const fake = (failing: readonly string[], seen: string[][] = []): TestRunner => 
 
 describe('forge test', () => {
   let out: string;
-  let err: string;
   beforeEach(() => {
     out = '';
-    err = '';
     vi.spyOn(process.stdout, 'write').mockImplementation((c: unknown) => ((out += String(c)), true));
-    vi.spyOn(process.stderr, 'write').mockImplementation((c: unknown) => ((err += String(c)), true));
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
   });
   afterEach(() => vi.restoreAllMocks());
 

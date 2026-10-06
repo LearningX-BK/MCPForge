@@ -9,7 +9,7 @@ import * as React from 'react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
-import { changeHostSubmitRequest } from '@/lib/change-host/local-git-actions';
+import { submitRequest } from '@/lib/change-host/submit-request';
 import type { RequestVerdict } from './types';
 
 export interface SubmitRequestFormProps {
@@ -64,7 +64,7 @@ export function SubmitRequestForm({
     setBusy(true);
     try {
       const snapshot = verdictSnapshot(verdict);
-      const result = await changeHostSubmitRequest({
+      const result = await submitRequest({
         ask,
         business: {
           does,
