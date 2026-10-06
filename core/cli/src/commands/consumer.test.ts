@@ -478,7 +478,7 @@ describe('forge consumer issue-credential --method private-key-jwt', () => {
   const CLIENT_SECRET_YAML = WORKED_EXAMPLE_YAML.replace(
     'method: private-key-jwt',
     'method: client-secret',
-  ).replace(/  publicKeys:\n(?: {4}.*\n)+/, '');
+  ).replace(/ {2}publicKeys:\n(?: {4}.*\n)+/, '');
   const args = { target: 'claude-desktop-coe', by: 'u:builder', method: 'private-key-jwt' };
   const run = (root: string, extra: Partial<ConsumerCommandOptions> = {}) => {
     const c = capture();
