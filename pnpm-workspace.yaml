@@ -1,6 +1,8 @@
 packages:
   - "core/*"
   - "adapters/function"
+  # W0-Q9 — the model-assisted authoring adapters (the only place a provider key is dereferenced).
+  - "adapters/model"
   - "adapters/rest"
   - "adapters/vendor"
   - "tools/eslint-rules"
