@@ -207,10 +207,39 @@ describe('W0-E8 case 1 — the gateway is the only door (Wave 0 exit criterion 5
       function: 'tests/policy/escalation.egress-grant.test.ts',
     };
     const adapters = join(repoRoot, 'adapters');
+    // W0-Q9: `adapters/model` is the authoring-model seam (docs/build-plan/
+    // w0-q8-assisted-authoring.md). It is NOT a binding executor: it is never
+    // dispatched by the policy chain, serves no tool call, and has no
+    // `binding*` file. It does make outbound HTTPS calls (to the configured
+    // LLM provider, in authoring only), which is exactly why it is listed here
+    // with a reason and checked below rather than silently skipped.
+    const NOT_BINDING_EXECUTORS: readonly string[] = ['model'];
+    for (const name of NOT_BINDING_EXECUTORS) {
+      const walkNames = (d: string): string[] =>
+        readdirSync(d).flatMap((n) => {
+          const full = join(d, n);
+          if (statSync(full).isDirectory()) {
+            return n === 'node_modules' || n === 'dist' ? [] : walkNames(full);
+          }
+          return [full];
+        });
+      for (const file of walkNames(join(adapters, name))) {
+        expect(file, `adapters/${name} must not hold a binding executor`).not.toMatch(
+          /[\\/]binding[^\\/]*$/,
+        );
+        if (file.endsWith('.ts') && !file.endsWith('.test.ts')) {
+          expect(
+            readFileSync(file, 'utf8'),
+            `adapters/${name} must not touch the execution grant or the policy chain`,
+          ).not.toMatch(/execution-grant|gateway\/policy/);
+        }
+      }
+    }
     const packagesWithCode = readdirSync(adapters).filter((name) => {
       // The Python worker is out of scope: 02 §1.4, it never speaks MCP, never
       // decides policy, and is driven BY the gateway, not around it.
       if (name === 'oracle-worker') return false;
+      if (NOT_BINDING_EXECUTORS.includes(name)) return false;
       const dir = join(adapters, name);
       if (!statSync(dir).isDirectory()) return false;
       let found = false;
