@@ -1,6 +1,6 @@
 # W0-Q8 — Model-assisted authoring: design note
 
-**Status: DRAFT for owner review. No code until this is approved.** W0-Q9 builds exactly what the approved version says and no more.
+**Status: owner decisions D1–D6 recorded 6 Oct 2026 (§9). One input is still missing before W0-Q9 can finish: the BlueVerse API contract (§2.1).** W0-Q9 builds exactly what this note says and no more.
 Drafted 6 Oct 2026 on a Sonnet session although the task is routed to Opus, and it touches four settled commitments. Treat every "recommendation" below as a proposal; the items in §9 are **owner decisions**, not defaults.
 
 Reads: 02 §2, §5.3, §11.5 · 01 §2 · CLAUDE.md §2 (non-negotiables 1, 2, 3, 4, 8), §3.1, §4, §5, §6, §8.
@@ -55,13 +55,25 @@ interface AuthoringModel {
 - It lives in a new package `adapters/model/` so the credential dereference sits inside `adapters/**`, where `SecretStore.get()` is already permitted. Nothing in `core/**` ever sees a key.
 - It returns **text for one named field**, never a patch, never YAML. The caller (the scaffolder-side `applySuggestion`) is the only thing that writes into a draft, and it only writes allow-listed fields (§5).
 - Providers: one real implementation plus a **deterministic fake** used by every test (so the suite needs no network or key).
-- **Default provider and model: owner decision D1.** My recommendation is the Anthropic Messages API with the most capable current model for the copy fields, because it is what this team already builds on; but this note does not hard-code a model id: it is a value in an overlay (§4), never code.
+- **Default provider: BlueVerse (owner decision D1, 6 Oct 2026), with multi-LLM switching.** Several providers can be configured at once, as sign-in providers are (W0-P23); one is the default.
+
+### 2.1 Multi-provider switching
+
+- The overlay lists providers, each with its own `id`, `kind`, `model`, `keyRef` and `allowedSensitivities`, plus `authoring.model.default: blueverse`. Nothing is hard-coded: adding a provider is an overlay entry, and the model id is a value, never code.
+- Selection order: `--provider <id>` / the editor's provider chooser (only providers that are `available`), else the overlay default. **There is no silent fallback to another provider**: if the chosen provider fails, the call fails with a `next` naming the other configured providers. A silent fallback would send the draft to a provider nobody chose, which is a data-egress decision (§4) and the same shape as a service-account fallback.
+- Each provider has its **own** `secretRef` and its own `allowedSensitivities` (so a hosted provider can be barred from `financial` tools while an approved internal one is not).
+- Provenance (§5) records which provider and model produced each accepted field.
+- Provider kinds planned: `blueverse` (default), `anthropic`, and `openai-compatible` (one generic adapter covering any OpenAI-style endpoint, including a local one). All sit behind the same `AuthoringModel` interface and share the fake used by tests.
+
+### 2.2 What is missing: the BlueVerse contract (`needs_human`)
+
+Nothing in this repository describes BlueVerse's API: endpoint, authentication scheme, how a model is selected or listed, request and response shape, and whether it already does the multi-LLM routing itself (in which case the adapter has one provider, and "switching" is BlueVerse's model parameter rather than our provider list). Per CLAUDE.md §8 I am not guessing it. **Needed from you:** BlueVerse's API reference or an example call. W0-Q9 will build the interface, the fake, the multi-provider overlay and the `openai-compatible` and `anthropic` adapters without it, and will leave the `blueverse` adapter as the one named gap until the contract is supplied; it must not be stubbed to look working.
 
 ## 3. (c) Key handling
 
-- The key is a `secretRef://binding/authoring-model/api-key`-style reference (final scope name per 02 §11.5's format `secretRef://<scope>/<subject>/<purpose>`; proposed `secretRef://gateway/authoring-model/api-key`). It lives in the `SecretStore` like any other credential (`forge secrets put`, rotation interval declared and enforced).
+- Each provider's key is a reference per 02 §11.5's format `secretRef://<scope>/<subject>/<purpose>`; proposed `secretRef://gateway/authoring-model-<providerId>/api-key`, one per provider. It lives in the `SecretStore` like any other credential (`forge secrets put`, rotation interval declared and enforced).
 - **Only `adapters/model/**` calls `SecretStore.get()`.** `no-secret-value-escape` already allows `adapters/**`; no new exemption is needed, and none may be added.
-- Does the four-part test of non-negotiable 8 apply? That test governs a credential a *binding* stores to reach a business target. This key reaches a model provider, not a target system, so (a)-(d) do not literally apply. **That is a judgment, not a spec fact**, and I would rather you confirm it than rely on my reading (D2). The conservative alternative is to apply the same scoping anyway: one purpose, one environment, rotation declared.
+- The four-part test of non-negotiable 8 governs a credential a *binding* stores to reach a business target; this key reaches a model provider, so it does not apply literally. **Decided (D2, owner: yes):** the four-part test is out of scope, but each key is still scoped to one purpose and one environment, with its rotation interval declared and enforced.
 - The key never appears in a manifest, overlay, proposal, provenance record, log line or CLI/portal output. Provenance records `provider`, `model` and a request id only.
 - No key configured, or key revoked (`forge secrets revoke`): `available` is false (§7).
 
@@ -73,7 +85,7 @@ Sent for a field suggestion: the tool id; the `app`, `module`, `entity`, `verb`,
 
 **Never sent:** `binding.*` (refs, technology, hosts), `writeSafety` values other than the plan template's own placeholders, `identity.*`, anything under `consumers/`, `overlays/` values, any `secretRef`, audit rows, probe reports, `.mcpforge/`, or any file the model did not need.
 
-- **Sensitivity gate.** A tool with `sensitivity: personal` or `financial` does not call the provider unless the overlay says so explicitly (D4 asks whether that default should be "off" for those two classes; my recommendation: off).
+- **Sensitivity gate (D4: decided, with a caveat).** The default is that a `personal` or `financial` tool does not call a provider unless that provider's `allowedSensitivities` in the overlay includes the class. Owner: "agree, but should be there", read here as *the capability must exist and be configurable*, not be removed. So the gate is a per-provider setting an overlay can open, never a hard block. **If you meant something else by "should be there", say so.**
 - **Overlay control.** The feature is governed by a values-only overlay block (config, not code; `overlay-purity` unaffected): `authoring.model.enabled`, `provider`, `model`, `keyRef`, `allowedSensitivities`. An overlay can turn it off per deployment; the default is **off** everywhere until configured.
 - **Show before send.** The UI and CLI display exactly what will be sent before the first call of a session. A `--dry-run` prints the payload and sends nothing.
 - Egress is recorded **locally** (what field, which provider, request id, byte count) in the proposal's provenance, not the contents.
@@ -107,23 +119,23 @@ The feature is **absent, not broken**:
 
 ## 8. What W0-Q9 builds, in order
 
-1. `AuthoringModel` interface, the closed `AllowedField` list, the deterministic fake, `applySuggestion` and its refusal test.
-2. `adapters/model/` provider (one real) behind `SecretStore`; lint rule coverage confirmed.
+1. `AuthoringModel` interface, multi-provider overlay and selection (no silent fallback), the closed `AllowedField` list, the deterministic fake, `applySuggestion` and its refusal test.
+2. `adapters/model/` adapters (`openai-compatible`, `anthropic`; `blueverse` once §2.2 is supplied) behind `SecretStore`; lint rule coverage confirmed.
 3. Overlay block + schema (values only); the "show what will be sent" payload builder with its never-sent list tested.
 4. Gate pipeline (§5 steps 3, 6, 7): token budgets, provenance on the proposal.
 5. Reachable from Build's draft editor and from `/requests` → draft (W0-Q5 provides the request side; if Q5 has not landed, Build only).
 6. Suggested-intents file and steward promotion (§6).
 
-## 9. Decisions I need from you
+## 9. Decisions (owner, 6 Oct 2026)
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
-| D1 | Default provider and model | Anthropic Messages API; model id lives in an overlay, not in code |
-| D2 | Does non-negotiable 8's four-part test apply to this key, or only the scoping/rotation parts? | Treat as out of scope of the four-part test, but apply scope + rotation anyway; **please confirm** |
-| D3 | Is `planTemplate` allowed on the draft allow-list? | Yes, human-accepted per field; cut it if you disagree |
-| D4 | Default behaviour for `personal` / `financial` tools | Off unless the overlay opts in |
-| D5 | Should eval-intent suggestion exist in Wave 0 at all? | Yes but as a suggestions file only; cut it first if scope tightens |
-| D6 | Is a hosted provider acceptable given data egress, or must the first provider be a local model? | Hosted, off by default, with show-before-send; a local-model provider is the same interface later |
+| D1 | Default provider and model | **BlueVerse as default, with multi-LLM switching** (§2.1). The BlueVerse API contract is still needed (§2.2) |
+| D2 | Does non-negotiable 8's four-part test apply to this key? | Yes, out of scope of the four-part test (as recommended); scope and rotation still apply |
+| D3 | May `planTemplate` be drafted by a model? | **Yes**, human-accepted per field |
+| D4 | Default for `personal` / `financial` tools | Agreed (off by default), "but should be there": a per-provider overlay setting that can enable it (§4) |
+| D5 | Eval-intent suggestion in Wave 0? | **Yes**, as a suggestions file only; first to cut if scope tightens |
+| D6 | Is a hosted provider acceptable given egress? | **Yes**, off until configured, with show-before-send |
 
 ## 10. Not covered, deliberately
 
