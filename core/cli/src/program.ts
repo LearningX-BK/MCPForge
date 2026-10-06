@@ -21,6 +21,8 @@ import { runSecretsCommand } from './commands/secrets.js';
 import { runDevCommand } from './commands/dev.js';
 import { runPackageCommand } from './commands/package.js';
 import { runSliceDiffCommand } from './commands/slice-diff.js';
+import { runNewToolCommand } from './commands/new-tool.js';
+import { runTestCommand } from './commands/test.js';
 
 /**
  * Real (non-stub) command handlers, keyed by their canonical path label
@@ -33,6 +35,16 @@ import { runSliceDiffCommand } from './commands/slice-diff.js';
 const REAL_HANDLERS: Readonly<
   Record<string, (opts: { json: boolean } & Record<string, unknown>) => number | Promise<number>>
 > = {
+  // W0-Q6. Scaffolds a tool manifest from answers into a staged proposal.
+  'new tool': (opts) => runNewToolCommand(opts as never),
+  // W0-Q7. Zero or more tool ids, lifted into `opts.targets`.
+  test: (opts) =>
+    runTestCommand(
+      ((opts['targets'] as unknown[] | undefined) ?? []).flat().filter(
+        (t): t is string => typeof t === 'string',
+      ),
+      opts as never,
+    ),
   ci: runCiCommand,
   codegen: runCodegenCommand,
   validate: runValidateCommand,
@@ -112,6 +124,9 @@ const ARGUMENTS: Readonly<Record<string, PositionalSpec | readonly PositionalSpe
       name: '[callId]',
       description: 'The audit call id of the completed write to construct a reversal for.',
     },
+    // W0-Q7. Variadic: `forge test [<toolId>…]`; unknown ids reach this CLI's own
+    // INPUT_INVALID envelope with a `next`.
+    test: { name: '[toolIds...]', description: 'Tool ids to test. Default: every tool.' },
     kill: {
       name: '<target>',
       description:
@@ -166,6 +181,21 @@ const ARGUMENTS: Readonly<Record<string, PositionalSpec | readonly PositionalSpe
 const EXTRA_OPTIONS: Readonly<
   Record<string, readonly { readonly flags: string; readonly description: string }[]>
 > = {
+  'new tool': [
+    { flags: '--id <toolId>', description: '{app}.{module}.{entity}.{verb} (required); the verb is from the closed list.' },
+    { flags: '--server <id>', description: 'Module server id (manifests/_servers/). Left as a placeholder if omitted.' },
+    { flags: '--binding-type <type>', description: 'rest | database | plsql | function | wrapped-vendor. Default: rest.' },
+    { flags: '--write', description: 'Scaffold a write tool with a complete writeSafety skeleton. Refused with database bindings.' },
+    { flags: '--sensitivity <class>', description: 'public | internal | confidential | financial | personal. Default: internal.' },
+    { flags: '--title <text>', description: 'Human title.' },
+    { flags: '--owner <team>', description: 'Accountable team.' },
+    { flags: '--technology <text>', description: 'Binding technology, e.g. "JDE AIS Orchestration".' },
+    { flags: '--ref <name>', description: 'Allowlisted binding reference.' },
+    { flags: '--answers <file>', description: 'JSON or YAML file of the same answers; flags win.' },
+    { flags: '--by <subject>', description: 'Principal.subject of the requester, recorded in the proposal.' },
+    { flags: '--root <dir>', description: 'Repository root. Default: the enclosing repository.' },
+  ],
+  test: [{ flags: '--root <dir>', description: 'Repository root. Default: the definitions root.' }],
   'audit verify': [
     {
       // Default: every deployment in the store. Single-INSTANCE is not the

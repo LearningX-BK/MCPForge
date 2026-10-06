@@ -8,51 +8,16 @@
 // unblocked review-path state: `plsql`/`function` force standard review, and
 // the starter should not assert an elevated binding nobody chose.
 
+import { scaffoldTool } from '@mcpforge/cli/commands/new-tool-scaffold';
 import type { BuildDraft } from './types';
 
-/** The minimal starter handed to "New draft". */
-export const NEW_DRAFT_TEMPLATE_YAML = `apiVersion: mcpforge/v1
-kind: Tool
-id: app.module.entity.verb
-version: 1.0.0
-server: REPLACE_ME
-title: REPLACE ME
-
-purpose: REPLACE — what this tool does, verb-first, at most 14 words.
-archetype: transactional
-verb: get
-entity: entity
-app: app
-module: module
-functionalArea: REPLACE ME
-sensitivity: internal
-write: false
-
-binding:
-  type: rest
-  technology: REPLACE ME
-  ref: REPLACE_ME
-  identity:
-    carries: unverified
-    probe: MCPFORGE_PROBE_WHOAMI
-    onServiceAccount: block
-    echoOn: never
-
-input: []
-
-output:
-  summaryTemplate: "REPLACE ME"
-  resultKeys: []
-
-governance:
-  reviewPath: standard
-  owner: REPLACE ME
-  steward: <named person, filled at intake>
-
-eval:
-  intentsFile: evals/REPLACE_ME/intents.yaml
-  minIntents: 10
-`;
+/**
+ * The minimal starter handed to "New draft" — the CLI's scaffolder with default answers
+ * (W0-Q6), so `forge new tool` and `/build/new` share ONE template.
+ */
+const starter = scaffoldTool();
+if (!starter.ok) throw new Error(starter.message);
+export const NEW_DRAFT_TEMPLATE_YAML: string = starter.yaml;
 
 /**
  * A fresh, unsaved draft. `branch` is empty: a real branch is assigned only

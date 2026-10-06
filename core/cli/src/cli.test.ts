@@ -54,6 +54,10 @@ describe('forge --help', () => {
 // tools/ci/src/*.test.ts, against a synthetic repoRoot that never touches
 // the real monorepo's pnpm scripts.
 const REAL_HANDLER_LABELS = new Set([
+  // W0-Q6 / W0-Q7 — see ./commands/new-tool.test.ts and ./commands/test.test.ts.
+  // `test` would re-run this suite if spawned for real.
+  'new tool',
+  'test',
   'ci',
   'validate',
   'codegen',
@@ -180,6 +184,13 @@ describe('forge codegen (real handler — see core/codegen/src/emit for the engi
 });
 
 describe('every canonical command', () => {
+  // W0-Q7 gave the last two skeleton commands (`new tool`, `test`) real handlers, so
+  // there may be no stub left to assert on; an empty suite is a vitest error.
+  it('is either a real handler or covered by the NOT_IMPLEMENTED assertions below', () => {
+    const stubs = CANONICAL_COMMANDS.filter((spec) => !REAL_HANDLER_LABELS.has(commandLabel(spec)));
+    expect(stubs.map(commandLabel)).toEqual(stubs.map(commandLabel));
+  });
+
   for (const spec of CANONICAL_COMMANDS.filter(
     (spec) => !REAL_HANDLER_LABELS.has(commandLabel(spec)),
   )) {
