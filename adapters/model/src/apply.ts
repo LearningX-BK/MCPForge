@@ -78,12 +78,14 @@ export function applySuggestion(yamlText: string, target: FieldTarget, text: str
     case 'input.example': {
       const inputs = before['input'];
       const index = Array.isArray(inputs)
-        ? inputs.findIndex((i) => (i as Record<string, unknown> | null)?.['name'] === target.inputName)
+        ? inputs.findIndex(
+            (i) => (i as Record<string, unknown> | null)?.['name'] === target.inputName,
+          )
         : -1;
       if (index < 0) {
         return refuse(
           `The draft has no input named "${String(target.inputName)}".`,
-          'Name one of the draft\'s declared inputs.',
+          "Name one of the draft's declared inputs.",
         );
       }
       path = ['input', index, target.field === 'input.desc' ? 'desc' : 'example'];

@@ -29,8 +29,12 @@ export function recordAcceptance(
   acceptedBy: string,
   acceptedAt: string,
 ): string {
-  const prior = existing === undefined ? undefined : (parseYaml(existing) as { fields?: AcceptedField[] } | null);
-  const key = (f: { field: string; inputName?: string | undefined }): string => `${f.field}#${f.inputName ?? ''}`;
+  const prior =
+    existing === undefined
+      ? undefined
+      : (parseYaml(existing) as { fields?: AcceptedField[] } | null);
+  const key = (f: { field: string; inputName?: string | undefined }): string =>
+    `${f.field}#${f.inputName ?? ''}`;
   const entry: AcceptedField = {
     field: target.field,
     ...(target.inputName === undefined ? {} : { inputName: target.inputName }),
@@ -42,5 +46,8 @@ export function recordAcceptance(
   };
   // Re-accepting a field replaces its entry: the record states who accepted what is there NOW.
   const fields = [...(prior?.fields ?? []).filter((f) => key(f) !== key(entry)), entry];
-  return stringifyYaml({ apiVersion: 'mcpforge/v1', kind: 'AuthoringProvenance', toolId, fields }, { lineWidth: 0 });
+  return stringifyYaml(
+    { apiVersion: 'mcpforge/v1', kind: 'AuthoringProvenance', toolId, fields },
+    { lineWidth: 0 },
+  );
 }

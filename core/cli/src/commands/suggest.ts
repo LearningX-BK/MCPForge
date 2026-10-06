@@ -57,13 +57,23 @@ export interface SuggestDeps {
 
 const USAGE_EXIT_CODE = 64;
 
-function emit(opts: SuggestOptions, payload: Record<string, unknown>, human: string[], stderr = false): void {
+function emit(
+  opts: SuggestOptions,
+  payload: Record<string, unknown>,
+  human: string[],
+  stderr = false,
+): void {
   if (opts.json) process.stdout.write(`${JSON.stringify(payload)}\n`);
   else (stderr ? process.stderr : process.stdout).write(`${human.join('\n')}\n`);
 }
 
 function fail(opts: SuggestOptions, code: string, message: string, next: string): number {
-  emit(opts, { ok: false, code, message, next }, [`forge: suggest — ${message}`, `forge: next — ${next}`], true);
+  emit(
+    opts,
+    { ok: false, code, message, next },
+    [`forge: suggest — ${message}`, `forge: next — ${next}`],
+    true,
+  );
   return USAGE_EXIT_CODE;
 }
 
@@ -103,7 +113,10 @@ export async function runSuggestCommand(
     );
   }
   const definitionsRoot = opts.root !== undefined ? resolve(opts.root) : findDefinitionsRoot();
-  const loaded = loadAuthoringConfig(definitionsRoot, opts.deployment ?? process.env['MCPFORGE_DEPLOYMENT'] ?? 'local');
+  const loaded = loadAuthoringConfig(
+    definitionsRoot,
+    opts.deployment ?? process.env['MCPFORGE_DEPLOYMENT'] ?? 'local',
+  );
   if (!loaded.ok) return fail(opts, 'INPUT_INVALID', loaded.message, loaded.next);
   const config = loaded.config;
   if (!authoringEnabled(config)) {
@@ -134,7 +147,12 @@ export async function runSuggestCommand(
   const baseYaml = readFileSync(existsSync(stagedManifest) ? stagedManifest : abs, 'utf8');
   const doc = parseYaml(baseYaml) as Record<string, unknown> | null;
   if (doc === null || typeof doc !== 'object') {
-    return fail(opts, 'INPUT_INVALID', `${manifest} is not a YAML mapping.`, 'Fix the manifest through a change proposal.');
+    return fail(
+      opts,
+      'INPUT_INVALID',
+      `${manifest} is not a YAML mapping.`,
+      'Fix the manifest through a change proposal.',
+    );
   }
 
   const target: FieldTarget = {
@@ -153,7 +171,14 @@ export async function runSuggestCommand(
     if (!preview.ok) return fail(opts, preview.code, preview.message, preview.next);
     emit(
       opts,
-      { ok: true, dryRun: true, provider: preview.provider, system: preview.system, user: preview.user, sent: false },
+      {
+        ok: true,
+        dryRun: true,
+        provider: preview.provider,
+        system: preview.system,
+        user: preview.user,
+        sent: false,
+      },
       [
         `forge suggest: dry run. Nothing was sent. This is exactly what would go to provider "${preview.provider}":`,
         '--- system ---',
@@ -176,8 +201,14 @@ export async function runSuggestCommand(
   if (opts.accept !== true) {
     emit(
       opts,
-      { ok: true, accepted: false, field: target.field, text: result.text, provenance: result.provenance,
-        next: `This is a suggestion only. Re-run with --accept --by <subject> to stage it, or edit the field by hand.` },
+      {
+        ok: true,
+        accepted: false,
+        field: target.field,
+        text: result.text,
+        provenance: result.provenance,
+        next: `This is a suggestion only. Re-run with --accept --by <subject> to stage it, or edit the field by hand.`,
+      },
       [
         `forge suggest: ${target.field}${target.inputName === undefined ? '' : ` (${target.inputName})`} from ${result.provenance.provider} / ${result.provenance.model}:`,
         result.text,
@@ -188,7 +219,12 @@ export async function runSuggestCommand(
   }
 
   if (opts.by === undefined || opts.by.length === 0) {
-    return fail(opts, 'INPUT_INVALID', '--accept needs --by <subject>.', 'Name the human accepting this field with --by <Principal.subject>. There is no default identity.');
+    return fail(
+      opts,
+      'INPUT_INVALID',
+      '--accept needs --by <subject>.',
+      'Name the human accepting this field with --by <Principal.subject>. There is no default identity.',
+    );
   }
   const applied = applySuggestion(baseYaml, target, result.text);
   if (!applied.ok) return fail(opts, applied.code, applied.message, applied.next);
@@ -199,7 +235,11 @@ export async function runSuggestCommand(
   mkdirSync(dirname(stagedManifest), { recursive: true });
   mkdirSync(dirname(provFile), { recursive: true });
   writeFileSync(stagedManifest, applied.yaml, 'utf8');
-  writeFileSync(provFile, recordAcceptance(provExisting, toolId, target, result.provenance, opts.by, now), 'utf8');
+  writeFileSync(
+    provFile,
+    recordAcceptance(provExisting, toolId, target, result.provenance, opts.by, now),
+    'utf8',
+  );
   writeFileSync(
     join(stagedDir, 'proposal.json'),
     `${JSON.stringify({ proposalId, kind: 'authoring-suggestion', toolId, requestedBy: opts.by, state: 'draft', files: [rel, provenancePath(toolId)] }, null, 2)}\n`,
@@ -207,8 +247,14 @@ export async function runSuggestCommand(
   );
   emit(
     opts,
-    { ok: true, accepted: true, field: target.field, staged: stagedManifest, provenance: provFile,
-      next: `Review the staged manifest, run "forge validate", and apply it in a change proposal. Nothing under manifests/ was written.` },
+    {
+      ok: true,
+      accepted: true,
+      field: target.field,
+      staged: stagedManifest,
+      provenance: provFile,
+      next: `Review the staged manifest, run "forge validate", and apply it in a change proposal. Nothing under manifests/ was written.`,
+    },
     [
       `forge suggest: accepted ${target.field} (nothing was written to manifests/).`,
       `  staged at ${stagedManifest}`,

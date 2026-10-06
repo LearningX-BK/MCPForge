@@ -11,9 +11,19 @@
 import { PARAM_DESC_MAX_WORDS, PURPOSE_MAX_WORDS } from '@mcpforge/codegen/rules';
 
 import { inputsOf, resultKeyNames, type DraftContext } from './payload.js';
-import { failure, type AllowedField, type FieldTarget, type SuggestFailure } from './types.js';
+import {
+  failure,
+  isAllowedField,
+  type AllowedField,
+  type FieldTarget,
+  type SuggestFailure,
+} from './types.js';
 
-const words = (t: string): number => t.trim().split(/\s+/).filter((w) => w.length > 0).length;
+const words = (t: string): number =>
+  t
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0).length;
 
 function refuse(message: string, next: string): SuggestFailure {
   return failure('AUTHORING_GATE_REFUSED', message, next);
@@ -22,7 +32,11 @@ function refuse(message: string, next: string): SuggestFailure {
 /** Models like to wrap a single value in quotes or backticks. Strip one matching layer. */
 function clean(raw: string): string {
   let t = raw.trim();
-  const pairs: [string, string][] = [['"', '"'], ["'", "'"], ['`', '`']];
+  const pairs: [string, string][] = [
+    ['"', '"'],
+    ["'", "'"],
+    ['`', '`'],
+  ];
   for (const [a, b] of pairs) {
     if (t.length >= 2 && t.startsWith(a) && t.endsWith(b)) t = t.slice(1, -1).trim();
   }
@@ -40,6 +54,15 @@ export function checkSuggestion(
   raw: string,
   ctx: DraftContext,
 ): { ok: true; text: string } | SuggestFailure {
+  // The gate is also the last check before acceptance, so it re-checks the allow-list
+  // itself: a field off the list must never fall through to "accepted".
+  if (!isAllowedField(target.field)) {
+    return failure(
+      'AUTHORING_FIELD_NOT_ALLOWED',
+      `"${String(target.field)}" is not a field a model may draft.`,
+      'Write this field by hand.',
+    );
+  }
   const field: AllowedField = target.field;
   const text = clean(raw);
   if (text.length === 0) {
@@ -106,10 +129,16 @@ export function checkSuggestion(
         );
       }
       if (type === 'integer' && !Number.isInteger(Number(text))) {
-        return refuse(`The example "${text}" is not an integer.`, 'Ask again, or type a valid example.');
+        return refuse(
+          `The example "${text}" is not an integer.`,
+          'Ask again, or type a valid example.',
+        );
       }
       if (type === 'boolean' && text !== 'true' && text !== 'false') {
-        return refuse(`The example "${text}" is not true or false.`, 'Ask again, or type a valid example.');
+        return refuse(
+          `The example "${text}" is not true or false.`,
+          'Ask again, or type a valid example.',
+        );
       }
       if (text.length > 80) {
         return refuse('The example is longer than 80 characters.', 'Ask again for a shorter one.');

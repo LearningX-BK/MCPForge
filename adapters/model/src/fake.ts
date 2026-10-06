@@ -22,7 +22,15 @@ export function fakeModel(options: FakeOptions = {}): AuthoringModel {
     async complete(prompt: Prompt): Promise<SuggestResult> {
       options.sent?.push(prompt);
       const text = options.reply?.(prompt) ?? 'Look up AP vouchers by supplier and amount.';
-      return { ok: true, text, provenance: { provider: id, model: 'fake-1', requestId: `fake-${options.sent?.length ?? 0}` } };
+      return {
+        ok: true,
+        text,
+        provenance: {
+          provider: id,
+          model: 'fake-1',
+          requestId: `fake-${options.sent?.length ?? 0}`,
+        },
+      };
     },
   });
 }

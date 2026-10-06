@@ -15,7 +15,13 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { selectProvider, sensitivityAllowed, type AuthoringConfig } from './config.js';
 import { createModel, type ProviderDeps } from './providers.js';
 import type { RequestBusiness } from './payload.js';
-import { failure, type AuthoringModel, type Prompt, type Provenance, type SuggestFailure } from './types.js';
+import {
+  failure,
+  type AuthoringModel,
+  type Prompt,
+  type Provenance,
+  type SuggestFailure,
+} from './types.js';
 
 export interface IntentCandidate {
   readonly utterance: string;
@@ -44,14 +50,21 @@ export function intentsPrompt(i: IntentsInput): Prompt {
   return {
     system:
       'You write realistic questions a business user would type to an assistant. Reply with 10 lines, one question per line, no numbering, no quotes, nothing else.',
-    user: ['Write 10 different ways a user might ask for this capability.', '', ...lines].join('\n'),
+    user: ['Write 10 different ways a user might ask for this capability.', '', ...lines].join(
+      '\n',
+    ),
   };
 }
 
 export function parseCandidates(raw: string, toolId: string): IntentCandidate[] {
   return raw
     .split(/[\r\n]+/)
-    .map((l) => l.replace(/^[-*\d.)\s]+/, '').replace(/^["'`]|["'`]$/g, '').trim())
+    .map((l) =>
+      l
+        .replace(/^[-*\d.)\s]+/, '')
+        .replace(/^["'`]|["'`]$/g, '')
+        .trim(),
+    )
     .filter((l) => l.length > 0 && l.length <= 240)
     .slice(0, 10)
     .map((utterance) => ({ utterance, expectedTool: toolId }));
@@ -78,13 +91,21 @@ export async function suggestIntents(
   if (!r.ok) return r;
   const candidates = parseCandidates(r.text, input.toolId);
   if (candidates.length === 0) {
-    return failure('AUTHORING_RESPONSE_UNRECOGNISED', 'No usable intents were returned.', 'Nothing was written. Ask again, or author the intents by hand.');
+    return failure(
+      'AUTHORING_RESPONSE_UNRECOGNISED',
+      'No usable intents were returned.',
+      'Nothing was written. Ask again, or author the intents by hand.',
+    );
   }
   return { ok: true, candidates, provenance: r.provenance };
 }
 
 /** The file a proposal carries. `.mcpforge/proposals/<id>/suggested-intents.yaml`: never `evals/`. */
-export function suggestedIntentsYaml(toolId: string, candidates: readonly IntentCandidate[], provenance: Provenance): string {
+export function suggestedIntentsYaml(
+  toolId: string,
+  candidates: readonly IntentCandidate[],
+  provenance: Provenance,
+): string {
   return stringifyYaml(
     {
       apiVersion: 'mcpforge/v1',
@@ -99,8 +120,7 @@ export function suggestedIntentsYaml(toolId: string, candidates: readonly Intent
 }
 
 export type PromoteResult =
-  | { ok: true; intentsYaml: string }
-  | { ok: false; message: string; next: string };
+  { ok: true; intentsYaml: string } | { ok: false; message: string; next: string };
 
 /** Append one candidate to an `evals/<server>/intents.yaml` document, as the named steward only. */
 export function promoteIntent(

@@ -36,7 +36,9 @@ const keyRef = z.string().refine(isSecretRef, {
 const common = {
   id: z.string().regex(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/),
   keyRef,
-  allowedSensitivities: z.array(z.enum(SENSITIVITY_CLASSES)).default([...DEFAULT_ALLOWED_SENSITIVITIES]),
+  allowedSensitivities: z
+    .array(z.enum(SENSITIVITY_CLASSES))
+    .default([...DEFAULT_ALLOWED_SENSITIVITIES]),
 };
 
 /** BlueVerse: the model is chosen inside the flow, so there is no `model` (note §2.2). */
@@ -70,7 +72,11 @@ const openaiCompatible = z
   })
   .strict();
 
-export const providerSchema = z.discriminatedUnion('kind', [blueverse, anthropic, openaiCompatible]);
+export const providerSchema = z.discriminatedUnion('kind', [
+  blueverse,
+  anthropic,
+  openaiCompatible,
+]);
 export type ProviderConfig = z.infer<typeof providerSchema>;
 
 export const authoringConfigSchema = z
@@ -124,7 +130,8 @@ export function parseAuthoringConfig(
     const first = r.error.issues[0];
     return {
       ok: false,
-      message: `authoring.yaml is invalid: ${first?.path.join('.') ?? ''} ${first?.message ?? ''}`.trim(),
+      message:
+        `authoring.yaml is invalid: ${first?.path.join('.') ?? ''} ${first?.message ?? ''}`.trim(),
       next: 'Correct overlays/<deployment>/authoring.yaml. A provider key is a keyRef (secretRef://...), never a value; store the key with "forge secrets put".',
     };
   }

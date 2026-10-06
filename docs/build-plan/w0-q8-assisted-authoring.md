@@ -163,3 +163,15 @@ The feature is **absent, not broken**:
 ## 10. Not covered, deliberately
 
 Model-written bindings or wrapped-vendor discovery (that is W0-Q10's Harvest, and needs its own note), fine-tuning, caching or reusing suggestions across tenants, cost budgeting and rate limits, and any model call at **runtime** in the gateway: this feature exists only at authoring time, and the gateway never calls a model.
+
+## 11. Implementation notes (W0-Q9, 6 Oct 2026)
+
+Decisions the build made where this note was silent or slightly off. None reverses a decision above.
+
+1. **`errors.next` is not on the allow-list.** §1 listed error-map `next` copy, but the tool manifest has no error-map field (`core/shared/src/manifest/tool.ts`), so there is nowhere to write it. The list is the other seven fields. If an error map joins the manifest, extending the list is a deliberate, tested change.
+2. **Provenance sidecar path: `provenance/<toolId>.authoring.yaml`.** §5 step 7 said "the proposal's metadata, not the manifest" without naming a file. A new top-level `provenance/` directory (added to the change host's definitional prefixes) is outside the trees `forge codegen` and `forge validate` read, so it needs no schema change and cannot be mistaken for a manifest. It records provider, model, request id and the acceptor (the signed-in `Principal.subject`, stamped server-side), never a prompt, response or key.
+3. **Codegen token budgets are enforced at merge, not at suggestion time.** Card, resident and describe budgets are measured on a built tool. The gate checks what is checkable per field (the same word-limit constants `forge validate` uses, sibling references, declared placeholders, a stated consequence, one-value-only), and `forge codegen` / `forge validate` in the merge check enforce the token budgets on the proposal. A suggestion that busts one fails the merge; it is not silently trimmed.
+4. **The CLI is `forge suggest <manifest> --field <f>`** (not flags on `forge new tool`): suggestion only by default, `--dry-run` prints exactly what would be sent, `--accept --by <subject>` stages one field and its provenance under `.mcpforge/proposals/`. It prints one "not configured" line, exit 64, when no overlay enables the feature.
+5. **Overlay location: `overlays/<deployment>/authoring.yaml`** (`kind: AuthoringModels`). `.strict()` rejects any `apiKey`/`token` field, and `keyRef` must parse as a `secretRef://`. A broken overlay is treated as not configured in the portal (never half-on).
+6. **`AuthoringModel` gained `complete(prompt)`** beside `suggest(request)`: `suggest` is a completion of the rendered request, and eval-intent suggestion is a separate `complete` call whose prompt is built from the tool's identity and the request's words only, never the draft's copy (§6).
+7. **BlueVerse:** adapter built to the §2.2 contract; `spaceName` and `flowId` are empty until the owner supplies them, and a BlueVerse provider without them reports itself unavailable rather than guessing. No live call has been made.

@@ -18,6 +18,7 @@ import { GuidedForm } from './guided-form';
 import { PreviewPane } from './preview-pane';
 import { ChecksPane } from './checks-pane';
 import { SandboxRun } from './sandbox-run';
+import { SuggestPanel, type SuggestPanelProps } from './suggest-panel';
 import { Button } from '@/components/ui/button';
 import { ProposeButton, ReviewActions } from '@/components/change';
 import { useOptionalChangeHost, type ChangeHost, type ChangeProposal } from '@/lib/change-host';
@@ -28,6 +29,8 @@ export interface DraftEditorProps {
   readonly draft: BuildDraft;
   /** Overrides the context host — the only injection point tests need. */
   readonly host?: ChangeHost | undefined;
+  /** The linked intake request's business half (`/build/new?request=<id>`), for suggestions. */
+  readonly request?: SuggestPanelProps['request'];
 }
 
 /** `forge/build-<slug>` — the branch a draft's Save draft lands on. Stable
@@ -46,12 +49,14 @@ function manifestPathFor(toolId: string): string {
   return `manifests/${app}/${module_}/${entity}.${verb}.tool.yaml`;
 }
 
-export function DraftEditor({ draft, host }: DraftEditorProps): React.ReactElement {
+export function DraftEditor({ draft, host, request }: DraftEditorProps): React.ReactElement {
   const contextHost = useOptionalChangeHost();
   const activeHost = host ?? contextHost;
 
   const [yamlText, setYamlText] = React.useState(draft.yaml);
   const [guidedFormOpen, setGuidedFormOpen] = React.useState(false);
+  // W0-Q9: provenance for model-drafted fields the person accepted; rides Save draft.
+  const [provenance, setProvenance] = React.useState<{ path: string; yaml: string } | undefined>(undefined);
   const [proposal, setProposal] = React.useState<ChangeProposal | undefined>(undefined);
   const [saveError, setSaveError] = React.useState<
     { message: string; next: string } | undefined
@@ -87,7 +92,10 @@ export function DraftEditor({ draft, host }: DraftEditorProps): React.ReactEleme
       const saved = await activeHost.saveDraft({
         title: `${previews.toolView.id}: manifest draft`,
         branch: branchFor({ ...draft, toolId: previews.toolView.id }),
-        files: { [liveManifestPath]: yamlText },
+        files: {
+          [liveManifestPath]: yamlText,
+          ...(provenance === undefined ? {} : { [provenance.path]: provenance.yaml }),
+        },
       });
       setProposal(saved);
     } catch (caught) {
@@ -138,6 +146,14 @@ export function DraftEditor({ draft, host }: DraftEditorProps): React.ReactEleme
           />
         </div>
       </div>
+
+      <SuggestPanel
+        yamlText={yamlText}
+        onYamlChange={setYamlText}
+        provenanceYaml={provenance?.yaml}
+        onProvenance={(path, yaml) => setProvenance({ path, yaml })}
+        {...(request === undefined ? {} : { request })}
+      />
 
       <div className="rounded-lg border border-line bg-bg-surface">
         <h2 className="px-3 pt-3 text-[12px] font-semibold uppercase tracking-[0.4px] text-text-2">Sandbox run</h2>

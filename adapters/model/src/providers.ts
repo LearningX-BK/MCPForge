@@ -142,13 +142,18 @@ export function extractBlueVerseText(data: unknown): string | undefined {
   }
   const choices = d['choices'];
   if (Array.isArray(choices)) {
-    const content = (choices[0] as { message?: { content?: unknown } } | undefined)?.message?.content;
+    const content = (choices[0] as { message?: { content?: unknown } } | undefined)?.message
+      ?.content;
     return nonEmpty(content);
   }
   return undefined;
 }
 
-function blueverse(provider: Extract<ProviderConfig, { kind: 'blueverse' }>, deps: ProviderDeps, present: boolean): CompleteModel {
+function blueverse(
+  provider: Extract<ProviderConfig, { kind: 'blueverse' }>,
+  deps: ProviderDeps,
+  present: boolean,
+): CompleteModel {
   const configured = provider.spaceName.length > 0 && provider.flowId.length > 0;
   return {
     id: provider.id,
@@ -182,7 +187,15 @@ function blueverse(provider: Extract<ProviderConfig, { kind: 'blueverse' }>, dep
         );
       }
       // BlueVerse selects the model inside the flow, so the model is the flow.
-      return { ok: true, text, provenance: { provider: provider.id, model: `flow:${provider.flowId}`, requestId: requestId(deps) } };
+      return {
+        ok: true,
+        text,
+        provenance: {
+          provider: provider.id,
+          model: `flow:${provider.flowId}`,
+          requestId: requestId(deps),
+        },
+      };
     },
   };
 }
@@ -191,7 +204,11 @@ function blueverse(provider: Extract<ProviderConfig, { kind: 'blueverse' }>, dep
 // Anthropic
 // ---------------------------------------------------------------------------
 
-function anthropic(provider: Extract<ProviderConfig, { kind: 'anthropic' }>, deps: ProviderDeps, present: boolean): CompleteModel {
+function anthropic(
+  provider: Extract<ProviderConfig, { kind: 'anthropic' }>,
+  deps: ProviderDeps,
+  present: boolean,
+): CompleteModel {
   return {
     id: provider.id,
     available: present,
@@ -204,10 +221,16 @@ function anthropic(provider: Extract<ProviderConfig, { kind: 'anthropic' }>, dep
         deps,
         provider.baseUrl,
         { 'x-api-key': key.key, 'anthropic-version': '2023-06-01' },
-        { model: provider.model, max_tokens: 512, system, messages: [{ role: 'user', content: user }] },
+        {
+          model: provider.model,
+          max_tokens: 512,
+          system,
+          messages: [{ role: 'user', content: user }],
+        },
       );
       if (!sent.ok) return sent;
-      const content = (sent.json as { content?: { type?: string; text?: unknown }[] } | undefined)?.content;
+      const content = (sent.json as { content?: { type?: string; text?: unknown }[] } | undefined)
+        ?.content;
       const text = nonEmpty(content?.find((c) => c.type === 'text' || c.type === undefined)?.text);
       if (text === undefined) {
         return failure(
@@ -216,7 +239,11 @@ function anthropic(provider: Extract<ProviderConfig, { kind: 'anthropic' }>, dep
           'Nothing was written. Try again, or choose another provider with --provider.',
         );
       }
-      return { ok: true, text, provenance: { provider: provider.id, model: provider.model, requestId: requestId(deps) } };
+      return {
+        ok: true,
+        text,
+        provenance: { provider: provider.id, model: provider.model, requestId: requestId(deps) },
+      };
     },
   };
 }
@@ -225,7 +252,11 @@ function anthropic(provider: Extract<ProviderConfig, { kind: 'anthropic' }>, dep
 // OpenAI-compatible
 // ---------------------------------------------------------------------------
 
-function openaiCompatible(provider: Extract<ProviderConfig, { kind: 'openai-compatible' }>, deps: ProviderDeps, present: boolean): CompleteModel {
+function openaiCompatible(
+  provider: Extract<ProviderConfig, { kind: 'openai-compatible' }>,
+  deps: ProviderDeps,
+  present: boolean,
+): CompleteModel {
   const url = provider.baseUrl.includes('completions')
     ? provider.baseUrl
     : `${provider.baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
@@ -260,7 +291,11 @@ function openaiCompatible(provider: Extract<ProviderConfig, { kind: 'openai-comp
           'Nothing was written. Check the endpoint is OpenAI-compatible, or choose another provider with --provider.',
         );
       }
-      return { ok: true, text, provenance: { provider: provider.id, model: provider.model, requestId: requestId(deps) } };
+      return {
+        ok: true,
+        text,
+        provenance: { provider: provider.id, model: provider.model, requestId: requestId(deps) },
+      };
     },
   };
 }
@@ -269,7 +304,10 @@ function openaiCompatible(provider: Extract<ProviderConfig, { kind: 'openai-comp
 type CompleteModel = Pick<AuthoringModel, 'id' | 'available' | 'complete'>;
 
 /** Build the adapter for one overlay entry. `available` is false when its key is not in the store. */
-export async function createModel(provider: ProviderConfig, deps: ProviderDeps): Promise<AuthoringModel> {
+export async function createModel(
+  provider: ProviderConfig,
+  deps: ProviderDeps,
+): Promise<AuthoringModel> {
   const present = await keyPresent(provider, deps.secrets);
   const low: CompleteModel =
     provider.kind === 'blueverse'

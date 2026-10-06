@@ -8,11 +8,7 @@
 // (`applySuggestion`), and the acceptance is what is recorded in provenance
 // (./provenance.ts). There is no "accept all".
 
-import {
-  selectProvider,
-  sensitivityAllowed,
-  type AuthoringConfig,
-} from './config.js';
+import { selectProvider, sensitivityAllowed, type AuthoringConfig } from './config.js';
 import { checkSuggestion } from './gate.js';
 import { buildSuggestRequest, renderPrompt, type DraftContext } from './payload.js';
 import { createModel, type ProviderDeps } from './providers.js';
@@ -48,7 +44,9 @@ export function authoringEnabled(config: AuthoringConfig): boolean {
 /** §4 "show before send": exactly what would leave the machine, and nothing is sent. */
 export function previewPayload(
   input: SuggestInput,
-): { ok: true; provider: string; system: string; user: string; request: SuggestRequest } | SuggestFailure {
+):
+  | { ok: true; provider: string; system: string; user: string; request: SuggestRequest }
+  | SuggestFailure {
   const picked = selectProvider(input.config, input.providerId);
   if (!picked.ok) return picked;
   const built = buildSuggestRequest(input.target, input.draft);
@@ -70,7 +68,10 @@ export async function suggestField(
   const built = buildSuggestRequest(input.target, input.draft);
   if (!built.ok) return built;
 
-  const sensitivity = typeof input.draft.doc['sensitivity'] === 'string' ? input.draft.doc['sensitivity'] : 'internal';
+  const sensitivity =
+    typeof input.draft.doc['sensitivity'] === 'string'
+      ? input.draft.doc['sensitivity']
+      : 'internal';
   const blocked = sensitivityAllowed(picked.provider, sensitivity);
   if (blocked !== undefined) return blocked;
 

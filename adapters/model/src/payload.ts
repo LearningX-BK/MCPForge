@@ -53,7 +53,8 @@ export interface DraftContext {
   readonly request?: RequestBusiness;
 }
 
-const str = (v: unknown): string | undefined => (typeof v === 'string' && v.length > 0 ? v : undefined);
+const str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.length > 0 ? v : undefined;
 const rec = (v: unknown): Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
@@ -87,7 +88,8 @@ function constraintFor(target: FieldTarget, ctx: DraftContext): FieldConstraint 
     case 'aliases':
       return {
         maxItems: 8,
-        description: 'Up to 8 short alternative phrases a business user might say, one per line, no numbering.',
+        description:
+          'Up to 8 short alternative phrases a business user might say, one per line, no numbering.',
       };
     case 'input.desc':
       return {
@@ -167,7 +169,7 @@ export function buildSuggestRequest(
       return failure(
         'AUTHORING_FIELD_NOT_ALLOWED',
         `${target.field} needs the name of an existing input; "${String(target.inputName)}" is not one.`,
-        'Name one of the draft\'s declared inputs.',
+        "Name one of the draft's declared inputs.",
       );
     }
     context['targetInput'] = [str(found['name']), str(found['type']), str(found['format'])]
@@ -187,6 +189,12 @@ export function renderPrompt(request: SuggestRequest): { system: string; user: s
       ? request.target.field
       : `${request.target.field} (parameter "${request.target.inputName}")`;
   const ctxLines = Object.entries(request.context).map(([k, v]) => `${k}: ${v}`);
-  const user = [`Field: ${target}`, `Requirement: ${request.constraint.description}`, '', 'Context:', ...ctxLines].join('\n');
+  const user = [
+    `Field: ${target}`,
+    `Requirement: ${request.constraint.description}`,
+    '',
+    'Context:',
+    ...ctxLines,
+  ].join('\n');
   return { system, user };
 }
