@@ -78,10 +78,12 @@ beforeEach(async () => {
   dbFile = path.join(tempDir, 'runtime.db');
   store = await openRuntimeStore({ kind: 'sqlite', file: dbFile });
 
+  // Timestamps are relative to now: the reversal window is judged against the
+  // real clock, so fixed dates rot into `window_expired`.
   // A completed write, with the reversal contract and the business keys frozen
   // into it exactly as the write dispatcher freezes them at execute time.
   const write = await store.audit.append({
-    ts: '2026-09-03T12:00:00.000Z',
+    ts: new Date(Date.now() - 60_000).toISOString(),
     callerSubject: 'bikash',
     consumerId: 'portal-local',
     humanInTheLoop: true,
@@ -101,7 +103,7 @@ beforeEach(async () => {
   writeCallId = write.id;
 
   const read = await store.audit.append({
-    ts: '2026-09-03T12:01:00.000Z',
+    ts: new Date(Date.now() - 30_000).toISOString(),
     callerSubject: 'bikash',
     consumerId: 'portal-local',
     humanInTheLoop: true,

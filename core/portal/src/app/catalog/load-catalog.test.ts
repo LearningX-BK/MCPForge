@@ -108,25 +108,24 @@ describe('loadCatalogData — git + /api/v1', () => {
 });
 
 describe('loadToolConsumption — /api/v1/calls', () => {
-  const call = (id: string, ts: string, consumerId: string) =>
-    ({
-      id,
-      ts,
-      callerSubject: 'local:x',
-      callerDisplay: null,
-      consumerId,
-      toolId: 'jde.ap.voucher.create',
-      verb: 'create',
-      isWrite: true,
-      phase: 'execute',
-      outcome: 'ok',
-      targetEnv: null,
-      latencyMsTotal: null,
-      resultKeys: [],
-      reversesCallId: null,
-      reversedByCallId: null,
-      deploymentId: 'local',
-    }) as const;
+  const call = (id: string, ts: string, consumerId: string): CallsPage['items'][number] => ({
+    id,
+    ts,
+    callerSubject: 'local:x',
+    callerDisplay: null,
+    consumerId,
+    toolId: 'jde.ap.voucher.create',
+    verb: 'create',
+    isWrite: true,
+    phase: 'execute',
+    outcome: 'ok',
+    targetEnv: null,
+    latencyMsTotal: null,
+    resultKeys: [],
+    reversesCallId: null,
+    reversedByCallId: null,
+    deploymentId: 'local',
+  });
 
   function pages(...items: (readonly ReturnType<typeof call>[])[]) {
     let i = 0;

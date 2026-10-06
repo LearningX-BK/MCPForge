@@ -117,11 +117,7 @@ async function adminToken(baseUrl: string): Promise<string> {
 }
 
 function admin(baseUrl: string, token: string) {
-  return async function call(
-    method: string,
-    path: string,
-    payload?: unknown,
-  ): Promise<Response> {
+  return async function call(method: string, path: string, payload?: unknown): Promise<Response> {
     return fetch(`${baseUrl}/admin${path}`, {
       method,
       headers: {
@@ -180,7 +176,10 @@ function amrMapper(): Record<string, unknown> {
   };
 }
 
-function publicClient(clientId: string, mappers: Record<string, unknown>[]): Record<string, unknown> {
+function publicClient(
+  clientId: string,
+  mappers: Record<string, unknown>[],
+): Record<string, unknown> {
   return {
     clientId,
     enabled: true,
@@ -205,7 +204,10 @@ function publicClient(clientId: string, mappers: Record<string, unknown>[]): Rec
 /**
  * Create both realms, both clients, the groups and the users. Idempotent.
  */
-export async function configureKeycloak(baseUrl: string, resource: string): Promise<KeycloakFixture> {
+export async function configureKeycloak(
+  baseUrl: string,
+  resource: string,
+): Promise<KeycloakFixture> {
   const token = await adminToken(baseUrl);
   const call = admin(baseUrl, token);
 
@@ -215,6 +217,40 @@ export async function configureKeycloak(baseUrl: string, resource: string): Prom
     'create foreign realm',
   );
 
+  // Keycloak 26's default user profile REQUIRES email, first and last name, and
+  // refuses a password grant for a user without them ("Account is not fully set
+  // up"). The `nameless` user exists to produce a token with no `name` claim, and
+  // the foreign user has no email, so in both realms only the username is required.
+  for (const realm of [REALM, FOREIGN_REALM]) {
+    await expectOk(
+      await call('PUT', `/realms/${realm}/users/profile`, {
+        attributes: [
+          {
+            name: 'username',
+            displayName: 'Username',
+            permissions: { view: ['admin', 'user'], edit: ['admin', 'user'] },
+          },
+          {
+            name: 'email',
+            displayName: 'Email',
+            validations: { email: {} },
+            permissions: { view: ['admin', 'user'], edit: ['admin', 'user'] },
+          },
+          {
+            name: 'firstName',
+            displayName: 'First name',
+            permissions: { view: ['admin', 'user'], edit: ['admin', 'user'] },
+          },
+          {
+            name: 'lastName',
+            displayName: 'Last name',
+            permissions: { view: ['admin', 'user'], edit: ['admin', 'user'] },
+          },
+        ],
+      }),
+      `relax user profile (${realm})`,
+    );
+  }
   await expectOk(
     await call(
       'POST',
