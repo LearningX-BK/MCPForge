@@ -227,4 +227,37 @@ describe('local-git-actions — the one real ChangeHost composition', () => {
     viewerState.current = signedIn('local:priya');
     expect((await changeHostDiscard(draft.value.id)).ok).toBe(true);
   });
+
+  it('W0-Q5: submitting a request files it under requests/ on its own branch, stamped with the signed-in subject, and refuses nobody', async () => {
+    const { changeHostSubmitRequest } = await import('./local-git-actions');
+    const input = {
+      ask: 'schedule robot firmware windows',
+      business: { does: 'schedule it', app: 'plant', module: 'maint', access: 'read' as const },
+      verdict: { tier: 'new' as const, matches: [] },
+      indexDigest: 'sha256:abc',
+      // a smuggled requester must never be read
+      requestedBy: 'mallory',
+    };
+    const done = await changeHostSubmitRequest(input as never);
+    expect(done.ok).toBe(true);
+    if (!done.ok) return;
+    expect(done.value.branch).toMatch(/^forge\/req-\d{8}-schedule-robot-firmware-windows$/);
+    const sandbox = path.join(fixtureRoot, '.mcpforge', 'change-host-sandbox');
+    const id = done.value.branch.replace('forge/', '');
+    const file = git(sandbox, ['show', `${done.value.branch}:requests/${id}.request.yaml`]);
+    expect(file).toContain('requestedBy: local:priya');
+    expect(file).not.toContain('mallory');
+    // proposed, never written to the default branch
+    expect(() => git(sandbox, ['show', `main:requests/${id}.request.yaml`])).toThrow();
+
+    viewerState.current = null;
+    expect(await changeHostSubmitRequest(input as never)).toMatchObject({
+      ok: false,
+      code: 'CHANGE_SIGN_IN_REQUIRED',
+    });
+    viewerState.current = signedIn('local:priya');
+    expect(
+      await changeHostSubmitRequest({ ...input, business: { ...input.business, does: '' } } as never),
+    ).toMatchObject({ ok: false });
+  });
 });

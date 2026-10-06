@@ -302,6 +302,8 @@ export const DEFINITIONAL_PREFIXES = [
   'evals/',
   'approvals/',
   'generated/',
+  // W0-Q5: a tracked intake request. Grants nothing; see w0-q4-intake-requests.md.
+  'requests/',
 ] as const;
 
 /** A repo-relative path under a definitional tree, with no traversal. */
