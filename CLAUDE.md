@@ -127,6 +127,8 @@ MCPForge/
 
 **Commits.** One task, one branch `forge/<taskId>-<slug>`, one proposal. The message names the task id and the exit criterion it serves. Small and reviewable beats complete and unreadable — the whole point of committing `generated/` is that a reviewer can see the blast radius.
 
+**Remote / cloud sessions.** An agent running in a cloud session pushes its `forge/<taskId>-<slug>` branch and **never merges to `main`**; the owner merges after running the Docker-dependent legs (Keycloak, Postgres) locally. Say which test legs could not run in your environment. Mark the task `[x]` with a result note in `TASKS.md` on the task branch, then stop. Open tasks are whatever `TASKS.md` shows as `[ ]` — never trust a remembered queue.
+
 **Never mark a CI gate "allowed to fail."** The gates that exist are the goals made real: regen-diff, privilege-escalation, token budget, discovery benchmark, slice-diff, and the five accessibility gates.
 
 ---
