@@ -119,8 +119,12 @@ describe('ServersView', () => {
     const card = screen.getByTestId('server-jde-fin-ap');
     expect(within(card).getByText('A — in-process')).toBeTruthy();
     expect(within(card).getByText('1.4.0')).toBeTruthy();
-    const link = within(card).getByRole('link');
+    const link = within(card).getByRole('link', { name: /open in Catalog/ });
     expect(link.getAttribute('href')).toBe('/catalog?server=jde-fin-ap');
+    // W0-Q2: the id opens the server's own detail page.
+    expect(within(card).getByTestId('server-detail-link-jde-fin-ap').getAttribute('href')).toBe(
+      '/catalog/servers/jde-fin-ap',
+    );
     expect(catalogLinkFor('jde-fin-ap')).toBe('/catalog?server=jde-fin-ap');
     expect(within(card).getByText('Not killed')).toBeTruthy();
   });
