@@ -46,6 +46,7 @@ import { confirmTokenHash } from '../../policy/idempotency/audit-row.js';
 import type { AppendAuditCallInput } from '../../store/audit/types.js';
 import type { RuntimeStore } from '../../store/repository.js';
 import type { ApprovalRequest } from '../../store/runtime/types.js';
+import { holdsQualifiedGroup } from '../../identity/subject.js';
 import { verifiedPlanBody } from './plan-body.js';
 import { ApiRefusal } from './refusal.js';
 
@@ -266,10 +267,13 @@ export async function decideApproval(
   }
 }
 
-/** W0-P32 — the actor holds a `superAdmins:` group. Groups come from the verified principal. */
+/**
+ * W0-P32 — the actor holds a `superAdmins:` group. Groups come from the
+ * verified principal; W0-P23: they count only under the actor's own provider
+ * (`superAdminGroups` are `<providerId>:<group>`).
+ */
 function isSuperAdminActor(deps: ApprovalDecisionDeps, actor: DecisionActor): boolean {
-  const admins = deps.superAdminGroups ?? [];
-  return actor.session.principal.groups.some((g) => admins.includes(g));
+  return holdsQualifiedGroup(actor.session.principal, deps.superAdminGroups ?? []);
 }
 
 // --- audit rows ------------------------------------------------------------------

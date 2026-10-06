@@ -42,8 +42,9 @@ apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  finance-ap-clerks:
-    roles: [p2p-ap-clerk]
+  local:
+    finance-ap-clerks:
+      roles: [p2p-ap-clerk]
 subjectOverrides:
   local:jdoe:
     roles: [p2p-admin]

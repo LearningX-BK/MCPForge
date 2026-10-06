@@ -107,6 +107,7 @@ function discoveryUrl(): string {
 
 async function provider(overrides: { readonly jwksCooldownMs?: number } = {}) {
   return oidcIdentityProvider({
+    providerId: 'kc',
     issuer,
     audience: AUDIENCE,
     discoveryUrl: discoveryUrl(),
@@ -122,7 +123,7 @@ async function tokenFrom(
 ): Promise<string> {
   const seconds = Math.floor(Date.now() / 1000);
   return new SignJWT({
-    sub: 'kc:00000000-0000-4000-8000-000000000001',
+    sub: '00000000-0000-4000-8000-000000000001',
     name: 'Alice Okonkwo',
     email: 'alice.okonkwo@example.invalid',
     groups: ['ap-clerks'],

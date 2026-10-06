@@ -45,6 +45,7 @@ import {
 import type { EstablishedSession } from '../../assembly/session.js';
 import type { AppendAuditCallInput, AuditCallRecord } from '../../store/audit/types.js';
 import type { RuntimeStore } from '../../store/repository.js';
+import { holdsQualifiedGroup } from '../../identity/subject.js';
 import { ApiRefusal } from './refusal.js';
 
 /** The tool id a `probe` audit row names: a probe run touches every tool, not one. */
@@ -141,8 +142,8 @@ export async function runPortalProbe(
   }
 
   // 2. The human half.
-  const groups = actor.session.principal.groups;
-  if (!groups.some((g) => deps.superAdminGroups.includes(g))) {
+  // W0-P23: `<providerId>:<group>`, held only under the actor's own provider.
+  if (!holdsQualifiedGroup(actor.session.principal, deps.superAdminGroups)) {
     await appendRow(
       deps,
       refusedRow(deps, actor, 'probe.not_super_admin', 'TOOL_NOT_IN_SCOPE', {

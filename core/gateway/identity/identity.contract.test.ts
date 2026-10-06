@@ -110,7 +110,12 @@ interface IdentityLeg {
  */
 function tamper(token: string): string {
   const [header, payload, signature] = token.split('.');
-  if (header === undefined || payload === undefined || signature === undefined || signature.length === 0) {
+  if (
+    header === undefined ||
+    payload === undefined ||
+    signature === undefined ||
+    signature.length === 0
+  ) {
     throw new Error('Expected a three-part compact JWS to tamper with.');
   }
   const first = signature.slice(0, 1);
@@ -247,7 +252,8 @@ const localLeg: IdentityLeg = {
 // ---------------------------------------------------------------------------
 
 const keycloakUrl = process.env['MCPFORGE_TEST_KEYCLOAK_URL'];
-const keycloakResource = process.env['MCPFORGE_TEST_KEYCLOAK_RESOURCE'] ?? 'https://mcpforge.local/mcp';
+const keycloakResource =
+  process.env['MCPFORGE_TEST_KEYCLOAK_RESOURCE'] ?? 'https://mcpforge.local/mcp';
 
 const oidcLeg: IdentityLeg = {
   name: 'OidcProvider (Keycloak)',
@@ -262,6 +268,7 @@ const oidcLeg: IdentityLeg = {
 
     function providerWith(now: () => Date): IdentityProvider {
       return oidcIdentityProviderFrom(discovery, {
+        providerId: 'keycloak',
         issuer,
         audience: keycloakResource,
         discoveryUrl: `${issuer}/.well-known/openid-configuration`,

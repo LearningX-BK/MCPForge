@@ -102,7 +102,8 @@ function checkDeclaredKeys(doc: Record<string, unknown>): string | null {
   if (kind === 'Caps') {
     const allowedTop = new Set(['apiVersion', 'kind', 'deployment', 'caps']);
     for (const key of Object.keys(doc)) {
-      if (!allowedTop.has(key)) return `top-level key "${key}" is not part of the Caps overlay schema`;
+      if (!allowedTop.has(key))
+        return `top-level key "${key}" is not part of the Caps overlay schema`;
     }
     const caps = doc['caps'];
     if (caps !== undefined) {
@@ -136,21 +137,100 @@ function checkDeclaredKeys(doc: Record<string, unknown>): string | null {
       if (!allowedTop.has(key))
         return `top-level key "${key}" is not part of the GroupRoleMapping overlay schema`;
     }
-    for (const section of ['groups', 'subjectOverrides'] as const) {
-      const value = doc[section];
-      if (value === undefined) continue;
-      if (!isRecord(value)) return `"${section}" must be a mapping`;
-      for (const [entryKey, entry] of Object.entries(value)) {
-        if (!isRecord(entry) || !Array.isArray(entry['roles'])) {
-          return `${section}.${entryKey} must be { roles: [...] } — no other key is declared`;
+    // W0-P23: `groups` is keyed by provider id, then group; `subjectOverrides`
+    // is keyed by (issuer-qualified) subject. The reader validates the rest.
+    const groups = doc['groups'];
+    if (groups !== undefined) {
+      if (!isRecord(groups))
+        return '"groups" must be a mapping of provider id -> group -> { roles }';
+      for (const [providerId, byGroup] of Object.entries(groups)) {
+        if (!isRecord(byGroup)) {
+          return `groups.${providerId} must be a mapping of group -> { roles: [...] } — since W0-P23 "groups" is keyed by provider id first`;
         }
-        for (const entryOwnKey of Object.keys(entry)) {
-          if (entryOwnKey !== 'roles')
-            return `${section}.${entryKey}.${entryOwnKey} is not part of the GroupRoleMapping overlay schema`;
+        for (const [group, entry] of Object.entries(byGroup)) {
+          const bad = checkRolesEntry(`groups.${providerId}.${group}`, entry);
+          if (bad !== null) return bad;
         }
       }
     }
+    const overrides = doc['subjectOverrides'];
+    if (overrides !== undefined) {
+      if (!isRecord(overrides)) return '"subjectOverrides" must be a mapping';
+      for (const [subject, entry] of Object.entries(overrides)) {
+        const bad = checkRolesEntry(`subjectOverrides.${subject}`, entry);
+        if (bad !== null) return bad;
+      }
+    }
     return null;
+  }
+  if (kind === 'Identity') return checkIdentityKeys(doc);
+  return null;
+}
+
+function checkRolesEntry(where: string, entry: unknown): string | null {
+  if (!isRecord(entry) || !Array.isArray(entry['roles'])) {
+    return `${where} must be { roles: [...] } — no other key is declared`;
+  }
+  for (const key of Object.keys(entry)) {
+    if (key !== 'roles')
+      return `${where}.${key} is not part of the GroupRoleMapping overlay schema`;
+  }
+  return null;
+}
+
+/**
+ * W0-P23 — the `Identity` overlay (`identity.providers`). Values only, and no
+ * field for a secret: a `clientSecret` is refused here as an undeclared key,
+ * because the portal is a PUBLIC client (non-negotiable 8). The gateway's
+ * identity/config.ts validates the values; this job refuses keys nobody declared.
+ */
+const IDENTITY_TOP = new Set(['apiVersion', 'kind', 'deployment', 'identity']);
+const IDENTITY_BLOCK = new Set(['providers', 'sessionLimits']);
+const IDENTITY_PROVIDER = new Set([
+  'id',
+  'kind',
+  'displayName',
+  'issuer',
+  'discoveryUrl',
+  'audience',
+  'clientId',
+  'scopes',
+  'groupsClaim',
+  'nameClaim',
+]);
+const IDENTITY_LIMITS = new Set(['idleSeconds', 'absoluteSeconds']);
+
+function checkIdentityKeys(doc: Record<string, unknown>): string | null {
+  for (const key of Object.keys(doc)) {
+    if (!IDENTITY_TOP.has(key))
+      return `top-level key "${key}" is not part of the Identity overlay schema`;
+  }
+  const identity = doc['identity'];
+  if (identity === undefined) return null;
+  if (!isRecord(identity)) return '"identity" must be a mapping';
+  for (const key of Object.keys(identity)) {
+    if (!IDENTITY_BLOCK.has(key))
+      return `identity.${key} is not part of the Identity overlay schema`;
+  }
+  const providers = identity['providers'];
+  if (providers !== undefined) {
+    if (!Array.isArray(providers)) return 'identity.providers must be a list';
+    for (const [i, provider] of providers.entries()) {
+      if (!isRecord(provider)) return `identity.providers[${i}] must be a mapping`;
+      for (const key of Object.keys(provider)) {
+        if (!IDENTITY_PROVIDER.has(key)) {
+          return `identity.providers[${i}].${key} is not part of the Identity overlay schema (no secret has a field here)`;
+        }
+      }
+    }
+  }
+  const limits = identity['sessionLimits'];
+  if (limits !== undefined) {
+    if (!isRecord(limits)) return 'identity.sessionLimits must be a mapping';
+    for (const key of Object.keys(limits)) {
+      if (!IDENTITY_LIMITS.has(key))
+        return `identity.sessionLimits.${key} is not part of the Identity overlay schema`;
+    }
   }
   return null;
 }
@@ -159,8 +239,8 @@ function checkDeclaredKeys(doc: Record<string, unknown>): string | null {
  * 02 §6.3's original overlay-purity check: no code, no manifest/server/
  * role/package definition, anywhere under `overlays/**`. Also enforces the
  * declared-key half of "may only set values the base schema declares" for
- * the two overlay kinds this repo's runtime actually reads (Caps,
- * GroupRoleMapping) — see `checkDeclaredKeys`'s header for the scope of
+ * the overlay kinds this repo's runtime actually reads (Caps,
+ * GroupRoleMapping, Identity) — see `checkDeclaredKeys`'s header for the scope of
  * that half.
  */
 export function checkOverlayFileTypes(repoRoot: string): OverlayPurityViolation[] {

@@ -717,7 +717,7 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
         {
           store: store as never,
           reloader,
-          superAdminGroups: ['supers'],
+          superAdminGroups: ['local:supers'],
           digest: () => 'sha256:enum',
           gatewayVersion: 'test',
           now: () => new Date('2026-10-01T00:00:00Z'),
@@ -754,7 +754,7 @@ const ALLOWLISTED_COMPUTED_SITES: readonly ComputedSiteRule[] = [
                 } as never),
               write: () => undefined,
             },
-            superAdminGroups: ['supers'],
+            superAdminGroups: ['local:supers'],
             reload: () =>
               Promise.resolve(
                 served
@@ -814,7 +814,7 @@ async function reloadSuccessNexts(): Promise<string[]> {
 
 function enumReloadSession(): EstablishedSession {
   const scopeSession = {
-    principal: { subject: 'u-0001', groups: ['supers'] },
+    principal: { subject: 'local:u-0001', groups: ['supers'] },
     heldRoleIds: ['super-admin'],
     consumer: {
       consumerId: 'portal-local',

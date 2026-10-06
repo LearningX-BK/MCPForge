@@ -64,27 +64,37 @@ describe('Approve a definitional change', () => {
 
   it('W0-P34: an admin who is NOT a super admin is refused approving their own, with a next', () => {
     expect(
-      gateApproveDefinitional(viewer('local:meera', ['admin', 'developer', 'business']), 'local:meera', false),
+      gateApproveDefinitional(
+        viewer('local:meera', ['admin', 'developer', 'business']),
+        'local:meera',
+        false,
+      ),
     ).toEqual(SELF_REFUSAL);
   });
 
   it('W0-P34: a super admin may approve their own, flagged selfApproved, whatever persona', () => {
     for (const personas of [['admin'], []] as const) {
-      expect(gateApproveDefinitional(viewer('local:super', personas), 'local:super', true)).toEqual({
-        allowed: true,
-        selfApproved: true,
-      });
+      expect(gateApproveDefinitional(viewer('local:super', personas), 'local:super', true)).toEqual(
+        {
+          allowed: true,
+          selfApproved: true,
+        },
+      );
     }
   });
 
   it('a non-admin proposer is refused with the same copy', () => {
-    expect(gateApproveDefinitional(viewer('local:priya', ['developer']), 'local:priya', false)).toEqual(
-      SELF_REFUSAL,
-    );
+    expect(
+      gateApproveDefinitional(viewer('local:priya', ['developer']), 'local:priya', false),
+    ).toEqual(SELF_REFUSAL);
   });
 
   it('a non-admin who did not propose is refused too, naming who can', () => {
-    const result = gateApproveDefinitional(viewer('local:arjun', ['business']), 'local:priya', false);
+    const result = gateApproveDefinitional(
+      viewer('local:arjun', ['business']),
+      'local:priya',
+      false,
+    );
     expect(result).toMatchObject({ allowed: false, next: expect.stringMatching(/admin/) });
   });
 

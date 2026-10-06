@@ -102,7 +102,7 @@ export function launchRepo(options: LaunchRepoOptions): string {
   mkdirSync(mappings, { recursive: true });
   writeFileSync(
     join(mappings, 'groups-to-roles.yaml'),
-    `apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  ${TEST_GROUP}:\n    roles: [p2p]\n`,
+    `apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  local:\n    ${TEST_GROUP}:\n      roles: [p2p]\n`,
   );
   const roleFile = join(root, 'generated', 'roles', 'p2p.scope.json');
   const role = JSON.parse(readFileSync(roleFile, 'utf8')) as {

@@ -18,7 +18,7 @@ import {
   localTokenIssuer,
 } from './jwt.js';
 import { localIdentityProvider, staticLocalPrincipalSource } from './local.js';
-import { identityProviderKind, type IdentityConfig } from './config.js';
+import { identityProviderKind, type IdentityProviderConfig } from './config.js';
 import type { IdentityProvider, Principal } from './types.js';
 
 const ISSUER = 'https://mcpforge.local/identity';
@@ -326,25 +326,24 @@ describe('clause 3 — the Wave 1 issuer swap changes nothing downstream', () =>
   });
 
   it('the config discriminant is the only switch, and it is total', () => {
-    const local: IdentityConfig = {
-      provider: 'local',
-      issuer: ISSUER,
-      audience: AUDIENCE,
-      signingKeyRef: 'secretRef://gateway/local-issuer/jwt-signing',
-    };
-    const oidc: IdentityConfig = {
-      provider: 'oidc',
+    const local: IdentityProviderConfig = { id: 'local', kind: 'local', displayName: 'Local' };
+    const oidc: IdentityProviderConfig = {
+      id: 'entra',
+      kind: 'oidc',
+      displayName: 'Entra ID',
       issuer: 'https://login.microsoftonline.com/ltm/v2.0',
       audience: AUDIENCE,
       discoveryUrl: 'https://login.microsoftonline.com/ltm/v2.0/.well-known/openid-configuration',
       clientId: 'mcpforge',
+      scopes: ['openid'],
     };
     expect(identityProviderKind(local)).toBe('local');
     expect(identityProviderKind(oidc)).toBe('oidc');
-    // CLAUDE.md non-negotiable 8: a config block carries a reference, never a
-    // value. Asserted rather than assumed, because this type is what an
+    // CLAUDE.md non-negotiable 8: a provider block has no field for a secret
+    // value at all (W0-P23; the gateway only verifies, the portal is a public
+    // PKCE client). Asserted rather than assumed, because this type is what an
     // overlay — a git artefact — is deserialised into.
-    expect(local.signingKeyRef.startsWith('secretRef://')).toBe(true);
+    expect(Object.keys(oidc).some((k) => /secret|key|password|token/i.test(k))).toBe(false);
   });
 });
 

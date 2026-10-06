@@ -191,7 +191,12 @@ async function ensureHost(): Promise<LocalGit> {
 
 export type ActionResult<T> =
   | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly code: ChangeHostErrorCode; readonly message: string; readonly next: string };
+  | {
+      readonly ok: false;
+      readonly code: ChangeHostErrorCode;
+      readonly message: string;
+      readonly next: string;
+    };
 
 async function runAction<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   try {
@@ -238,7 +243,9 @@ async function requireSignedIn() {
   return viewer;
 }
 
-export async function changeHostSaveDraft(input: SaveDraftInput): Promise<ActionResult<ChangeProposal>> {
+export async function changeHostSaveDraft(
+  input: SaveDraftInput,
+): Promise<ActionResult<ChangeProposal>> {
   return runAction(async () => {
     const viewer = await requireSignedIn();
     return (await ensureHost()).saveDraft({
@@ -250,7 +257,9 @@ export async function changeHostSaveDraft(input: SaveDraftInput): Promise<Action
   });
 }
 
-export async function changeHostPropose(input: ProposeInput): Promise<ActionResult<ChangeProposal>> {
+export async function changeHostPropose(
+  input: ProposeInput,
+): Promise<ActionResult<ChangeProposal>> {
   return runAction(async () => {
     const viewer = await requireSignedIn();
     return (await ensureHost()).propose({
@@ -282,7 +291,9 @@ export async function changeHostListProposals(): Promise<ActionResult<readonly C
   return runAction(async () => (await ensureHost()).listProposals());
 }
 
-export async function changeHostGetProposal(id: string): Promise<ActionResult<ChangeProposal | undefined>> {
+export async function changeHostGetProposal(
+  id: string,
+): Promise<ActionResult<ChangeProposal | undefined>> {
   return runAction(async () => (await ensureHost()).getProposal(id));
 }
 
@@ -305,7 +316,7 @@ export async function changeHostApprove(id: string): Promise<ActionResult<Change
     const gate = gateApproveDefinitional(
       viewer,
       proposal.author,
-      viewer !== null && holdsSuperAdmin(viewer.groups),
+      viewer !== null && holdsSuperAdmin(viewer),
     );
     if (!gate.allowed || viewer === null) {
       throw new ChangeHostError(
@@ -325,7 +336,7 @@ export async function changeHostApprove(id: string): Promise<ActionResult<Change
 export async function changeHostMerge(id: string): Promise<ActionResult<MergeResult>> {
   return runAction(async () => {
     const viewer = await getViewer();
-    const gate = gateMerge(viewer, viewer !== null && holdsSuperAdmin(viewer.groups));
+    const gate = gateMerge(viewer, viewer !== null && holdsSuperAdmin(viewer));
     if (!gate.allowed || viewer === null) {
       refused(
         gate as GateResult & { allowed: false },

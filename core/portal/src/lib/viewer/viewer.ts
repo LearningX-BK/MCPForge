@@ -10,7 +10,6 @@
 // mapping's `personas:` block applies to signed-in viewers on their next
 // request, and a persona can only come from a file a reviewer approved.
 
-import type { GatewayGrant } from './gateway-auth';
 import { effectivePersona, type Persona } from './personas';
 import {
   deleteSession,
@@ -18,6 +17,7 @@ import {
   renewOnce,
   replaceGrant,
   type StoredSession,
+  type ViewerGrant,
 } from './session-store';
 
 /** Renew when the access token has less than this left, so a request never carries an expired one. */
@@ -43,13 +43,18 @@ export interface Viewer {
 
 export interface ResolveViewerDeps {
   readonly now?: () => Date;
-  readonly refresh: (refreshToken: string) => Promise<GatewayGrant>;
-  readonly personasFor: (groups: readonly string[]) => readonly Persona[];
+  /** Renews a grant. Which provider does it is the caller's dispatch on `grant.principal.providerId`. */
+  readonly refresh: (grant: ViewerGrant) => Promise<ViewerGrant>;
+  /** W0-P23: personas are looked up under the member's own provider, so the subject is needed. */
+  readonly personasFor: (member: {
+    readonly subject: string;
+    readonly groups: readonly string[];
+  }) => readonly Persona[];
 }
 
 function viewerFrom(session: StoredSession, deps: ResolveViewerDeps): Viewer {
   const p = session.grant.principal;
-  const personas = deps.personasFor(p.groups);
+  const personas = deps.personasFor({ subject: p.subject, groups: p.groups });
   return {
     subject: p.subject,
     displayName: p.displayName,
@@ -77,8 +82,20 @@ export async function resolveSession(
     deleteSession(id);
     return null;
   }
-  if (Date.parse(session.grant.accessTokenExpiresAt) - now > RENEW_BEFORE_EXPIRY_MS) {
-    return session;
+  // W0-P23: an OIDC session's idle limit is the portal's to enforce. Use extends it.
+  if (session.idleMs !== undefined) {
+    if (now >= Date.parse(session.grant.idleExpiresAt)) {
+      deleteSession(id);
+      return null;
+    }
+    const idleExpiresAt = new Date(
+      Math.min(now + session.idleMs, Date.parse(session.grant.sessionExpiresAt)),
+    ).toISOString();
+    replaceGrant(id, { ...session.grant, idleExpiresAt });
+  }
+  const live = readSession(id) ?? session;
+  if (Date.parse(live.grant.accessTokenExpiresAt) - now > RENEW_BEFORE_EXPIRY_MS) {
+    return live;
   }
   return renewOnce(id, async () => {
     // Re-read inside the single flight: a concurrent caller may have renewed.
@@ -88,7 +105,7 @@ export async function resolveSession(
       return current;
     }
     try {
-      return replaceGrant(id, await deps.refresh(current.grant.refreshToken)) ?? null;
+      return replaceGrant(id, await deps.refresh(current.grant)) ?? null;
     } catch {
       deleteSession(id);
       return null;

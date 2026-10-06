@@ -45,6 +45,7 @@ import type { LocalUserStore } from '../../identity/local/index.js';
 import type { AppendAuditCallInput } from '../../store/audit/types.js';
 import type { LocalUserRecord } from '../../store/identity/types.js';
 import type { RuntimeStore } from '../../store/repository.js';
+import { holdsQualifiedGroup } from '../../identity/subject.js';
 import { ApiRefusal } from './refusal.js';
 
 export const ADMIN_USERS_PATH = `${API_V1_PREFIX}/admin/users`;
@@ -84,8 +85,18 @@ export interface AdminActor {
 export interface UserAdminDeps {
   readonly store: Pick<RuntimeStore, 'audit' | 'transaction'>;
   readonly users: LocalUserStore;
-  /** The `identityAdmins:` groups of THIS deployment, read from git at startup. */
+  /**
+   * The LOCAL provider's `identityAdmins:` groups of THIS deployment, bare, read
+   * from git at startup. Judges the local ACCOUNTS administered here.
+   */
   readonly identityAdminGroups: readonly string[];
+  /**
+   * W0-P23 — every provider's `identityAdmins:` groups as `<providerId>:<group>`.
+   * Judges the ACTOR, who may have signed in through any configured provider;
+   * a group counts only under the actor's own provider. Absent: the local
+   * groups above, qualified `local:`.
+   */
+  readonly identityAdminActorGroups?: readonly string[];
   /** Every group the deployment's mapping names, so an unmapped group can be flagged. */
   readonly mappedGroups: ReadonlySet<string>;
   readonly gatewayVersion: string;
@@ -116,7 +127,7 @@ export async function listAdminUsers(
   deps: UserAdminDeps,
   actor: AdminActor,
 ): Promise<AdminUsersResponse> {
-  if (!holdsAdminGroup(deps, actor.session.principal.groups)) {
+  if (!isAdminActor(deps, actor)) {
     throw new ApiRefusal(
       'TOOL_NOT_IN_SCOPE',
       'Listing local users is limited to identity admins, and none of your groups is one.',
@@ -232,6 +243,14 @@ export async function changeAdminUser(
 
 // --- authorization ----------------------------------------------------------------
 
+/** W0-P23 — the actor holds an identity-admin group of their own provider. */
+function isAdminActor(deps: UserAdminDeps, actor: AdminActor): boolean {
+  const qualified =
+    deps.identityAdminActorGroups ?? deps.identityAdminGroups.map((g) => `local:${g}`);
+  return holdsQualifiedGroup(actor.session.principal, qualified);
+}
+
+/** A LOCAL account's groups hold a local identity-admin group. */
 function holdsAdminGroup(deps: UserAdminDeps, groups: readonly string[]): boolean {
   return groups.some((g) => deps.identityAdminGroups.includes(g));
 }
@@ -245,7 +264,7 @@ async function authorizeChange(
   actor: AdminActor,
   attempt: Attempt,
 ): Promise<void> {
-  if (!holdsAdminGroup(deps, actor.session.principal.groups)) {
+  if (!isAdminActor(deps, actor)) {
     await auditRefusal(
       deps,
       actor,

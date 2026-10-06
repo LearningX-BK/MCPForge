@@ -30,13 +30,41 @@ export {
   type PrincipalClaims,
 } from './claims.js';
 export {
+  DEFAULT_ABSOLUTE_SECONDS,
+  DEFAULT_IDLE_SECONDS,
   DEFAULT_LOCAL_AUDIENCE,
   DEFAULT_LOCAL_ISSUER,
+  DEFAULT_OIDC_SCOPES,
+  IDENTITY_OVERLAY_FILE,
+  IdentityConfigInvalid,
+  defaultIdentityConfig,
   identityProviderKind,
+  loadIdentityConfig,
+  parseIdentityConfig,
   type IdentityConfig,
-  type LocalIdentityConfig,
-  type OidcIdentityConfig,
+  type IdentityProviderConfig,
+  type LocalProviderConfig,
+  type OidcProviderConfig,
+  type SessionLimitsConfig,
 } from './config.js';
+// W0-P23 — issuer-qualified subjects, and several providers at once.
+export {
+  PROVIDER_ID_RE,
+  holdsQualifiedGroup,
+  isProviderId,
+  isQualifiedSubject,
+  providerIdOfSubject,
+  qualifyGroups,
+  qualifySubject,
+} from './subject.js';
+export {
+  buildMultiProviderIdentity,
+  multiProviderIdentity,
+  unverifiedIssuer,
+  type BuildIdentityOptions,
+  type ConfiguredProvider,
+  type MultiProviderIdentity,
+} from './multi.js';
 export { bearerToken } from './bearer.js';
 export {
   DEFAULT_TOKEN_TTL_SECONDS,

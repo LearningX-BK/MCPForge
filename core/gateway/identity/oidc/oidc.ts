@@ -35,6 +35,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { forgeError } from '@mcpforge/shared/errors';
 import { bearerToken } from '../bearer.js';
 import { principalFromClaims } from '../claims.js';
+import { isProviderId, qualifySubject } from '../subject.js';
 import type { IdentityProvider, Principal, ProviderMetadata } from '../types.js';
 import { fetchOidcDiscovery, isAcceptableMetadataUrl } from './discovery.js';
 import type { OidcDiscoveryDocument } from './discovery.js';
@@ -62,6 +63,13 @@ export const DEFAULT_JWKS_COOLDOWN_MS = 30 * 1000;
 export const DEFAULT_JWKS_TIMEOUT_MS = 5 * 1000;
 
 export interface OidcIdentityProviderOptions {
+  /**
+   * W0-P23 — the configured provider id (`identity.providers[].id`). Every
+   * subject this provider resolves is `<providerId>:<sub>` (W0-P4 §9 decision
+   * 1), from the first row written. Required: an unqualified OIDC subject could
+   * collide with another provider's.
+   */
+  readonly providerId: string;
   /** The `iss` this deployment trusts. The anchor for discovery validation. */
   readonly issuer: string;
   /** The `aud` this gateway is. A token for another resource is refused. */
@@ -123,6 +131,9 @@ export function oidcIdentityProviderFrom(
   discovery: OidcDiscoveryDocument,
   options: OidcIdentityProviderOptions,
 ): OidcIdentityProvider {
+  if (!isProviderId(options.providerId)) {
+    throw new Error(`Refusing to build an OIDC provider with provider id "${options.providerId}".`);
+  }
   if (discovery.issuer !== options.issuer) {
     throw new Error(
       `Refusing to build an OIDC provider whose discovery document (${discovery.issuer}) disagrees with its configured issuer (${options.issuer}).`,
@@ -200,10 +211,15 @@ export function oidcIdentityProviderFrom(
 
   async function verifyOidcToken(token: string, correlationId: string): Promise<Principal> {
     const refuse: () => never = () => {
-      throw forgeError('AUTH_REQUIRED', 'The presented bearer token did not verify.', correlationId, {
-        condition:
-          'The session presented a token that failed signature, algorithm, expiry, issuer or audience verification.',
-      });
+      throw forgeError(
+        'AUTH_REQUIRED',
+        'The presented bearer token did not verify.',
+        correlationId,
+        {
+          condition:
+            'The session presented a token that failed signature, algorithm, expiry, issuer or audience verification.',
+        },
+      );
     };
 
     let payload: JWTPayload;
@@ -228,11 +244,14 @@ export function oidcIdentityProviderFrom(
       // exists to deny a caller.
       refuse();
     }
-    return principalFromClaims(
+    const principal = principalFromClaims(
       normalizeOidcClaims(payload, { groupsClaim, nameClaim }),
       'oidc',
       correlationId,
     );
+    // W0-P23: issuer-qualified with the CONFIGURED id, never one from a claim.
+    // `principalFromClaims` has already refused an empty `sub`.
+    return { ...principal, subject: qualifySubject(options.providerId, principal.subject) };
   }
 }
 

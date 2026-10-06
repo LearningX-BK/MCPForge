@@ -70,8 +70,9 @@ const TEST_MAPPING = `apiVersion: mcpforge/v1
 kind: GroupRoleMapping
 deployment: local
 groups:
-  finance-ap-clerks:
-    roles: [p2p]
+  local:
+    finance-ap-clerks:
+      roles: [p2p]
 `;
 
 export interface ConsumerAuthorizationFixture {

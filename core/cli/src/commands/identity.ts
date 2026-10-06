@@ -10,6 +10,7 @@
 
 import path from 'node:path';
 import {
+  isQualifiedSubject,
   remapSubjectAcrossMappingFiles,
   type MappingParseError,
   type RemapChangedRow,
@@ -124,6 +125,22 @@ export function runIdentityRemapCommand(opts: IdentityRemapOptions): number {
       ),
       opts.json,
     );
+  }
+
+  // W0-P23: subjects are issuer-qualified (`<providerId>:<sub>`) from the first
+  // row written, and a mapping file accepts no other spelling.
+  for (const [flag, value] of [
+    ['--from', from],
+    ['--to', to],
+  ] as const) {
+    if (!isQualifiedSubject(value)) {
+      return emitCliError(
+        usageError(
+          `${flag} "${value}" is not an issuer-qualified subject (<providerId>:<sub>, e.g. local:<uuid> or entra:<oid>).`,
+        ),
+        opts.json,
+      );
+    }
   }
 
   const mappingsRoot = opts.mappingsRoot ?? DEFAULT_MAPPINGS_ROOT;

@@ -24,7 +24,7 @@ function writeMapping(extra: string): void {
   mkdirSync(dir, { recursive: true });
   writeFileSync(
     path.join(dir, 'groups-to-roles.yaml'),
-    `apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  ops-admins:\n    roles: [p2p]\n${extra}`,
+    `apiVersion: mcpforge/v1\nkind: GroupRoleMapping\ndeployment: local\ngroups:\n  local:\n    ops-admins:\n      roles: [p2p]\n${extra}`,
   );
 }
 
@@ -70,7 +70,7 @@ afterEach(() => {
 
 describe('forge identity bootstrap-admin', () => {
   it('creates exactly one admin, audits it without the password, then refuses', async () => {
-    writeMapping('identityAdmins:\n  - ops-admins\n');
+    writeMapping('identityAdmins:\n  local:\n    - ops-admins\n');
     expect(await run()).toBe(0);
     const report = last();
     expect(report.ok).toBe(true);
@@ -95,7 +95,7 @@ describe('forge identity bootstrap-admin', () => {
   });
 
   it('refuses when CI=true, before touching the store', async () => {
-    writeMapping('identityAdmins:\n  - ops-admins\n');
+    writeMapping('identityAdmins:\n  local:\n    - ops-admins\n');
     expect(await run({ CI: 'true' })).toBe(1);
     expect(last().code).toBe('POLICY_GUARDRAIL_BREACH');
   });
@@ -107,7 +107,7 @@ describe('forge identity bootstrap-admin', () => {
   });
 
   it('refuses a short password without echoing it', async () => {
-    writeMapping('identityAdmins:\n  - ops-admins\n');
+    writeMapping('identityAdmins:\n  local:\n    - ops-admins\n');
     expect(await run({}, 'short-pw')).toBe(64);
     expect(out.join('')).not.toContain('short-pw');
   });

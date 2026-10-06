@@ -63,8 +63,9 @@ import {
 } from '@mcpforge/shared/api/v1';
 import type { ZodType } from 'zod';
 
-import { gatewayBaseUrl, gatewayRefresh, type FetchLike } from '../viewer/gateway-auth';
+import { gatewayBaseUrl, type FetchLike } from '../viewer/gateway-auth';
 import { heldPersonas } from '../viewer/mapping';
+import { refreshGrant } from '../viewer/refresh';
 import { sessionIdFromCookies } from '../viewer/session';
 import { resolveSession } from '../viewer/viewer';
 import { ConsumerCredentialError, consumerAssertionHeaders } from './consumer-assertion';
@@ -104,8 +105,8 @@ async function sessionAccessToken(): Promise<string | null> {
   const id = await sessionIdFromCookies();
   if (id === undefined || id.length === 0) return null;
   const session = await resolveSession(id, {
-    refresh: (refreshToken) => gatewayRefresh(refreshToken),
-    personasFor: (groups) => heldPersonas(groups),
+    refresh: (grant) => refreshGrant(grant),
+    personasFor: (member) => heldPersonas(member),
   });
   return session?.grant.accessToken ?? null;
 }

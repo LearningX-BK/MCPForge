@@ -6,12 +6,13 @@
 # means the Wave 0 local store and the Wave 1 AD deployment use *the same
 # mapping file format*."
 #
-# The `groups` map below is the proof of that claim: `finance-ap-clerks` (a
-# local group name, from LocalUserStore, W0-D2) and the `CN=...` key (an AD
-# group DN, from OidcProvider / LTM AD, W0-D3) are both just string keys in
-# the same map, resolved by the identical code path in
-# core/cli/src/lib/group-role-mapping.ts. Nothing here or downstream branches
-# on which kind of string a group key is.
+# W0-P23 (W0-P4 §2.1 item 3, owner decision 25 Sep 2026): several identity
+# providers may be active at once (overlays/<deployment>/identity.yaml), and
+# their group names are different namespaces. So every group-keyed block below
+# is keyed by PROVIDER ID first: `groups: { <providerId>: { <group>: ... } }`.
+# A principal's groups are looked up only under the provider its
+# issuer-qualified subject (`<providerId>:<sub>`) names; an Entra group that
+# happens to be called `mcpforge-admins` is not the local one.
 #
 # A widened grant — a new role added to an existing group, or a new group
 # added — shows up as an ordinary `git diff` on this file, which is the whole
@@ -23,45 +24,48 @@ deployment: local
 
 groups:
   # Wave 0 local groups (LocalUserStore, W0-D2) — bare names.
-  finance-ap-clerks:
-    roles:
-      - p2p-ap-clerk
-  finance-ap-approvers:
-    roles:
-      - p2p-ap-clerk
-      - p2p-ap-approver
-  mcpforge-admins:
-    roles:
-      - p2p-admin
-  # W0-P31 — the super admin: every tool, through the git-held super-admin
-  # role (roles/super-admin.yaml). Still intersected with the consumer, and an
-  # elevated binding still needs that role's named, expiring grant.
-  mcpforge-superadmins:
-    roles:
-      - super-admin
+  local:
+    finance-ap-clerks:
+      roles:
+        - p2p-ap-clerk
+    finance-ap-approvers:
+      roles:
+        - p2p-ap-clerk
+        - p2p-ap-approver
+    mcpforge-admins:
+      roles:
+        - p2p-admin
+    # W0-P31 — the super admin: every tool, through the git-held super-admin
+    # role (roles/super-admin.yaml). Still intersected with the consumer, and
+    # an elevated binding still needs that role's named, expiring grant.
+    mcpforge-superadmins:
+      roles:
+        - super-admin
 
-  # Wave 1 LTM AD groups (OidcProvider, W0-D3) — distinguished names. Same
-  # map, same key type as above: a group key is a group key.
-  'CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com':
-    roles:
-      - p2p-ap-clerk
-  'CN=Finance-AP-Approvers,OU=Groups,DC=corp,DC=example,DC=com':
-    roles:
-      - p2p-ap-clerk
-      - p2p-ap-approver
+  # Wave 1 LTM AD groups (an `oidc` provider with id `ltm-ad`, W0-D3) —
+  # distinguished names. Same shape as above: a group key is a group key. The
+  # local deployment does not configure `ltm-ad` (identity.yaml), so these
+  # grant nobody anything here; they show the format.
+  ltm-ad:
+    'CN=Finance-AP,OU=Groups,DC=corp,DC=example,DC=com':
+      roles:
+        - p2p-ap-clerk
+    'CN=Finance-AP-Approvers,OU=Groups,DC=corp,DC=example,DC=com':
+      roles:
+        - p2p-ap-clerk
+        - p2p-ap-approver
 
-# Per-subject exceptions, independent of group membership. This is the ONLY
-# place a Principal.subject value (core/gateway/identity/types.ts) appears in
-# this file, and it exists so `forge identity remap --from <old> --to <new>`
-# has something to rewrite when a subject value changes at an IdP swap (02
-# §4.4 item 3): group membership itself is re-resolved from the new IdP and
-# needs no rewrite, but a named per-subject exception written against the OLD
-# subject would silently stop applying unless something rewrites it.
+# Per-subject exceptions, independent of group membership. This is one of the
+# two places a Principal.subject value (core/gateway/identity/types.ts)
+# appears in this file (with superAdminSubjects below), and it exists so
+# `forge identity remap --from <old> --to <new>` has something to rewrite when
+# a subject value changes at an IdP swap (02 §4.4 item 3). Keys must be
+# issuer-qualified subjects (`<providerId>:<sub>`).
 subjectOverrides: {}
 
 # W0-P5b, W0-P4 §2 and §9 decision 2 — which portal personas each group's
-# members may use. Keyed by group, like `groups` above, so a persona is reviewed
-# in the same diff as the role grant it rides on.
+# members may use. Keyed by provider, then group, like `groups` above, so a
+# persona is reviewed in the same diff as the role grant it rides on.
 #
 # A persona is a LENS, never a grant: it changes where a person lands in the
 # portal and which portal actions are offered. The gateway never reads this
@@ -69,33 +73,38 @@ subjectOverrides: {}
 # `subjectOverrides`. A person whose groups appear nowhere here still signs in
 # and sees every page, and holds no gated portal action.
 personas:
-  mcpforge-superadmins:
-    personas: [admin, developer, business]
-  mcpforge-admins:
-    personas: [admin, developer]
-  mcpforge-developers:
-    personas: [developer]
-  finance-ap-clerks:
-    personas: [business]
-  finance-ap-approvers:
-    personas: [business]
+  local:
+    mcpforge-superadmins:
+      personas: [admin, developer, business]
+    mcpforge-admins:
+      personas: [admin, developer]
+    mcpforge-developers:
+      personas: [developer]
+    finance-ap-clerks:
+      personas: [business]
+    finance-ap-approvers:
+      personas: [business]
 
 # W0-P28 (owner decision, 30 Sep 2026) — the groups whose members may
 # administer LOCAL user accounts through the gateway: create, disable, enable,
-# change groups, reset a password. Unlike `personas` this IS a grant, of that
-# one capability only: the gateway refuses user administration to anyone whose
-# groups are not listed here. It grants no tool and no role. Widening it is a
-# reviewed diff on this file, like any other grant.
+# change groups, reset a password. Keyed by provider (W0-P23). Unlike
+# `personas` this IS a grant, of that one capability only: the gateway refuses
+# user administration to anyone whose groups are not listed here under their
+# own provider. It grants no tool and no role. Widening it is a reviewed diff
+# on this file, like any other grant.
 identityAdmins:
-  - mcpforge-admins
-  - mcpforge-superadmins
+  local:
+    - mcpforge-admins
+    - mcpforge-superadmins
 
-# W0-P31 (owner decision, 30 Sep 2026) — the super-admin groups. Grants
-# nothing by itself (the tools come from the super-admin role above). The
-# gateway reads it for the one thing the owner allowed only a super admin:
-# approving their own request, always flagged as self-approved (W0-P32).
+# W0-P31 (owner decision, 30 Sep 2026) — the super-admin groups, keyed by
+# provider (W0-P23). Grants nothing by itself (the tools come from the
+# super-admin role above). The gateway reads it for the one thing the owner
+# allowed only a super admin: approving their own request, always flagged as
+# self-approved (W0-P32).
 superAdmins:
-  - mcpforge-superadmins
+  local:
+    - mcpforge-superadmins
 
 # W0-P22 (owner decision, 1 Oct 2026: "A: superAdminSubjects list
 # (Recommended)") — the Principal.subject values of the super admins whose
@@ -104,7 +113,8 @@ superAdmins:
 # Group membership lives in the identity provider, not in git, so validate
 # cannot check `superAdmins:` above against an approval record; this list is
 # the git fact it checks instead. It grants nothing at runtime (the gateway
-# does not read it). Add a super admin's subject (`forge identity
-# bootstrap-admin` prints it) through a reviewed change; `forge identity
-# remap` rewrites it. Empty: nobody's self-approval passes validate yet.
+# does not read it). Issuer-qualified subjects only (W0-P23). Add a super
+# admin's subject (`forge identity bootstrap-admin` prints it) through a
+# reviewed change; `forge identity remap` rewrites it. Empty: nobody's
+# self-approval passes validate yet.
 superAdminSubjects: []
