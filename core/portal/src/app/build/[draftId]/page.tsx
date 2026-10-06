@@ -7,6 +7,9 @@ import * as React from 'react';
 import { notFound } from 'next/navigation';
 
 import { DraftEditor } from '../_components/draft-editor';
+import { ServerDraftEditor } from '../_components/server-draft-editor';
+import { loadExistingServers } from '../_lib/existing-servers';
+import { formFromYaml } from '../_lib/server-draft';
 import { findBuildDraft, loadCommittedManifest } from '../drafts';
 import { newBuildDraft } from '../new-draft';
 import type { BuildDraft } from '../types';
@@ -44,8 +47,15 @@ export default async function BuildDraftPage({
           {draft.branch.length > 0 ? draft.branch : 'not saved yet'}
         </span>
       </div>
-      <div className="min-h-0 flex-1">
-        <DraftEditor draft={draft} />
+      <div className="min-h-0 flex-1 overflow-auto">
+        {draft.kind === 'server' ? (
+          <ServerDraftEditor
+            initial={formFromYaml(draft.yaml)}
+            existing={loadExistingServers().filter((s) => s.id !== draft.toolId)}
+          />
+        ) : (
+          <DraftEditor draft={draft} />
+        )}
       </div>
     </main>
   );
