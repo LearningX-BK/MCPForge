@@ -117,7 +117,13 @@ export function ServersView({ servers, runtimeNotice }: ServersViewProps): React
               className="rounded-lg border border-line bg-surface p-4"
             >
               <h2 id={`server-${s.id}`} className="font-display text-lg text-text-1">
-                <span className="font-mono">{s.id}</span>
+                <a
+                  href={`/catalog/servers/${encodeURIComponent(s.id)}`}
+                  className="font-mono text-accent underline"
+                  data-testid={`server-detail-link-${s.id}`}
+                >
+                  {s.id}
+                </a>
                 <span className="ml-2 text-[13px] font-normal text-text-2">{s.label}</span>
               </h2>
               <dl className="mt-3 grid grid-cols-[160px_1fr] gap-x-3 gap-y-1 text-[13px]/[1.5]">

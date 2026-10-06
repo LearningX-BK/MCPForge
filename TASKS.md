@@ -1756,7 +1756,7 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
     - **Not run:** the Playwright E2E and the full stage 14–17 a11y gates (not run here; only the per-view axe test above). No live gateway walkthrough, so the page is proven against injected `calls` only. Keycloak / Postgres legs are not relevant to this task and were not run.
     - **Gap, not closed:** the granted scope shown is the consumer's *registered authorizations*, not a per-tool grant (there is no per-tool grant record in git). `/api/v1/calls` is the only edge source, so the graph is bounded by the viewer's read authority; an admin sees the whole graph, a narrower viewer a subset, and the page says so.
 
-- [ ] **W0-Q2** — Module-server detail and drill-down: `/catalog/servers/[serverId]`
+- [x] **W0-Q2** — Module-server detail and drill-down: `/catalog/servers/[serverId]`
   - model: sonnet
   - deps: W0-P6
   - wave: 0
@@ -1764,6 +1764,11 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
   - touches: core/portal/src/app/catalog/servers/**
   - context: The console's Registry was organised around **servers**, and each server had a map you could click through: server, then module, then entity, then tool, then binding type, then the underlying target (AIS orchestration, PL/SQL package, table/view). 03 §5.2 keeps this as `/catalog/servers/[serverId]`, and it was never built. `W0-P6` builds the server *inventory*; this task builds what opens when you click one server in it.
   - done: the route reads `manifests/_servers/<id>.server.yaml` plus that server's tool manifests for real, and shows id, mode, version, owner, split-rule inputs (tool count against the 15–20 threshold, auth boundary, sensitivity class), the tool list and a drill-down from entity to tool to binding to target; every tool links to its Catalog drawer; the inventory rows from `W0-P6` link here; probe and kill-switch state come from `/api/v1/**` once W0-P3 lands, and until then are shown explicitly as "runtime state unavailable", never faked; the a11y gates pass.
+  - **Done 6 Oct 2026, branch `forge/W0-Q2-server-detail`.** `OPUS_GUARDED_PATHS`: none touched.
+    - `/catalog/servers/[serverId]` (`load-detail.ts`, `server-detail-view.tsx`, `page.tsx`). Reads the server manifest and every tool manifest naming it from git (unknown id: 404). Shows id, mode (and promotion reason when B), version, app · module, owner, steward; the split-rule inputs; and an entity → tool → binding (type · technology) → target (`binding.ref` + `refVersion`) drill-down in which every tool links to `/catalog/<toolId>`. Probe and kill-switch state come from `/api/v1/enablement` and `/deployment` through the inventory's own `toInventory`, so the two pages cannot disagree; with the gateway unreadable both read "runtime state unavailable" and the live-state notice names why.
+    - **Decision, spec silent on a small detail:** `kind: Server` has no auth-boundary or sensitivity field (`core/shared/src/manifest/server.ts` says the schema is minimal). The page shows them as what the server's tools declare (binding types and technologies; sensitivity classes) and states that it shows inputs and does not decide the split. Tool count is shown against 15–20 with below / in-range / above copy. No schema field was added.
+    - **Edit outside `touches:`, required by `done:` ("inventory rows link here"):** the server id in `environments/servers/servers-view.tsx` is now a link, and `servers.test.tsx`'s one-link assumption was updated.
+    - **Verified:** new `server-detail.test.tsx` (real manifests, agreement with the inventory, tool links, runtime-unavailable, axe serious/critical); portal `catalog` + `environments` 16 files / 91 tests pass; `tsc --noEmit`, eslint, prettier clean; `forge validate` exit 0; `portal-http-boundary` 22/22. **Not run:** Playwright E2E, the full stage 14–17 a11y gates (only the per-view axe test), and a live-gateway walkthrough, so the probe and kill state were exercised only through the inventory's unit tests.
 
 - [ ] **W0-Q3** — Register a new module server from Build
   - model: sonnet
