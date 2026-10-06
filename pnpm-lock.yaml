@@ -97,6 +97,9 @@ importers:
 
   core/cli:
     dependencies:
+      '@mcpforge/adapter-model':
+        specifier: workspace:*
+        version: link:../../adapters/model
       '@mcpforge/ci':
         specifier: workspace:*
         version: link:../../tools/ci

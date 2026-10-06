@@ -40,6 +40,12 @@ export const CANONICAL_COMMANDS: readonly StubCommandSpec[] = [
     path: ['bench'],
     description: 'Run the discovery benchmark harness — TTFC, VTC, DH, SA@1, MTB (02 §5.9).',
   },
+  // W0-Q9. Optional model-assisted copy for ONE allow-listed field; absent unless an overlay enables it.
+  {
+    path: ['suggest'],
+    description:
+      'Draft text for one allow-listed manifest field with a configured model; suggestion only, --accept stages it (w0-q8 note).',
+  },
   { path: ['probe'], description: 'Run the capability probe against a live instance (02 §4.5).' },
   {
     path: ['package'],

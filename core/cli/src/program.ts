@@ -23,6 +23,7 @@ import { runPackageCommand } from './commands/package.js';
 import { runSliceDiffCommand } from './commands/slice-diff.js';
 import { runNewToolCommand } from './commands/new-tool.js';
 import { runTestCommand } from './commands/test.js';
+import { runSuggestCommand } from './commands/suggest.js';
 
 /**
  * Real (non-stub) command handlers, keyed by their canonical path label
@@ -45,6 +46,8 @@ const REAL_HANDLERS: Readonly<
       ),
       opts as never,
     ),
+  // W0-Q9. The manifest path arrives as the positional (`opts.target`).
+  suggest: (opts) => runSuggestCommand(opts['target'] as string | undefined, opts as never),
   ci: runCiCommand,
   codegen: runCodegenCommand,
   validate: runValidateCommand,
@@ -126,6 +129,7 @@ const ARGUMENTS: Readonly<Record<string, PositionalSpec | readonly PositionalSpe
     },
     // W0-Q7. Variadic: `forge test [<toolId>…]`; unknown ids reach this CLI's own
     // INPUT_INVALID envelope with a `next`.
+    suggest: { name: '[manifest]', description: 'Repo-relative path of the tool manifest to draft a field for.' },
     test: { name: '[toolIds...]', description: 'Tool ids to test. Default: every tool.' },
     kill: {
       name: '<target>',
@@ -194,6 +198,16 @@ const EXTRA_OPTIONS: Readonly<
     { flags: '--answers <file>', description: 'JSON or YAML file of the same answers; flags win.' },
     { flags: '--by <subject>', description: 'Principal.subject of the requester, recorded in the proposal.' },
     { flags: '--root <dir>', description: 'Repository root. Default: the enclosing repository.' },
+  ],
+  suggest: [
+    { flags: '--field <field>', description: 'purpose | disambiguation | aliases | input.desc | input.example | output.summaryTemplate | writeSafety.confirm.planTemplate.' },
+    { flags: '--input <name>', description: 'The input a per-input field targets (input.desc, input.example).' },
+    { flags: '--provider <id>', description: 'An overlay provider id. Default: the overlay default. There is no automatic fallback to another provider.' },
+    { flags: '--dry-run', description: 'Print exactly what would be sent and send nothing.' },
+    { flags: '--accept', description: 'Stage the suggestion for this one field (needs --by). Never writes manifests/.' },
+    { flags: '--by <subject>', description: 'Principal.subject of the human accepting the field.' },
+    { flags: '--deployment <id>', description: 'Whose overlays/<id>/authoring.yaml to read. Default: MCPFORGE_DEPLOYMENT, else "local".' },
+    { flags: '--root <dir>', description: 'Definitions root. Default: the definitions root.' },
   ],
   test: [{ flags: '--root <dir>', description: 'Repository root. Default: the definitions root.' }],
   'audit verify': [
