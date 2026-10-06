@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 //
-// W0-P3c: `/requests` ranks over this repository's committed discovery index
-// and shows no invented tracked requests.
+// W0-P3c / W0-Q5: `/requests` ranks over this repository's committed discovery
+// index. The tracked-request half (reading `requests/` and the change host) is
+// covered by `_lib/requests-lib.test.ts` with injected ports, so this suite
+// never starts a change host.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import RequestsPage from './page';
+vi.mock('@/lib/change-host/local-git-actions', () => ({
+  changeHostSubmitRequest: vi.fn(),
+}));
+
+import { RequestsView } from './requests-view';
 import { loadRequestCatalog } from './source';
 
 afterEach(cleanup);
@@ -18,14 +24,14 @@ describe('RequestsPage', () => {
     for (const id of ids) expect(catalog.tools[id]?.title.length).toBeGreaterThan(0);
   });
 
-  it('shows no tracked requests, and says why, rather than a seeded list', () => {
-    render(<RequestsPage />);
+  it('with no request files, says how a request is recorded rather than showing a seeded list', () => {
+    render(<RequestsView catalog={loadRequestCatalog()} requests={[]} />);
     expect(screen.queryByTestId('request-list')).toBeNull();
-    expect(screen.getByTestId('request-list-empty').textContent).toContain('W0-Q4');
+    expect(screen.getByTestId('request-list-empty').textContent).toContain('change proposal');
   });
 
   it('answers an ask with a real verdict and score from the committed index', () => {
-    render(<RequestsPage />);
+    render(<RequestsView catalog={loadRequestCatalog()} requests={[]} />);
     fireEvent.change(screen.getByLabelText('Ask'), {
       target: { value: 'search AP vouchers for a supplier' },
     });

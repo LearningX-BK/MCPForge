@@ -63,6 +63,12 @@ import { forgeMergeCheck } from './merge-check';
 import { getViewer } from '../viewer/session';
 import { LocalGit } from './local-git';
 import {
+  buildRequestFile,
+  submitRequestInputSchema,
+  type SubmitRequestInput,
+} from '../../app/requests/_lib/build-request';
+import { requestBranch, requestPath, requestYaml } from '../../app/requests/_lib/request-file';
+import {
   ChangeHostError,
   type ChangeDiffSet,
   type ChangeHostErrorCode,
@@ -357,4 +363,36 @@ export async function changeHostReadFile(
   filePath: string,
 ): Promise<ActionResult<string | undefined>> {
   return runAction(async () => (await ensureHost()).readFile(id, filePath));
+}
+
+// W0-Q5 — submitting a tracked intake request (w0-q4-intake-requests.md §1, §4).
+// `requestedBy` is the signed-in viewer's `Principal.subject`, stamped HERE:
+// like `author`, it is never a caller's input, so a client cannot file a
+// request in someone else's name. The request is a file on its own branch,
+// proposed through the same change flow as everything else (D1: no approval
+// record: it grants nothing).
+export async function changeHostSubmitRequest(
+  input: SubmitRequestInput,
+): Promise<ActionResult<ChangeProposal>> {
+  return runAction(async () => {
+    const viewer = await requireSignedIn();
+    const parsed = submitRequestInputSchema.safeParse(input);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      throw new ChangeHostError(
+        'CHANGE_NOTHING_TO_COMMIT',
+        `The request is incomplete: ${first?.path.join('.') ?? ''} ${first?.message ?? ''}`.trim(),
+        'Fill the marked fields (what it should do, app, module, read or write), then Submit again.',
+      );
+    }
+    const request = buildRequestFile(parsed.data, viewer.subject, new Date());
+    const host = await ensureHost();
+    const saved = await host.saveDraft({
+      title: `Request: ${request.ask}`.slice(0, 120),
+      branch: requestBranch(request.id),
+      files: { [requestPath(request.id)]: requestYaml(request) },
+      author: viewer.subject,
+    });
+    return host.propose({ id: saved.id, description: `Intake request ${request.id}`, author: viewer.subject });
+  });
 }
