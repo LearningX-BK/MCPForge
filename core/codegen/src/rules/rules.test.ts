@@ -265,8 +265,9 @@ describe('rules — the passing counterexample', () => {
     // (sod.declared-conflict, sod.implicit-create-approve), which join the
     // same default set so `forge validate` runs them without opting in,
     // + W0-P22's policy.approval-not-self-approved (exercised in
-    // approvals.test.ts against temporary repositories).
-    expect(ids).toHaveLength(22);
+    // approvals.test.ts against temporary repositories)
+    // + W0-Q5b's 9 request.* rules (exercised in requests.test.ts).
+    expect(ids).toHaveLength(31);
     expect(ids).toContain('policy.approval-not-self-approved');
     expect(ids).toContain('sod.declared-conflict');
     expect(ids).toContain('sod.implicit-create-approve');

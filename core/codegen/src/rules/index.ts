@@ -21,6 +21,7 @@ import { COPY_RULES } from './copy.js';
 import { CREDENTIAL_RULES } from './credentials.js';
 import { EVAL_RULES } from './evals.js';
 import { GRANT_RULES } from './grants.js';
+import { REQUEST_RULES } from './requests.js';
 import { WRITE_SAFETY_RULES } from './write-safety.js';
 
 export {
@@ -40,6 +41,7 @@ export {
 export { CREDENTIAL_RULES } from './credentials.js';
 export { EVAL_RULES, loadEvalStrings } from './evals.js';
 export { GRANT_RULES, WRAPPER_PACKAGE_RE, loadApprovalRefs } from './grants.js';
+export { REQUEST_RULES } from './requests.js';
 export { WRITE_SAFETY_RULES } from './write-safety.js';
 
 /** Every W0-B3 policy and safety rule, in a stable order. */
@@ -57,4 +59,7 @@ export const POLICY_RULES: readonly ValidationRule[] = [
   // and joins the DEFAULT rule set here so `forge validate` runs it without
   // any caller opting in.
   ...SOD_RULES,
+  // W0-Q5b — the `Request` artefact (`requests/<id>.request.yaml`, w0-q4 note
+  // §1). Requests are read by their own loader, never via loadManifestFiles.
+  ...REQUEST_RULES,
 ];

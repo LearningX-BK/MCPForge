@@ -21,7 +21,7 @@ export type {
   ValidationRule,
 } from './types.js';
 export { REFERENTIAL_RULES } from './referential.js';
-export { loadEnumNames, loadManifestFiles } from './loader.js';
+export { loadEnumNames, loadManifestFiles, loadRequestFiles } from './loader.js';
 export { resolvedKindAndId } from './structural.js';
 export { POLICY_RULES } from '../rules/index.js';
 

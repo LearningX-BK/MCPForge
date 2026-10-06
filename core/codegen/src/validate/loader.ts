@@ -62,6 +62,25 @@ export function loadManifestFiles(repoRoot: string): ManifestFile[] {
 }
 
 /**
+ * W0-Q5b — every YAML file under `requests/` (the `Request` artefact,
+ * docs/build-plan/w0-q4-intake-requests.md §1), parsed if possible.
+ *
+ * DELIBERATELY SEPARATE from `loadManifestFiles`. A request is not a manifest:
+ * it grants nothing and is never read by codegen or the gateway. Folding it
+ * into `loadManifestFiles` would hand every existing caller (codegen's
+ * pipeline, the gateway catalogue, `forge suggest`, `forge package`, the
+ * portal loaders) a new kind of document they were never written to expect.
+ * Only the request rules (core/codegen/src/rules/requests.ts) read this.
+ * Every YAML file is returned, not only `*.request.yaml`, so a misnamed file is
+ * reported rather than silently skipped.
+ */
+export function loadRequestFiles(repoRoot: string): ManifestFile[] {
+  return walkYamlFiles(join(repoRoot, 'requests'))
+    .sort()
+    .map((p) => loadManifestFile(repoRoot, p));
+}
+
+/**
  * Enum lookup-list names available under `enums/` (02 §2.2's `enumRef`).
  * Each file's name is its basename without extension, e.g. `enums/iso_currency.yaml`
  * makes `iso_currency` resolvable. A file may also declare `id:` to name itself
