@@ -10,6 +10,7 @@ import { DraftEditor } from '../_components/draft-editor';
 import { ServerDraftEditor } from '../_components/server-draft-editor';
 import { loadExistingServers } from '../_lib/existing-servers';
 import { formFromYaml } from '../_lib/server-draft';
+import { loadRequest } from '../../requests/_lib/load-requests';
 import { findBuildDraft, loadCommittedManifest } from '../drafts';
 import { newBuildDraft } from '../new-draft';
 import type { BuildDraft } from '../types';
@@ -29,15 +30,28 @@ export default async function BuildDraftPage({
   searchParams,
 }: {
   params: Promise<{ draftId: string }>;
-  searchParams: Promise<{ from?: string | string[] }>;
+  searchParams: Promise<{ from?: string | string[]; request?: string | string[] }>;
 }): Promise<React.ReactElement> {
   const { draftId } = await params;
-  const { from } = await searchParams;
+  const { from, request } = await searchParams;
   const draft = await resolveDraft(
     decodeURIComponent(draftId),
     typeof from === 'string' && from.length > 0 ? from : undefined,
   );
   if (!draft) notFound();
+
+  // W0-Q9: a draft opened from a request (`?request=<id>`) lets suggestions use the
+  // requester's own words as context. Read from git; a missing request is just no context.
+  const linked =
+    typeof request === 'string' && request.length > 0 ? await loadRequest(request) : undefined;
+  const requestContext =
+    linked === undefined
+      ? undefined
+      : {
+          does: linked.request.business.does,
+          ...(linked.request.business.goodAnswer === '' ? {} : { goodAnswer: linked.request.business.goodAnswer }),
+          ...(linked.request.business.inputs.length === 0 ? {} : { inputs: linked.request.business.inputs }),
+        };
 
   return (
     <main className="flex h-[calc(100vh-2rem)] flex-col gap-3 px-6 py-6">
@@ -54,7 +68,7 @@ export default async function BuildDraftPage({
             existing={loadExistingServers().filter((s) => s.id !== draft.toolId)}
           />
         ) : (
-          <DraftEditor draft={draft} />
+          <DraftEditor draft={draft} {...(requestContext === undefined ? {} : { request: requestContext })} />
         )}
       </div>
     </main>

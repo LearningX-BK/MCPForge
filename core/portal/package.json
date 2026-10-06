@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "MCPForge portal — Next.js App Router shell (W0-J2) plus the design-tokens package (W0-J1).",
+  "description": "MCPForge portal \u00e2\u20ac\u201d Next.js App Router shell (W0-J2) plus the design-tokens package (W0-J1).",
   "exports": {
     "./design/tokens": "./src/design/tokens.ts"
   },
@@ -31,6 +31,7 @@
     "@codemirror/view": "6.38.6",
     "@hookform/resolvers": "^5.9.1",
     "@lezer/highlight": "1.2.3",
+    "@mcpforge/adapter-model": "workspace:*",
     "@mcpforge/cli": "workspace:*",
     "@mcpforge/codegen": "workspace:*",
     "@mcpforge/registry": "workspace:*",

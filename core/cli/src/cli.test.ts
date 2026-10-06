@@ -58,6 +58,8 @@ const REAL_HANDLER_LABELS = new Set([
   // `test` would re-run this suite if spawned for real.
   'new tool',
   'test',
+  // W0-Q9 — see ./commands/suggest.test.ts.
+  'suggest',
   'ci',
   'validate',
   'codegen',

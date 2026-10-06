@@ -304,6 +304,8 @@ export const DEFINITIONAL_PREFIXES = [
   'generated/',
   // W0-Q5: a tracked intake request. Grants nothing; see w0-q4-intake-requests.md.
   'requests/',
+  // W0-Q9: authoring provenance sidecars. Outside the trees codegen and validate read.
+  'provenance/',
 ] as const;
 
 /** A repo-relative path under a definitional tree, with no traversal. */

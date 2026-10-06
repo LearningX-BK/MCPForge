@@ -148,6 +148,20 @@ export function RequestDetailView({
             {g.expectedVolume !== '' && <Row label="Expected volume">{g.expectedVolume}</Row>}
           </dl>
         )}
+        {g !== undefined && derivation.state !== 'declined' && derivation.state !== 'withdrawn' && (
+          <p className="mt-2 text-[13px]">
+            <Link
+              data-testid="open-in-build"
+              href={`/build/new?request=${encodeURIComponent(r.id)}`}
+              className="font-medium text-accent underline"
+            >
+              Start the draft in Build
+            </Link>{' '}
+            <span className="text-text-2">
+              (suggested copy can use what was asked above as context)
+            </span>
+          </p>
+        )}
       </section>
 
       {(tracked.submissionProposalId !== undefined || tracked.draftProposalId !== undefined) && (

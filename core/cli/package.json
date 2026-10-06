@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The forge CLI — MCPForge's automation seam (02 §8.2). Wave 0: command skeleton only, no real behaviour yet.",
+  "description": "The forge CLI \u00e2\u20ac\u201d MCPForge's automation seam (02 \u00c2\u00a78.2). Wave 0: command skeleton only, no real behaviour yet.",
   "bin": {
     "forge": "./bin/forge.js"
   },
@@ -17,6 +17,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mcpforge/adapter-model": "workspace:*",
     "@mcpforge/ci": "workspace:*",
     "@mcpforge/codegen": "workspace:*",
     "@mcpforge/gateway": "workspace:*",
