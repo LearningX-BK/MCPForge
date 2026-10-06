@@ -3,6 +3,7 @@
 // it here; this component never fetches and never sees a credential.
 'use client';
 
+import Link from 'next/link';
 import * as React from 'react';
 
 import { DataTable } from '../../components/data';
@@ -59,6 +60,15 @@ export function ActivityView({
         <p className="max-w-[70ch] text-[13px] text-text-2">
           Audit and consumption, in one dataset. Every call the gateway made a decision about —
           planned, executed, rejected or reversed.
+        </p>
+        <p className="mt-1 text-[13px]">
+          <Link href="/activity/consumers" className="underline decoration-dotted underline-offset-2">
+            Usage by consumer
+          </Link>
+          {' · '}
+          <Link href="/activity/consumption" className="underline decoration-dotted underline-offset-2">
+            Consumption graph (tool ↔ consumer)
+          </Link>
         </p>
       </div>
 
