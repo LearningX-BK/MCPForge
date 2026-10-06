@@ -1,6 +1,6 @@
 # W0-Q8 — Model-assisted authoring: design note
 
-**Status: owner decisions D1–D6 recorded 6 Oct 2026 (§9). One input is still missing before W0-Q9 can finish: the BlueVerse API contract (§2.1).** W0-Q9 builds exactly what this note says and no more.
+**Status: owner decisions D1–D6 recorded 6 Oct 2026 (§9). The BlueVerse contract was supplied the same day (§2.2); one human-supplied value remains: the BlueVerse space and flow to use.** W0-Q9 builds exactly what this note says and no more.
 Drafted 6 Oct 2026 on a Sonnet session although the task is routed to Opus, and it touches four settled commitments. Treat every "recommendation" below as a proposal; the items in §9 are **owner decisions**, not defaults.
 
 Reads: 02 §2, §5.3, §11.5 · 01 §2 · CLAUDE.md §2 (non-negotiables 1, 2, 3, 4, 8), §3.1, §4, §5, §6, §8.
