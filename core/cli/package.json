@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./commands/bench": "./src/commands/bench.ts"
+    "./commands/bench": "./src/commands/bench.ts",
+    "./commands/new-tool-scaffold": "./src/commands/new-tool-scaffold.ts"
   },
   "scripts": {
     "typecheck": "tsc --build --force",

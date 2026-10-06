@@ -1804,7 +1804,7 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
   - touches: core/portal/src/app/requests/**, requests/**
   - done: exactly what W0-Q4's approved note specifies; submitting from `/requests` creates the record through the change flow; `/requests/[requestId]` shows the lifecycle derived from real linked artefacts; `requests/fixtures.ts` is no longer imported by any `page.tsx`; a Playwright test drives ask → submit → request detail.
 
-- [ ] **W0-Q6** — Implement `forge new tool` (scaffold a manifest from answers)
+- [x] **W0-Q6** — Implement `forge new tool` (scaffold a manifest from answers)
   - model: sonnet
   - deps: none
   - wave: 0
@@ -1812,8 +1812,9 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
   - touches: core/cli/src/commands/new-tool*, core/cli/src/program.ts
   - context: `forge new tool` is registered in `core/cli/src/commands.ts:26` and still prints *"forge new tool is not implemented yet"* (the W0-A5 skeleton). 02 §2.5 makes it the authoring step (*"scaffolds the YAML from answers"*) and 02 §8 lists it first on the CLI automation seam. The portal's `/build/new` seeds a static `NEW_DRAFT_TEMPLATE_YAML` instead, so the CLI and the portal scaffold new tools in two different ways.
   - done: `forge new tool` takes answers (flags, or `--answers <file>`; never an interactive-only prompt, so the lane and CI can drive it) and writes a manifest that passes `forge validate` apart from the fields only a human may supply, each reported by name; `write: true` scaffolds a complete `writeSafety` skeleton and a `reviewPath` consistent with the binding type, and never `identity.carries: verified` (non-negotiable #2); it emits a `next` naming the steward-eval step; the output lands in the change flow, not directly in `manifests/`; `/build/new` uses the same scaffolder, so there is one template; unit tests cover read, write, and every binding type.
+  - **Done 6 Oct 2026.** `OPUS_GUARDED_PATHS`: none touched. `core/cli/src/commands/new-tool-scaffold.ts` is the one pure scaffolder (read, write, every binding type; never `verified`; refuses a `database` write and a write on a read verb, each with a `next`). `forge new tool` takes flags or `--answers <file>`, names the human-only fields, and STAGES to `.mcpforge/proposals/new-tool-<id>/` (never `manifests/`). `/build/new`'s `NEW_DRAFT_TEMPLATE_YAML` now comes from the same scaffolder (verified byte-identical to the old starter). Tests: `new-tool.test.ts` 15, including that `forge validate` fails only on named human fields. Portal `tsc` clean, `build`+`requests` 64/64. Small decisions: path is `manifests/<app>/<module>/<entity>.<verb>.tool.yaml`; the compensating reversal tool, plan template and dry-run ref are left as named placeholders. Edits outside `touches:`: `cli/package.json` export, `cli.test.ts` (no stub commands remain), portal `new-draft.ts`.
 
-- [ ] **W0-Q7** — Implement `forge test`
+- [x] **W0-Q7** — Implement `forge test`
   - model: sonnet
   - deps: none
   - wave: 0
@@ -1821,6 +1822,7 @@ Added 25 Sep 2026. The owner asked for an independent check of whether every **p
   - touches: core/cli/src/commands/test*, core/cli/src/program.ts
   - context: `forge test` is the other command still on the W0-A5 skeleton. The console's workspace had "run regression suite" for a single tool, and the generated per-tool contract and unit tests exist, but there is no one-tool entry point.
   - done: `forge test [<toolId>…] [--json]` runs the generated contract and unit tests for the named tools (all tools when none are named), reports per-tool pass/fail, and exits non-zero on any failure; an unknown tool id fails with a `next`; tests cover the one-tool and all-tools paths.
+  - **Done 6 Oct 2026.** `core/cli/src/commands/test.ts`: `forge test [<toolId>…] [--json] [--root]` runs each tool's generated `contract.test.ts` + `unit.test.ts` through the repo's Vitest (JSON reporter), per-tool pass/fail, non-zero on failure, unknown id -> `INPUT_INVALID` with `next`, an unreported file counts as failure. `test.test.ts` 5 (fake runner: one-tool, all-tools, failure, unknown, unreported). Run for real once: `forge test jde.ap.voucher.get` -> PASS, exit 0. Not run: the all-tools real run.
 
 - [ ] **W0-Q8** — Model-assisted authoring — design note first
   - model: opus
