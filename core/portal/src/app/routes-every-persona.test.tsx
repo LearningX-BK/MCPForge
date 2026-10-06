@@ -81,8 +81,56 @@ function pageFiles(dir: string, prefix = ''): { route: string; file: string }[] 
   return found.sort((a, b) => a.route.localeCompare(b.route));
 }
 
+// W0-Q5: the repo holds no committed request (they are git artefacts a person
+// submits), so the one route that needs one gets a single in-memory request. It
+// is the real parser and the real deriver; only the file read is replaced.
+vi.mock('@/app/requests/_lib/load-requests', async (importActual) => {
+  const actual = await importActual<typeof import('@/app/requests/_lib/load-requests')>();
+  const { parseRequestYaml } = await import('@/app/requests/_lib/request-file');
+  const { deriveRequestState } = await import('@/app/requests/_lib/derive-state');
+  const parsed = parseRequestYaml(
+    [
+      'apiVersion: mcpforge/v1',
+      'kind: Request',
+      'id: req-20261006-route-test',
+      'requestedBy: local:route-test',
+      'requestedAt: "2026-10-06T10:00:00.000Z"',
+      'ask: search AP vouchers by amount',
+      'business: { does: find vouchers by amount, app: jde, module: ap, access: read, inputs: [amount], goodAnswer: a list, whoMayRun: AP clerks }',
+      'verdictAtSubmit: { tier: new, indexDigest: "sha256:abc", matches: [] }',
+      'governance: { owner: JDE Finance CoE, steward: bob, sensitivity: internal, processTag: P2P, expectedVolume: "", intendedToolId: jde.ap.voucher.search_by_amount, server: jde-fin-ap }',
+      '',
+    ].join('\n'),
+  );
+  if (!parsed.ok) throw new Error(`route-test request fixture is invalid: ${parsed.message}`);
+  const facts = {
+    submissionOpen: false,
+    draftProposalState: undefined,
+    manifestMerged: false,
+    approvalRecorded: false,
+    inIndex: false,
+    probeStatus: undefined,
+  };
+  return {
+    ...actual,
+    loadRequest: (id: string) =>
+      Promise.resolve(
+        id === parsed.request.id
+          ? {
+              request: parsed.request,
+              derivation: deriveRequestState(parsed.request, facts),
+              submissionProposalId: undefined,
+              draftProposalId: undefined,
+            }
+          : undefined,
+      ),
+  };
+});
+
 /** One representative id per dynamic segment, as the a11y route list does. */
 const PARAMS: Readonly<Record<string, Record<string, string>>> = {
+  '/catalog/servers/[serverId]': { serverId: 'jde-fin-ap' },
+  '/requests/[requestId]': { requestId: 'req-20261006-route-test' },
   '/activity/calls/[callId]': { callId: 'call_a1f9e0' },
   // W0-P3c: drafts are git branches now, so the one id that always resolves is `new`.
   '/build/[draftId]': { draftId: 'new' },
