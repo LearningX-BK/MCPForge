@@ -233,6 +233,12 @@ export interface LaunchOptions {
    * shelling out at all.
    */
   readonly spawnPortal?: (repoRoot: string, gatewayUrl: string) => ChildProcess;
+  /**
+   * W0-Q9b — TEST ONLY: the transport the authoring endpoints use to reach a
+   * model provider, so the policy suite needs no network and no real key.
+   * Production leaves it unset and the adapter uses the global fetch.
+   */
+  readonly authoringFetch?: typeof fetch;
 }
 
 export interface LaunchedGateway {
@@ -579,6 +585,16 @@ export async function launchGateway(options: LaunchOptions): Promise<LaunchedGat
         write: (report) => {
           writeProbeReport(repoRoot, report);
         },
+      },
+      // W0-Q9b — model-assisted authoring (D7): the overlay and the sibling
+      // manifests are read from the definitions root; the provider key stays
+      // in THIS vault and is dereferenced only inside adapters/model. No
+      // portal process reads it.
+      authoring: {
+        secretStore,
+        definitionsRoot: defsRoot,
+        deployment,
+        ...(options.authoringFetch === undefined ? {} : { fetch: options.authoringFetch }),
       },
     });
     const gateway = createGatewayHttpTransport({

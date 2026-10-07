@@ -13,9 +13,12 @@
 //    W0-P33c's `POST /api/v1/admin/catalogue/reload` (design note W0-P33,
 //    decision C, owner 30 Sep 2026), served by ./catalogue-reload.ts. W0-P33d
 //    adds `POST /api/v1/admin/probe` (decision D), served by ./probe-run.ts,
-//    which reloads through the same seam. All sit behind the same front
-//    door. No other write may be added without a fresh decision (W0-P2 §7
-//    item 1).
+//    which reloads through the same seam. W0-Q9b adds model-assisted
+//    authoring (D7 of the W0-Q8 note, owner 7 Oct 2026): GET
+//    /api/v1/authoring/status and POST /api/v1/authoring/{suggest,accept},
+//    served by ./authoring.ts; none of them writes a definition or a target.
+//    All sit behind the same front door. No other write may be added without
+//    a fresh decision (W0-P2 §7 item 1).
 //  - No tool discovery and no invocation: nothing here reads a tool's
 //    description, schema or card, and nothing calls the policy chain's
 //    execute path. Agents reach tools through `/mcp` only.
@@ -45,6 +48,7 @@ import {
   API_V1_PAGE_MAX,
   API_V1_PREFIX,
   AUDIT_OUTCOMES,
+  AUTHORING_BODY_MAX_BYTES,
   CATALOGUE_RELOAD_PATH,
   PROBE_RUN_PATH,
   isSelfApproved,
@@ -95,6 +99,16 @@ import {
   type ProbeReloadResult,
   type ProbeRunSource,
 } from './probe-run.js';
+import {
+  AUTHORING_METHOD,
+  authoringAccept,
+  authoringRoute,
+  authoringStatus,
+  authoringSuggest,
+  type AuthoringRoute,
+  type AuthoringSource,
+} from './authoring.js';
+import { ConsumerCallRateLimiter } from '../../caps/consumer-quota.js';
 import {
   ADMIN_BODY_MAX_BYTES,
   adminUsersRoute,
@@ -151,6 +165,12 @@ export interface ReadApiOptions {
    * serve its report), POST /api/v1/admin/probe is refused as not served.
    */
   readonly probeRun?: ProbeRunSource;
+  /**
+   * W0-Q9b — model-assisted authoring (D7). The gateway's vault and
+   * definitions root, handed to the model adapter. Absent, every
+   * /api/v1/authoring path is refused as not served.
+   */
+  readonly authoring?: AuthoringSource;
 }
 
 export interface ReadApi {
@@ -191,6 +211,8 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
   digestOf(currentCatalogue());
   // W0-P33d: one portal probe at a time.
   let probeQueue: Promise<void> = Promise.resolve();
+  // W0-Q9b (D7.3): suggestions per consumer AND subject, one window per process.
+  const authoringRate = new ConsumerCallRateLimiter();
   const loadProbe =
     options.loadProbe ??
     (() =>
@@ -469,7 +491,7 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
     throw new ApiRefusal(
       'NOT_FOUND',
       `${url.pathname} is not an /api/v1 endpoint.`,
-      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, /admin/users for identity admins, and POST /admin/catalogue/reload and POST /admin/probe for super admins. Agents reach tools through /mcp only.',
+      'The read API serves /calls, /calls/{id}, /audit/verify, /approvals, /approvals/{id}, /consumers/usage, /enablement and /deployment, POST /approvals/{id}/decision, /admin/users for identity admins, POST /admin/catalogue/reload and POST /admin/probe for super admins, and GET /authoring/status, POST /authoring/suggest and POST /authoring/accept through a consumer with a human in its loop. Agents reach tools through /mcp only.',
     );
   }
 
@@ -492,6 +514,11 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
         }
         if (isProbeRunPath(url.pathname)) {
           await handleProbe(req, res, correlationId);
+          return;
+        }
+        const authoring = authoringRoute(url.pathname);
+        if (authoring !== undefined) {
+          await handleAuthoring(req, res, authoring, correlationId);
           return;
         }
         const decisionFor = decisionPathApprovalId(url.pathname);
@@ -641,6 +668,61 @@ export function createReadApi(options: ReadApiOptions): ReadApi {
       () => undefined,
     );
     send(res, 200, await run);
+  }
+
+  /**
+   * W0-Q9b — `/api/v1/authoring/{status,suggest,accept}` (D7). The front door
+   * runs first, before the method is checked or a body read, exactly as for
+   * the probe: an unregistered consumer or an unauthenticated human never
+   * reaches the authoring module, writes no row, and has no body read.
+   */
+  async function handleAuthoring(
+    req: IncomingMessage,
+    res: ServerResponse,
+    which: AuthoringRoute,
+    correlationId: string,
+  ): Promise<void> {
+    const viewer = await authenticate(req, correlationId);
+    const method = AUTHORING_METHOD[which];
+    if (req.method !== method) {
+      res.setHeader('allow', method);
+      throw new ApiRefusal(
+        'METHOD_NOT_ALLOWED',
+        `${req.method ?? 'This method'} is not served on ${API_V1_PREFIX}/authoring/${which}.`,
+        which === 'status'
+          ? 'Use GET to read whether model-assisted authoring is configured, and which providers have a key stored.'
+          : `Use POST with a JSON body to ${which === 'suggest' ? 'ask for a suggestion for one allow-listed field' : 'accept one suggested field'}.`,
+      );
+    }
+    const source = options.authoring;
+    if (source === undefined) {
+      throw new ApiRefusal(
+        'NOT_FOUND',
+        'Model-assisted authoring is not served by this gateway.',
+        "Restart the gateway with this deployment's overlay (overlays/<deployment>/authoring.yaml), or write the field by hand; this gateway was started without the authoring seam.",
+      );
+    }
+    const deps = {
+      store: options.store,
+      source,
+      catalogue: currentCatalogue(),
+      callsPerMinute: (consumerId: string) =>
+        options.consumers.consumers.find((c) => c.record.id === consumerId)?.record.limits
+          .callsPerMinute,
+      rateLimiter: authoringRate,
+      gatewayVersion,
+      now,
+    };
+    const actor = { session: viewer.session, subject: viewer.subject, correlationId };
+    const readBody = () =>
+      readBoundedJson(
+        req,
+        AUTHORING_BODY_MAX_BYTES,
+        'Send only the draft manifest and the fields the endpoint takes; a draft is far smaller than 256 KiB.',
+      );
+    if (which === 'status') send(res, 200, await authoringStatus(deps, actor));
+    else if (which === 'suggest') send(res, 200, await authoringSuggest(deps, actor, readBody));
+    else send(res, 200, await authoringAccept(deps, actor, readBody));
   }
 
   /** The reload a completed probe run asks for, as the same actor (W0-P33c's own row). */
@@ -905,7 +987,11 @@ function pageLimit(url: URL): number {
  * unread rather than buffered. Malformed JSON is `INPUT_INVALID`, never a
  * 500. Neither refusal echoes any of the body (it may hold a password).
  */
-async function readBoundedJson(req: IncomingMessage, maxBytes: number): Promise<unknown> {
+async function readBoundedJson(
+  req: IncomingMessage,
+  maxBytes: number,
+  oversizeNext = 'Send only the fields the endpoint takes: a decision and a reason of at most 2000 characters, or a user change with a password of at most 1024 characters.',
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -915,7 +1001,7 @@ async function readBoundedJson(req: IncomingMessage, maxBytes: number): Promise<
       throw new ApiRefusal(
         'INPUT_INVALID',
         `The request body is larger than ${maxBytes} bytes.`,
-        'Send only the fields the endpoint takes: a decision and a reason of at most 2000 characters, or a user change with a password of at most 1024 characters.',
+        oversizeNext,
       );
     }
     chunks.push(buf);

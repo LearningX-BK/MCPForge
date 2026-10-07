@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@mcpforge/adapter-function": "workspace:*",
+    "@mcpforge/adapter-model": "workspace:*",
     "@mcpforge/codegen": "workspace:*",
     "@mcpforge/probe": "workspace:*",
     "@mcpforge/registry": "workspace:*",

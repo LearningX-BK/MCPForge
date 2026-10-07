@@ -38,9 +38,22 @@ export interface AuditCredentialRef {
  * attempt to. Free text in both dialects, so again no migration.
  * `probe` (W0-P33d, design decision D, 30 Sep 2026): a super admin running the
  * capability probe from the portal, or a refused attempt to. No migration.
+ * uthoring (W0-Q9b, D7 of the W0-Q8 note, 7 Oct 2026): a person asking the
+ * gateway for a model-drafted manifest field, or accepting one, or a refused
+ * attempt to. The row never carries the prompt, the response text or a key:
+ * only the field, the provider, a request id, a byte count and a sha256 of the
+ * suggested text. Free text in both dialects, so no migration.
  */
 export type AuditPhase =
-  'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue' | 'probe';
+  | 'plan'
+  | 'execute'
+  | 'reject'
+  | 'reverse'
+  | 'approve'
+  | 'identity'
+  | 'catalogue'
+  | 'probe'
+  | 'authoring';
 
 /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
 export type AuditOutcome = 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';

@@ -247,6 +247,7 @@ export const CALL_PHASES = [
   'identity',
   'catalogue',
   'probe',
+  'authoring',
 ] as const;
 export type CallPhase = (typeof CALL_PHASES)[number];
 
@@ -302,6 +303,13 @@ export const CALL_PHASE: Readonly<Record<CallPhase, StatusEntry>> = {
     srLabel:
       'Call phase: probe. A super admin ran the capability probe from the portal, or was refused; only read-only and validate-only checks reached a target system.',
     icon: 'Radar',
+  },
+  authoring: {
+    token: 'status-neutral',
+    label: 'Authoring',
+    srLabel:
+      'Call phase: authoring. A person asked a model to draft one manifest field, or accepted one, or was refused; nothing reached a target system.',
+    icon: 'Sparkles',
   },
 } as const;
 

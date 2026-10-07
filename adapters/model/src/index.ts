@@ -1,6 +1,7 @@
 // MCPForge — W0-Q9: model-assisted authoring. See docs/build-plan/w0-q8-assisted-authoring.md.
 export * from './types.js';
 export * from './config.js';
+export { authoringOverlayPath, loadAuthoringConfig, siblingsOf } from './draft.js';
 export { NEVER_SENT, buildSuggestRequest, renderPrompt } from './payload.js';
 export type { DraftContext, RequestBusiness, SiblingTool } from './payload.js';
 export { checkSuggestion } from './gate.js';

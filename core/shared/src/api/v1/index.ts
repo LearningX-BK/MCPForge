@@ -77,6 +77,7 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 /** `identity` (W0-P28): an identity admin changing a local user, or a refused attempt to. */
 /** `catalogue` (W0-P33c): a super admin reloading the gateway catalogue, or a refused attempt to. */
 /** `probe` (W0-P33d): a super admin running the capability probe from the portal, or a refused attempt to. */
+/** `authoring` (W0-Q9b, D7): a person asking for, or accepting, a model-drafted field, or a refused attempt to. */
 export const AUDIT_PHASES = [
   'plan',
   'execute',
@@ -86,6 +87,7 @@ export const AUDIT_PHASES = [
   'identity',
   'catalogue',
   'probe',
+  'authoring',
 ] as const;
 export const AUDIT_OUTCOMES = [
   'ok',
@@ -647,3 +649,159 @@ export const probeRunResponseSchema = z.object({
   next: z.string().min(1),
 });
 export type ProbeRunResponse = z.infer<typeof probeRunResponseSchema>;
+
+// --- model-assisted authoring (W0-Q9b, D7) -----------------------------------------
+//
+// Decision D7 of docs/build-plan/w0-q8-assisted-authoring.md (owner, 7 Oct 2026:
+// "Yes, go ahead with all six as recommended"). The portal's Suggest panel no
+// longer opens the secret store: it relays to these three gateway endpoints,
+// behind the same front door as every other `/api/v1` call (a registered
+// consumer AND a signed-in human). The consumer must attest a human in its loop;
+// an agent consumer gets no authoring endpoint.
+//
+//  - `GET  …/authoring/status`  — `{enabled, providers, defaultProvider}`, so the
+//    panel stays ABSENT, not broken, when the feature is off (note §7).
+//  - `POST …/authoring/suggest` — one allow-listed field. `dryRun: true` is
+//    show-before-send: it sends nothing and writes no audit row. Otherwise every
+//    attempt is one hash-chained `authoring` audit row; the row's id is the
+//    `suggestionId`.
+//  - `POST …/authoring/accept`  — a person accepts ONE suggested field. The
+//    request names the `suggestionId` and the text; the gateway requires that
+//    the same subject asked for that field, unchanged, recently, and reads the
+//    provenance from that audit row.
+//
+// The acceptor is the authenticated `Principal.subject`. No request schema
+// below has an `acceptedBy` or `provenance` field, and every one is `.strict()`,
+// so a request that tries to name either is refused (`INPUT_INVALID`).
+
+export const AUTHORING_STATUS_PATH = `${API_V1_PREFIX}/authoring/status`;
+export const AUTHORING_SUGGEST_PATH = `${API_V1_PREFIX}/authoring/suggest`;
+export const AUTHORING_ACCEPT_PATH = `${API_V1_PREFIX}/authoring/accept`;
+
+/** A request body larger than this is refused unread (a draft manifest is far smaller). */
+export const AUTHORING_BODY_MAX_BYTES = 256 * 1024;
+
+/**
+ * Note §1 allow-list: the only manifest fields a model may propose text for.
+ * Closed, in code, and tested in `adapters/model` (which re-exports it as
+ * `ALLOWED_FIELDS`). It lives here so the portal can offer the list without
+ * importing the model adapter.
+ */
+export const AUTHORING_ALLOWED_FIELDS = [
+  'purpose',
+  'disambiguation',
+  'aliases',
+  'input.desc',
+  'input.example',
+  'output.summaryTemplate',
+  'writeSafety.confirm.planTemplate',
+] as const;
+export type AuthoringAllowedField = (typeof AUTHORING_ALLOWED_FIELDS)[number];
+
+/** The linked intake request's business half (W0-Q5), when the draft came from one. */
+export const authoringRequestBusinessSchema = z
+  .object({
+    does: z.string().min(1).max(4000),
+    goodAnswer: z.string().max(4000).optional(),
+    inputs: z.array(z.string().max(400)).max(50).optional(),
+  })
+  .strict();
+
+const draftYamlSchema = z.string().min(1);
+// The field is any string here: whether a model may draft it is the gate's
+// call (`AUTHORING_FIELD_NOT_ALLOWED`, audited), not a schema error.
+const fieldNameSchema = z.string().min(1).max(200);
+const inputNameSchema = z.string().min(1).max(200);
+
+/** `POST /api/v1/authoring/suggest`. No `acceptedBy`, no provenance: `.strict()`. */
+export const authoringSuggestRequestSchema = z
+  .object({
+    yaml: draftYamlSchema,
+    field: fieldNameSchema,
+    inputName: inputNameSchema.optional(),
+    providerId: z.string().min(1).max(200).optional(),
+    request: authoringRequestBusinessSchema.optional(),
+    /** Show-before-send: exactly what would be sent. Nothing is sent and no row is written. */
+    dryRun: z.boolean().optional(),
+  })
+  .strict();
+export type AuthoringSuggestRequest = z.infer<typeof authoringSuggestRequestSchema>;
+
+/** `POST /api/v1/authoring/accept`. No `acceptedBy`, no provenance: `.strict()`. */
+export const authoringAcceptRequestSchema = z
+  .object({
+    yaml: draftYamlSchema,
+    field: fieldNameSchema,
+    inputName: inputNameSchema.optional(),
+    /** The suggested text, unchanged. Its sha256 must match the suggestion's audit row. */
+    text: z.string().min(1).max(16_000),
+    /** The audit call id the suggest response returned. */
+    suggestionId: z.string().min(1).max(200),
+  })
+  .strict();
+export type AuthoringAcceptRequest = z.infer<typeof authoringAcceptRequestSchema>;
+
+/** `GET /api/v1/authoring/status`. Whether a key is stored is metadata; the key is never read. */
+export const authoringStatusResponseSchema = z.object({
+  asOf: z.string(),
+  enabled: z.boolean(),
+  providers: z.array(
+    z.object({ id: z.string(), kind: z.string(), available: z.boolean() }),
+  ),
+  defaultProvider: z.string().nullable(),
+});
+export type AuthoringStatusResponse = z.infer<typeof authoringStatusResponseSchema>;
+
+export const authoringProvenanceSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  requestId: z.string(),
+});
+export type AuthoringProvenanceView = z.infer<typeof authoringProvenanceSchema>;
+
+/** `POST /api/v1/authoring/suggest`: a dry run (nothing sent) or a suggestion (audited). */
+export const authoringSuggestResponseSchema = z.discriminatedUnion('dryRun', [
+  z.object({
+    asOf: z.string(),
+    dryRun: z.literal(true),
+    sent: z.literal(false),
+    provider: z.string(),
+    system: z.string(),
+    user: z.string(),
+    next: z.string().min(1),
+  }),
+  z.object({
+    asOf: z.string(),
+    dryRun: z.literal(false),
+    /** The hash-chained `authoring` audit row; accept names it. */
+    suggestionId: z.string(),
+    field: z.string(),
+    inputName: z.string().nullable(),
+    text: z.string(),
+    provenance: authoringProvenanceSchema,
+    next: z.string().min(1),
+  }),
+]);
+export type AuthoringSuggestResponse = z.infer<typeof authoringSuggestResponseSchema>;
+
+/** One accepted field, as the provenance sidecar records it. `acceptedBy` is the session's subject. */
+export const authoringAcceptedFieldSchema = authoringProvenanceSchema.extend({
+  field: z.string(),
+  inputName: z.string().optional(),
+  acceptedBy: z.string(),
+  acceptedAt: z.string(),
+});
+export type AuthoringAcceptedField = z.infer<typeof authoringAcceptedFieldSchema>;
+
+/** `POST /api/v1/authoring/accept`: the draft with exactly one field changed. */
+export const authoringAcceptResponseSchema = z.object({
+  asOf: z.string(),
+  yaml: z.string(),
+  /** Where the proposal's provenance sidecar lives: `provenance/<toolId>.authoring.yaml`. */
+  provenancePath: z.string(),
+  accepted: authoringAcceptedFieldSchema,
+  /** The hash-chained `authoring` audit row of this acceptance. */
+  auditCallId: z.string(),
+  next: z.string().min(1),
+});
+export type AuthoringAcceptResponse = z.infer<typeof authoringAcceptResponseSchema>;

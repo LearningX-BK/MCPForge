@@ -1,145 +1,192 @@
-// W0-Q9: the portal's authoring server actions. The viewer and the secret store are
-// the only mocks (a unit test has no request cookie and no OS keychain); the
-// overlay, the gate, `applySuggestion` and the provenance are real.
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+// W0-Q9b: the Suggest panel's relay to the gateway's authoring endpoints. The
+// gateway is a fetch fake answering in the shared /api/v1 contract; nothing
+// here opens a secret store or imports a model adapter (the portal-http-boundary
+// gate). The acceptor is never sent, and a spoofed one is dropped before the
+// request is built.
+import { describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import { SecretValue } from '@mcpforge/gateway/secrets';
+import { AUTHORING_ACCEPT_PATH, AUTHORING_STATUS_PATH, AUTHORING_SUGGEST_PATH } from '@mcpforge/shared/api/v1';
 
-const viewerState: { current: { subject: string } | null } = { current: null };
-vi.mock('@/lib/viewer/session', () => ({ getViewer: () => Promise.resolve(viewerState.current) }));
+vi.mock('@/lib/viewer/session', () => ({ sessionIdFromCookies: () => Promise.resolve(undefined) }));
 
-const keys = new Set<string>();
-vi.mock('@mcpforge/gateway/secrets/server', () => ({
-  EncryptedFileStore: class {
-    kind = 'encrypted-file';
-    async metadata(ref: { uri: string }) {
-      if (!keys.has(ref.uri)) throw new Error('missing');
-      return { ref: ref.uri, version: 1, createdAt: 'x', rotatedAt: undefined, expiresAt: undefined };
-    }
-    async get(ref: { uri: string }) {
-      if (!keys.has(ref.uri)) throw new Error('missing');
-      return new SecretValue(ref as never, 1, 'KEY');
-    }
-  },
-}));
+import { START_GATEWAY_COMMAND, type ReadDeps } from '@/lib/gateway-client/read-client';
 
-import { authoringAccept, authoringPreview, authoringStatus } from './actions';
+import { mergeAcceptedField, relayAccept, relayPreview, relayStatus, relaySuggest } from './relay';
 
-const OVERLAY = `apiVersion: mcpforge/v1
-kind: AuthoringModels
-enabled: true
-default: bv
-providers:
-  - id: bv
-    kind: blueverse
-    keyRef: secretRef://gateway/authoring-model-bv/api-key
-    spaceName: s
-    flowId: f
-`;
-const DRAFT = `id: jde.ap.supplier.create
-app: jde
-module: ap
-entity: supplier
-verb: create
-sensitivity: internal
-purpose: Old purpose here.
-binding: { type: function, ref: KEEP_ME }
-governance: { reviewPath: standard, steward: bob }
-`;
-const PROV = { provider: 'bv', model: 'flow:f', requestId: 'r1' };
+const DRAFT = 'id: jde.ap.supplier.create\npurpose: Old.\n';
+const ASOF = '2026-10-07T10:00:00Z';
+const ACCEPTED = {
+  field: 'purpose',
+  provider: 'bv',
+  model: 'flow:f',
+  requestId: 'r1',
+  acceptedBy: 'local:alice',
+  acceptedAt: ASOF,
+};
 
-let root: string;
-function put(rel: string, text: string): void {
-  mkdirSync(join(root, rel, '..'), { recursive: true });
-  writeFileSync(join(root, rel), text);
+type Call = { url: string; init: RequestInit };
+
+function gateway(status: number, json: unknown): { deps: ReadDeps; calls: Call[] } {
+  const calls: Call[] = [];
+  const deps: ReadDeps = {
+    baseUrl: 'http://gw.test',
+    accessToken: () => Promise.resolve('human-token'),
+    consumerHeaders: () => Promise.resolve({ 'mcpforge-consumer-assertion': 'signed' }),
+    fetch: (url, init) => {
+      calls.push({ url, init });
+      return Promise.resolve(new Response(JSON.stringify(json), { status }));
+    },
+  };
+  return { deps, calls };
 }
 
-beforeAll(() => {
-  root = mkdtempSync(join(tmpdir(), 'forge-authoring-actions-'));
-  writeFileSync(join(root, 'pnpm-workspace.yaml'), 'packages: []\n');
-  process.env['MCPFORGE_PORTAL_REPO_ROOT'] = root;
-});
-afterAll(() => {
-  delete process.env['MCPFORGE_PORTAL_REPO_ROOT'];
-});
-beforeEach(() => {
-  viewerState.current = { subject: 'local:alice' };
-  keys.clear();
-});
+const sent = (c: Call | undefined): Record<string, unknown> => JSON.parse(String(c?.init.body)) as Record<string, unknown>;
 
-describe('authoringStatus: absent, not broken', () => {
-  it('is off with no overlay', async () => {
-    expect(await authoringStatus()).toEqual({ enabled: false, providers: [], defaultProvider: null });
+describe('relayStatus: absent, not broken', () => {
+  it('passes an enabled status through, from the gateway', async () => {
+    const status = {
+      asOf: ASOF,
+      enabled: true,
+      defaultProvider: 'bv',
+      providers: [{ id: 'bv', kind: 'blueverse', available: true }],
+    };
+    const g = gateway(200, status);
+    expect(await relayStatus(g.deps)).toEqual({
+      enabled: true,
+      defaultProvider: 'bv',
+      providers: status.providers,
+    });
+    expect(g.calls[0]?.url).toBe(`http://gw.test${AUTHORING_STATUS_PATH}`);
+    expect(g.calls[0]?.init.method).toBe('GET');
   });
 
-  it('is off, not half-on, when the overlay is broken or carries a pasted key', async () => {
-    put('overlays/local/authoring.yaml', OVERLAY.replace('keyRef:', 'apiKey: sk-1\n    keyRef:'));
-    expect((await authoringStatus()).enabled).toBe(false);
-  });
-
-  it('reports whether each provider has a key, without reading it', async () => {
-    put('overlays/local/authoring.yaml', OVERLAY);
-    expect((await authoringStatus()).providers).toEqual([{ id: 'bv', kind: 'blueverse', available: false }]);
-    keys.add('secretRef://gateway/authoring-model-bv/api-key');
-    const s = await authoringStatus();
-    expect(s).toMatchObject({ enabled: true, defaultProvider: 'bv', providers: [{ id: 'bv', available: true }] });
-    expect(JSON.stringify(s)).not.toContain('KEY');
+  it('is absent when the gateway refuses (an agent consumer), is down, or nobody is signed in', async () => {
+    const off = { enabled: false, providers: [], defaultProvider: null };
+    const refused = gateway(403, {
+      error: { code: 'CONSUMER_NOT_AUTHORIZED', message: 'm', next: 'n', correlationId: 'c' },
+    });
+    expect(await relayStatus(refused.deps)).toEqual(off);
+    const down: ReadDeps = { ...refused.deps, fetch: () => Promise.reject(new TypeError('ECONNREFUSED')) };
+    expect(await relayStatus(down)).toEqual(off);
+    expect(await relayStatus({ ...refused.deps, accessToken: () => Promise.resolve(null) })).toEqual(off);
   });
 });
 
-describe('authoringAccept: one field, stamped by the session', () => {
-  beforeEach(() => put('overlays/local/authoring.yaml', OVERLAY));
-
-  it('refuses when nobody is signed in', async () => {
-    viewerState.current = null;
-    const r = await authoringAccept({ yaml: DRAFT, field: 'purpose', text: 'Create a supplier.', provenance: PROV });
-    expect(r).toMatchObject({ ok: false, code: 'CHANGE_SIGN_IN_REQUIRED' });
+describe('relaySuggest / relayPreview', () => {
+  it('preview asks the gateway for a dry run and shows its payload', async () => {
+    const g = gateway(200, { asOf: ASOF, dryRun: true, sent: false, provider: 'bv', system: 'SYS', user: 'Field: purpose', next: 'Nothing was sent.' });
+    const r = await relayPreview({ yaml: DRAFT, field: 'purpose' }, g.deps);
+    expect(r).toEqual({ ok: true, provider: 'bv', system: 'SYS', user: 'Field: purpose' });
+    expect(g.calls[0]?.url).toBe(`http://gw.test${AUTHORING_SUGGEST_PATH}`);
+    expect(sent(g.calls[0])).toEqual({ yaml: DRAFT, field: 'purpose', dryRun: true });
   });
 
-  it('applies exactly one field and records the SIGNED-IN subject, whatever the caller sends', async () => {
-    const r = await authoringAccept({
-      yaml: DRAFT,
+  it('a suggestion carries its suggestionId, with both halves of the caller and a bounded wait', async () => {
+    const g = gateway(200, {
+      asOf: ASOF,
+      dryRun: false,
+      suggestionId: 'call-1',
       field: 'purpose',
-      text: 'Create a supplier record.',
-      provenance: PROV,
-      acceptedBy: 'mallory',
-    } as never);
+      inputName: null,
+      text: 'Create a supplier.',
+      provenance: { provider: 'bv', model: 'flow:f', requestId: 'r1' },
+      next: 'A suggestion only.',
+    });
+    const r = await relaySuggest(
+      { yaml: DRAFT, field: 'purpose', providerId: 'bv', request: { does: 'adds suppliers', goodAnswer: '', inputs: [] } },
+      g.deps,
+    );
+    expect(r).toEqual({
+      ok: true,
+      text: 'Create a supplier.',
+      suggestionId: 'call-1',
+      provenance: { provider: 'bv', model: 'flow:f', requestId: 'r1' },
+    });
+    const headers = g.calls[0]?.init.headers as Record<string, string>;
+    expect(headers['authorization']).toBe('Bearer human-token');
+    expect(headers['mcpforge-consumer-assertion']).toBe('signed');
+    expect(g.calls[0]?.init.signal).toBeInstanceOf(AbortSignal);
+    // Empty request answers are omitted, not sent as empty strings.
+    expect(sent(g.calls[0])).toEqual({ yaml: DRAFT, field: 'purpose', providerId: 'bv', request: { does: 'adds suppliers' } });
+  });
+
+  it('maps every non-answer onto a refusal with a next', async () => {
+    const signedOut = gateway(200, {});
+    const out = await relaySuggest({ yaml: DRAFT, field: 'purpose' }, { ...signedOut.deps, accessToken: () => Promise.resolve(null) });
+    expect(out).toMatchObject({ ok: false, code: 'CHANGE_SIGN_IN_REQUIRED' });
+    expect(signedOut.calls).toHaveLength(0);
+
+    const down = await relaySuggest({ yaml: DRAFT, field: 'purpose' }, { ...signedOut.deps, fetch: () => Promise.reject(new TypeError('x')) });
+    expect(down).toMatchObject({ ok: false, code: 'GATEWAY_UNREACHABLE' });
+    if (!down.ok) expect(down.next).toContain(START_GATEWAY_COMMAND);
+
+    const refusal = { code: 'AUTHORING_SENSITIVITY_BLOCKED', message: 'Too sensitive.', next: 'Write this copy by hand.', correlationId: 'c' };
+    const refused = await relaySuggest({ yaml: DRAFT, field: 'purpose' }, gateway(403, { error: refusal }).deps);
+    expect(refused).toEqual({ ok: false, code: refusal.code, message: refusal.message, next: refusal.next });
+
+    const notServed = await relaySuggest(
+      { yaml: DRAFT, field: 'purpose' },
+      gateway(404, { error: { code: 'NOT_FOUND', message: 'Not served.', next: 'Restart.', correlationId: 'c' } }).deps,
+    );
+    expect(notServed).toMatchObject({ ok: false, code: 'AUTHORING_NOT_SERVED' });
+    if (!notServed.ok) expect(notServed.next).toContain('overlays/<deployment>/authoring.yaml');
+  });
+});
+
+describe('relayAccept: the acceptor is the gateway\'s', () => {
+  const answer = {
+    asOf: ASOF,
+    yaml: 'id: jde.ap.supplier.create\npurpose: Create a supplier.\n',
+    provenancePath: 'provenance/jde.ap.supplier.create.authoring.yaml',
+    accepted: ACCEPTED,
+    auditCallId: 'call-2',
+    next: 'Applied.',
+  };
+
+  it('sends only the field, the text and the suggestionId: never an acceptor, provenance or the sidecar', async () => {
+    const g = gateway(200, answer);
+    const r = await relayAccept(
+      {
+        yaml: DRAFT,
+        field: 'purpose',
+        text: 'Create a supplier.',
+        suggestionId: 'call-1',
+        provenanceYaml: 'kind: AuthoringProvenance\n',
+        acceptedBy: 'local:mallory',
+        provenance: { provider: 'evil', model: 'x', requestId: 'y' },
+      } as never,
+      g.deps,
+    );
+    expect(g.calls[0]?.url).toBe(`http://gw.test${AUTHORING_ACCEPT_PATH}`);
+    expect(sent(g.calls[0])).toEqual({ yaml: DRAFT, field: 'purpose', text: 'Create a supplier.', suggestionId: 'call-1' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const doc = parseYaml(r.yaml) as { purpose: string; binding: { ref: string }; governance: { steward: string } };
-    expect(doc.purpose).toBe('Create a supplier record.');
-    expect(doc.binding.ref).toBe('KEEP_ME');
-    expect(doc.governance.steward).toBe('bob');
-    expect(r.provenancePath).toBe('provenance/jde.ap.supplier.create.authoring.yaml');
+    expect(r.yaml).toBe(answer.yaml);
+    expect(r.provenancePath).toBe(answer.provenancePath);
     expect(r.provenanceYaml).toContain('acceptedBy: local:alice');
     expect(r.provenanceYaml).not.toContain('mallory');
-    expect(r.provenanceYaml).not.toContain('KEY');
+    expect(r.provenanceYaml).not.toContain('evil');
   });
 
-  it('refuses a field off the allow-list, text that is not one value, and an unconfigured provider', async () => {
-    const off = await authoringAccept({ yaml: DRAFT, field: 'binding.ref', text: 'EVIL', provenance: PROV });
-    expect(off).toMatchObject({ ok: false });
-    const multi = await authoringAccept({ yaml: DRAFT, field: 'purpose', text: 'x\nbinding:\n  type: plsql', provenance: PROV });
-    expect(multi).toMatchObject({ ok: false, code: 'AUTHORING_GATE_REFUSED' });
-    const stranger = await authoringAccept({ yaml: DRAFT, field: 'purpose', text: 'Create it.', provenance: { ...PROV, provider: 'nobody' } });
-    expect(stranger).toMatchObject({ ok: false, code: 'AUTHORING_PROVIDER_UNKNOWN' });
+  it('a refused accept is passed through with its next', async () => {
+    const error = { code: 'AUTHORING_SUGGESTION_UNKNOWN', message: 'Cannot accept.', next: 'Ask for a new suggestion.', correlationId: 'c' };
+    const r = await relayAccept({ yaml: DRAFT, field: 'purpose', text: 't', suggestionId: 's' }, gateway(409, { error }).deps);
+    expect(r).toEqual({ ok: false, code: error.code, message: error.message, next: error.next });
   });
 });
 
-describe('authoringPreview', () => {
-  it('needs a signed-in viewer, and shows the payload without any binding value', async () => {
-    put('overlays/local/authoring.yaml', OVERLAY);
-    viewerState.current = null;
-    expect(await authoringPreview({ yaml: DRAFT, field: 'purpose' })).toMatchObject({ ok: false });
-    viewerState.current = { subject: 'local:alice' };
-    const r = await authoringPreview({ yaml: DRAFT, field: 'purpose' });
-    expect(r.ok).toBe(true);
-    if (r.ok) {
-      expect(r.user).toContain('jde.ap.supplier.create');
-      expect(r.user).not.toContain('KEEP_ME');
-    }
+describe('mergeAcceptedField', () => {
+  it('keeps other fields, replaces a re-accepted one, and ignores a sidecar for another tool', () => {
+    const first = mergeAcceptedField(undefined, 'a.b.c.get', ACCEPTED);
+    const second = mergeAcceptedField(first, 'a.b.c.get', { ...ACCEPTED, field: 'input.desc', inputName: 'amount' });
+    const third = mergeAcceptedField(second, 'a.b.c.get', { ...ACCEPTED, requestId: 'r2', acceptedBy: 'local:bob' });
+    const doc = parseYaml(third) as { kind: string; toolId: string; fields: { field: string; requestId: string; acceptedBy: string }[] };
+    expect(doc).toMatchObject({ kind: 'AuthoringProvenance', toolId: 'a.b.c.get' });
+    expect(doc.fields.map((f) => `${f.field}:${f.requestId}:${f.acceptedBy}`)).toEqual([
+      'input.desc:r1:local:alice',
+      'purpose:r2:local:bob',
+    ]);
+    const other = parseYaml(mergeAcceptedField(third, 'x.y.z.get', ACCEPTED)) as { fields: unknown[] };
+    expect(other.fields).toHaveLength(1);
   });
 });

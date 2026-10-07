@@ -9,6 +9,8 @@
 import * as React from 'react';
 import { parse as parseYaml } from 'yaml';
 
+import { AUTHORING_ALLOWED_FIELDS, type AuthoringAllowedField } from '@mcpforge/shared/api/v1';
+
 import { Button } from '@/components/ui/button';
 import {
   authoringAccept,
@@ -19,16 +21,20 @@ import {
   type SuggestPayload,
 } from '../_authoring/actions';
 
-/** The closed list a model may draft (adapters/model ALLOWED_FIELDS); labels for people. */
-const FIELDS: readonly { value: string; label: string; perInput?: true }[] = [
-  { value: 'purpose', label: 'Purpose' },
-  { value: 'disambiguation', label: 'Disambiguation' },
-  { value: 'aliases', label: 'Aliases' },
-  { value: 'input.desc', label: 'Input description', perInput: true },
-  { value: 'input.example', label: 'Input example', perInput: true },
-  { value: 'output.summaryTemplate', label: 'Result summary' },
-  { value: 'writeSafety.confirm.planTemplate', label: 'Confirmation plan text' },
-];
+/** Labels for people. The list itself is the shared closed allow-list (W0-Q9b), in its order. */
+const LABELS: Readonly<Record<AuthoringAllowedField, { label: string; perInput?: true }>> = {
+  purpose: { label: 'Purpose' },
+  disambiguation: { label: 'Disambiguation' },
+  aliases: { label: 'Aliases' },
+  'input.desc': { label: 'Input description', perInput: true },
+  'input.example': { label: 'Input example', perInput: true },
+  'output.summaryTemplate': { label: 'Result summary' },
+  'writeSafety.confirm.planTemplate': { label: 'Confirmation plan text' },
+};
+const FIELDS: readonly { value: string; label: string; perInput?: true }[] = AUTHORING_ALLOWED_FIELDS.map((value) => ({
+  value,
+  ...LABELS[value],
+}));
 
 export interface SuggestPanelProps {
   readonly yamlText: string;
@@ -62,7 +68,7 @@ export function SuggestPanel({ yamlText, onYamlChange, provenanceYaml, onProvena
   const [problem, setProblem] = React.useState<Problem | undefined>(undefined);
   const [preview, setPreview] = React.useState<{ provider: string; system: string; user: string } | undefined>(undefined);
   const [suggestion, setSuggestion] = React.useState<
-    { text: string; provenance: { provider: string; model: string; requestId: string } } | undefined
+    { text: string; suggestionId: string; provenance: { provider: string; model: string; requestId: string } } | undefined
   >(undefined);
   const [accepted, setAccepted] = React.useState<string | undefined>(undefined);
 
@@ -119,7 +125,7 @@ export function SuggestPanel({ yamlText, onYamlChange, provenanceYaml, onProvena
     setPreview(undefined);
     const r = await run(() => authoringSuggest(payload()));
     if (r === undefined) return;
-    if (r.ok) setSuggestion({ text: r.text, provenance: r.provenance });
+    if (r.ok) setSuggestion({ text: r.text, suggestionId: r.suggestionId, provenance: r.provenance });
     else {
       setSuggestion(undefined);
       setProblem({ message: r.message, next: r.next });
@@ -129,7 +135,15 @@ export function SuggestPanel({ yamlText, onYamlChange, provenanceYaml, onProvena
   async function onAccept() {
     if (suggestion === undefined) return;
     const r = await run(() =>
-      authoringAccept({ ...payload(), text: suggestion.text, provenance: suggestion.provenance, provenanceYaml }),
+      // The suggestion's audit id, never its provenance or an acceptor: the gateway reads both itself.
+      authoringAccept({
+        yaml: yamlText,
+        field,
+        ...(perInput && input !== '' ? { inputName: input } : {}),
+        text: suggestion.text,
+        suggestionId: suggestion.suggestionId,
+        provenanceYaml,
+      }),
     );
     if (r === undefined) return;
     if (r.ok) {

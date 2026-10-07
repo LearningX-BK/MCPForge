@@ -58,7 +58,7 @@ async function revealKey(
     return failure(
       'AUTHORING_KEY_MISSING',
       `No key is stored for provider "${provider.id}".`,
-      `Store it with "forge secrets put ${provider.keyRef}" (the value is read from a prompt or stdin, never argv), then try again.`,
+      `Store it with "forge secrets put ${provider.keyRef}" (the value is read from a prompt or stdin, never argv), then ask for the suggestion again.`,
     );
   }
 }
@@ -85,7 +85,7 @@ async function post(
     return failure(
       'AUTHORING_PROVIDER_FAILED',
       `Provider "${provider.id}" could not be reached: ${e instanceof Error ? e.name : 'network error'}.`,
-      `Check the network and the baseUrl in the overlay, or choose another provider with --provider (no provider is switched to automatically). Nothing was written.`,
+      `Check the network and the baseUrl in the overlay, or choose another configured provider (--provider on the CLI, the Provider chooser in the portal); no provider is switched to automatically. Nothing was written.`,
     );
   }
   const text = await res.text();
@@ -94,8 +94,8 @@ async function post(
       'AUTHORING_PROVIDER_FAILED',
       `Provider "${provider.id}" answered HTTP ${res.status}.`,
       res.status === 401 || res.status === 403
-        ? `The key for "${provider.id}" was refused. Rotate it with "forge secrets put ${provider.keyRef}", or choose another provider with --provider.`
-        : `Try again later, or choose another provider with --provider (no provider is switched to automatically). Nothing was written.`,
+        ? `The key for "${provider.id}" was refused. Rotate it with "forge secrets put ${provider.keyRef}", or choose another configured provider (--provider on the CLI, the Provider chooser in the portal).`
+        : `Nothing was written. Ask again after the provider recovers, or choose another configured provider (--provider on the CLI, the Provider chooser in the portal); no provider is switched to automatically.`,
     );
   }
   let json: unknown;
@@ -183,7 +183,7 @@ function blueverse(
         return failure(
           'AUTHORING_RESPONSE_UNRECOGNISED',
           'BlueVerse returned a response shape this adapter does not recognise.',
-          'Nothing was written. Check the flow returns its answer in a field such as output, answer or response, or choose another provider with --provider.',
+          'Nothing was written. Check the flow returns its answer in a field such as output, answer or response, or choose another configured provider (--provider on the CLI, the Provider chooser in the portal).',
         );
       }
       // BlueVerse selects the model inside the flow, so the model is the flow.
@@ -236,7 +236,7 @@ function anthropic(
         return failure(
           'AUTHORING_RESPONSE_UNRECOGNISED',
           'The Anthropic response had no text content.',
-          'Nothing was written. Try again, or choose another provider with --provider.',
+          'Nothing was written. Ask for the suggestion again, or choose another configured provider (--provider on the CLI, the Provider chooser in the portal).',
         );
       }
       return {
@@ -288,7 +288,7 @@ function openaiCompatible(
         return failure(
           'AUTHORING_RESPONSE_UNRECOGNISED',
           'The response had no choices[0].message.content.',
-          'Nothing was written. Check the endpoint is OpenAI-compatible, or choose another provider with --provider.',
+          'Nothing was written. Check the endpoint is OpenAI-compatible, or choose another configured provider (--provider on the CLI, the Provider chooser in the portal).',
         );
       }
       return {

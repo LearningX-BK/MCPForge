@@ -5,6 +5,8 @@
 // choice of which field to write: the caller names the field, from a closed
 // list, and only `applySuggestion` (./apply.ts) ever writes into a draft.
 
+import { AUTHORING_ALLOWED_FIELDS } from '@mcpforge/shared/api/v1';
+
 /**
  * §1 allow-list: the only manifest fields a model may propose text for. Closed,
  * in code, and tested. Everything else (binding.*, writeSafety.* except the plan
@@ -15,16 +17,12 @@
  * field (core/shared/src/manifest/tool.ts), so there is nowhere to write it and
  * it is NOT on this list. If an error map joins the manifest, extending this
  * list is a deliberate, tested change.
+ *
+ * W0-Q9b: the constant itself lives in `@mcpforge/shared/api/v1`
+ * (`AUTHORING_ALLOWED_FIELDS`) so the portal can offer the list without
+ * importing this package. This is the same array, not a copy.
  */
-export const ALLOWED_FIELDS = [
-  'purpose',
-  'disambiguation',
-  'aliases',
-  'input.desc',
-  'input.example',
-  'output.summaryTemplate',
-  'writeSafety.confirm.planTemplate',
-] as const;
+export const ALLOWED_FIELDS = AUTHORING_ALLOWED_FIELDS;
 export type AllowedField = (typeof ALLOWED_FIELDS)[number];
 
 export function isAllowedField(field: unknown): field is AllowedField {
