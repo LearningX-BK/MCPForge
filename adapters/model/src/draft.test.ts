@@ -37,7 +37,11 @@ providers:
     kind: blueverse
     keyRef: secretRef://gateway/authoring-model-bv/api-key
 `;
-    put(r, 'overlays/local/authoring.yaml', overlay.replace('keyRef:', 'apiKey: sk-1\n    keyRef:'));
+    put(
+      r,
+      'overlays/local/authoring.yaml',
+      overlay.replace('keyRef:', 'apiKey: sk-1\n    keyRef:'),
+    );
     const bad = loadAuthoringConfig(r, 'local');
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.next.length).toBeGreaterThan(0);
@@ -54,9 +58,21 @@ describe('siblingsOf', () => {
     const r = root();
     const tool = (id: string, entity: string, purpose: string): string =>
       `apiVersion: mcpforge/v1\nkind: Tool\nid: ${id}\napp: jde\nmodule: ap\nentity: ${entity}\npurpose: ${purpose}\n`;
-    put(r, 'manifests/jde/ap/voucher.get.tool.yaml', tool('jde.ap.voucher.get', 'voucher', 'Get one voucher.'));
-    put(r, 'manifests/jde/ap/voucher.create.tool.yaml', tool('jde.ap.voucher.create', 'voucher', 'Create a voucher.'));
-    put(r, 'manifests/jde/ap/supplier.get.tool.yaml', tool('jde.ap.supplier.get', 'supplier', 'Get a supplier.'));
+    put(
+      r,
+      'manifests/jde/ap/voucher.get.tool.yaml',
+      tool('jde.ap.voucher.get', 'voucher', 'Get one voucher.'),
+    );
+    put(
+      r,
+      'manifests/jde/ap/voucher.create.tool.yaml',
+      tool('jde.ap.voucher.create', 'voucher', 'Create a voucher.'),
+    );
+    put(
+      r,
+      'manifests/jde/ap/supplier.get.tool.yaml',
+      tool('jde.ap.supplier.get', 'supplier', 'Get a supplier.'),
+    );
     const doc = { id: 'jde.ap.voucher.create', app: 'jde', module: 'ap', entity: 'voucher' };
     expect(siblingsOf(r, doc)).toEqual([{ id: 'jde.ap.voucher.get', purpose: 'Get one voucher.' }]);
   });
