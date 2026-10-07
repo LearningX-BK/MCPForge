@@ -71,7 +71,15 @@ export interface RecordUsageCallInput {
    * not a write, a plan or a confirmation.
    */
   readonly phase:
-    'plan' | 'execute' | 'reject' | 'reverse' | 'approve' | 'identity' | 'catalogue' | 'probe';
+    | 'plan'
+    | 'execute'
+    | 'reject'
+    | 'reverse'
+    | 'approve'
+    | 'identity'
+    | 'catalogue'
+    | 'probe'
+    | 'authoring';
   /** 02 §4.6 — `ok | business_error | policy_denied | binding_error | timeout`. */
   readonly outcome: 'ok' | 'business_error' | 'policy_denied' | 'binding_error' | 'timeout';
   readonly errorCode?: string | null;
