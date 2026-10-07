@@ -68,8 +68,8 @@ describe('status.ts — one vocabulary, two products (03 §13.5)', () => {
     assertWellFormed(BINDING_TYPE);
   });
 
-  it('CALL_PHASE covers all 8 audit phases (02 §4.6 + W0-P25 + W0-P28 + W0-P33c + W0-P33d): plan | execute | reject | reverse | approve | identity | catalogue | probe', () => {
-    expect(CALL_PHASES).toHaveLength(8);
+  it('CALL_PHASE covers all 9 audit phases (02 §4.6 + W0-P25 + W0-P28 + W0-P33c + W0-P33d + W0-Q9b): plan | execute | reject | reverse | approve | identity | catalogue | probe | authoring', () => {
+    expect(CALL_PHASES).toHaveLength(9);
     expect(Object.keys(CALL_PHASE).sort()).toEqual([...CALL_PHASES].sort());
     assertWellFormed(CALL_PHASE);
   });
