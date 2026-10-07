@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import {
   authoringAcceptResponseSchema,
@@ -29,6 +29,11 @@ import {
   type AuthoringDeps,
 } from './authoring.js';
 import { ApiRefusal, STATUS_BY_CODE } from './refusal.js';
+
+// Each model call opens the sealed vault (a deliberately slow KDF), and several
+// tests make five or more: the default 5 s is too tight when the suite runs in
+// parallel with the rest of the gateway's.
+vi.setConfig({ testTimeout: 30_000 });
 
 const KEY = 'sk-SENTINEL-AUTHORING-KEY-9f3a';
 const KEY_REF = 'secretRef://gateway/authoring-model-oc/api-key';
