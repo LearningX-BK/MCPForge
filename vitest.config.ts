@@ -20,6 +20,13 @@ export default defineConfig({
       {
         test: {
           name: 'root',
+          // Slow-machine allowance: the default 5 s fails spawned-CLI,
+          // git-sandbox and real-gateway tests when the whole suite runs in
+          // parallel on one developer machine (a warm `forge --help` alone
+          // takes 4-7 s there). A longer limit changes no assertion; a test
+          // that is actually hung still fails, just later.
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
           include: ['**/*.{test,spec}.{ts,tsx,js,mjs}'],
           exclude: [
             '**/node_modules/**',

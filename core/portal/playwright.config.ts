@@ -60,6 +60,9 @@ export default defineConfig({
     command: 'pnpm exec next dev --port 3100',
     url: 'http://127.0.0.1:3100',
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
+    // `next dev` cold start took longer than 60 s on a slow developer
+    // machine ("Timed out waiting 60000ms from config.webServer"). Only the
+    // wait for the server widens; the per-test timeout above is unchanged.
+    timeout: 180_000,
   },
 });
