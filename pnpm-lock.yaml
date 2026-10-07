@@ -289,9 +289,6 @@ importers:
       '@lezer/highlight':
         specifier: 1.2.3
         version: 1.2.3
-      '@mcpforge/adapter-model':
-        specifier: workspace:*
-        version: link:../../adapters/model
       '@mcpforge/cli':
         specifier: workspace:*
         version: link:../cli

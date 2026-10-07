@@ -31,7 +31,6 @@
     "@codemirror/view": "6.38.6",
     "@hookform/resolvers": "^5.9.1",
     "@lezer/highlight": "1.2.3",
-    "@mcpforge/adapter-model": "workspace:*",
     "@mcpforge/cli": "workspace:*",
     "@mcpforge/codegen": "workspace:*",
     "@mcpforge/registry": "workspace:*",

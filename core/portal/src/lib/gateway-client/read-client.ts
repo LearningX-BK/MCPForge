@@ -27,6 +27,10 @@
 // W0-P33d (decision D of the W0-P33 design note): a super admin starting the
 // capability probe goes through here too. Who may, and in which environment
 // class, is the gateway's call; the portal forwards and renders the answer.
+//
+// W0-Q9b (D7 of the W0-Q8 note): the Build editor's Suggest panel relays
+// here too. The provider key, the overlay and the model call are the
+// gateway's; the portal opens no secret store and imports no model adapter.
 
 import {
   API_V1_PATHS,
@@ -37,6 +41,17 @@ import {
   approvalDetailResponseSchema,
   approvalsResponseSchema,
   auditVerifyResponseSchema,
+  AUTHORING_ACCEPT_PATH,
+  AUTHORING_STATUS_PATH,
+  AUTHORING_SUGGEST_PATH,
+  authoringAcceptResponseSchema,
+  authoringStatusResponseSchema,
+  authoringSuggestResponseSchema,
+  type AuthoringAcceptRequest,
+  type AuthoringAcceptResponse,
+  type AuthoringStatusResponse,
+  type AuthoringSuggestRequest,
+  type AuthoringSuggestResponse,
   callDetailResponseSchema,
   callsPageSchema,
   consumerUsageResponseSchema,
@@ -120,6 +135,8 @@ async function request<T>(
   schema: ZodType<T>,
   deps: ReadDeps,
   post: { readonly body: unknown } | undefined,
+  /** W0-Q9b: a bound on the whole round trip (a model call can take a minute). */
+  timeoutMs?: number,
 ): Promise<ReadResult<T>> {
   const token = await (deps.accessToken ?? sessionAccessToken)();
   if (token === null) {
@@ -144,18 +161,28 @@ async function request<T>(
   let res: Response;
   try {
     const headers = { ...consumer, authorization: `Bearer ${token}`, accept: 'application/json' };
+    const signal = timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) };
     res = await (deps.fetch ?? ((input, init) => fetch(input, init)))(
       endpoint,
       post === undefined
-        ? { method: 'GET', headers, cache: 'no-store' }
+        ? { method: 'GET', headers, cache: 'no-store', ...signal }
         : {
             method: 'POST',
             headers: { ...headers, 'content-type': 'application/json' },
             body: JSON.stringify(post.body),
             cache: 'no-store',
+            ...signal,
           },
     );
-  } catch {
+  } catch (error) {
+    if (timeoutMs !== undefined && error instanceof Error && error.name === 'TimeoutError') {
+      return {
+        kind: 'refused',
+        code: 'GATEWAY_TIMEOUT',
+        message: `The gateway did not answer within ${Math.round(timeoutMs / 1000)} seconds.`,
+        next: 'Nothing was written to your draft. Ask again once, choose another provider, or write the field by hand; the gateway audit list shows whether the call reached a provider.',
+      };
+    }
     return {
       kind: 'gateway-down',
       endpoint: base,
@@ -314,4 +341,47 @@ export function changeAdminUser(
  */
 export function runProbe(deps: ReadDeps = {}): Promise<ReadResult<ProbeRunResponse>> {
   return request(PROBE_RUN_PATH, probeRunResponseSchema, deps, { body: undefined });
+}
+
+// --- model-assisted authoring (W0-Q9b, D7) ------------------------------------------
+
+/**
+ * The model call happens on the gateway (its adapter's own timeout is 60 s), so
+ * the portal waits a little longer than that for the whole round trip.
+ */
+export const AUTHORING_CLIENT_TIMEOUT_MS = 70_000;
+
+/** Whether authoring is configured, and which providers have a key stored. Never the key. */
+export function readAuthoringStatus(
+  deps: ReadDeps = {},
+): Promise<ReadResult<AuthoringStatusResponse>> {
+  return read(AUTHORING_STATUS_PATH, authoringStatusResponseSchema, deps);
+}
+
+/**
+ * Ask the gateway for one allow-listed field (or, with `dryRun`, for exactly
+ * what it would send). The gateway holds the provider key and audits the call.
+ */
+export function suggestAuthoring(
+  body: AuthoringSuggestRequest,
+  deps: ReadDeps = {},
+): Promise<ReadResult<AuthoringSuggestResponse>> {
+  return request(
+    AUTHORING_SUGGEST_PATH,
+    authoringSuggestResponseSchema,
+    deps,
+    { body },
+    AUTHORING_CLIENT_TIMEOUT_MS,
+  );
+}
+
+/**
+ * Accept one suggested field. The acceptor is never sent: the gateway takes it
+ * from the token, and reads the provenance from the suggestion's audit row.
+ */
+export function acceptAuthoring(
+  body: AuthoringAcceptRequest,
+  deps: ReadDeps = {},
+): Promise<ReadResult<AuthoringAcceptResponse>> {
+  return request(AUTHORING_ACCEPT_PATH, authoringAcceptResponseSchema, deps, { body });
 }

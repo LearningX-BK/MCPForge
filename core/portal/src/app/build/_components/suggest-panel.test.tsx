@@ -108,7 +108,7 @@ describe('SuggestPanel', () => {
 
   it('a suggestion changes nothing until that one field is accepted, and acceptance reports provenance', async () => {
     status.mockResolvedValue(ON);
-    suggest.mockResolvedValue({ ok: true, text: 'Find vouchers by supplier.', provenance: PROV });
+    suggest.mockResolvedValue({ ok: true, text: 'Find vouchers by supplier.', provenance: PROV, suggestionId: 'call-1' });
     accept.mockResolvedValue({ ok: true, yaml: 'NEW', provenanceYaml: 'PROV', provenancePath: 'provenance/a.b.c.get.authoring.yaml' });
     const { onYamlChange, onProvenance } = panel();
     fireEvent.click(await screen.findByRole('button', { name: 'Suggest' }));
@@ -121,14 +121,17 @@ describe('SuggestPanel', () => {
     const sent = accept.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(sent['field']).toBe('purpose');
     expect(sent['text']).toBe('Find vouchers by supplier.');
-    // the acceptor is never sent: the server stamps it from the session
+    // W0-Q9b: the suggestion's audit id is sent; the acceptor and the provenance never are
+    // (the gateway takes the acceptor from the session and the provenance from the audit row).
+    expect(sent['suggestionId']).toBe('call-1');
     expect(sent).not.toHaveProperty('acceptedBy');
+    expect(sent).not.toHaveProperty('provenance');
     expect((await screen.findByTestId('suggest-accepted')).textContent).toContain('purpose');
   });
 
   it('there is no accept-all', async () => {
     status.mockResolvedValue(ON);
-    suggest.mockResolvedValue({ ok: true, text: 'x', provenance: PROV });
+    suggest.mockResolvedValue({ ok: true, text: 'x', provenance: PROV, suggestionId: 'call-1' });
     panel();
     fireEvent.click(await screen.findByRole('button', { name: 'Suggest' }));
     await screen.findByTestId('suggest-text');
@@ -168,7 +171,7 @@ describe('SuggestPanel', () => {
 describe('DraftEditor + Suggest: Save draft carries the provenance', () => {
   it('writes the accepted-field provenance beside the manifest, and nothing when nothing was accepted', async () => {
     status.mockResolvedValue(ON);
-    suggest.mockResolvedValue({ ok: true, text: 'Find vouchers by supplier.', provenance: PROV });
+    suggest.mockResolvedValue({ ok: true, text: 'Find vouchers by supplier.', provenance: PROV, suggestionId: 'call-1' });
     accept.mockResolvedValue({
       ok: true,
       yaml: NEW_DRAFT_TEMPLATE_YAML,
