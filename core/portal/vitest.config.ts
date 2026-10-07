@@ -41,6 +41,10 @@ export default defineConfig({
     // test passes comfortably in isolation (~1s). Widened rather than
     // serialised, matching this repo's own precedent
     // (playwright.config.ts's `timeout: 90_000` for the same reason).
-    testTimeout: 20_000,
+    // Widened again from 20 s: a `LocalGit` contract test still hit 20 s in a
+    // full `forge ci` on a slow machine, with real `git` spawns taking several
+    // seconds each. Same reason, same remedy.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });

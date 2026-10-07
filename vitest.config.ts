@@ -16,6 +16,12 @@ import { defineConfig } from 'vitest/config';
 // which settings apply to which files within that one run.
 export default defineConfig({
   test: {
+    // Slow-machine allowance: one worker per physical core, not per logical
+    // thread. On a 4-core / 8-thread laptop the default (about 8 workers) runs
+    // spawn-heavy suites (CLI, git, real gateway) so oversubscribed that
+    // workers miss vitest's RPC heartbeat ("Timeout calling onTaskUpdate")
+    // and `pnpm test` fails with no failing test.
+    maxWorkers: 4,
     projects: [
       {
         test: {
