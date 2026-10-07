@@ -103,7 +103,7 @@
     --line-soft: var(--ltm-ink-550);
     --line-strong: var(--ltm-line-strong-dark);
 
-    --accent: var(--ltm-coral-500);
+    --accent: var(--ltm-coral-300); /* text/border on --accent-tint: coral-500 was 4.38:1 on --bg-ink-800, 3.70:1 on ink-600 */
     --accent-solid-bg: var(--ltm-coral-500);
     --accent-solid-fg: var(--ltm-ink-900); /* ink on coral — 5.50:1, never white */
     --accent-tint: var(--ltm-coral-tint-dark);
@@ -160,7 +160,7 @@
   --line-soft: var(--ltm-ink-550);
   --line-strong: var(--ltm-line-strong-dark);
 
-  --accent: var(--ltm-coral-500);
+  --accent: var(--ltm-coral-300); /* see the prefers-color-scheme block above */
   --accent-solid-bg: var(--ltm-coral-500);
   --accent-solid-fg: var(--ltm-ink-900); /* ink on coral — 5.50:1, never white */
   --accent-tint: var(--ltm-coral-tint-dark);

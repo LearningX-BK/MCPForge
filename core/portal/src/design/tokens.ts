@@ -61,7 +61,7 @@ export const tokens = {
     line: "#34383d",
     lineSoft: "#2a2e33",
     lineStrong: "#454a51",
-    accent: "#f2665b",
+    accent: "#f5877e",
     accentSolidBg: "#f2665b",
     accentSolidFg: "#1a1d21",
     accentTint: "rgba(242, 102, 91, 0.12)",
