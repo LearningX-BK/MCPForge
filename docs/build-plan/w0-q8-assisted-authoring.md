@@ -159,10 +159,22 @@ The feature is **absent, not broken**:
 | D4 | Default for `personal` / `financial` tools | Agreed (off by default), "but should be there": a per-provider overlay setting that can enable it (§4) |
 | D5 | Eval-intent suggestion in Wave 0? | **Yes**, as a suggestions file only; first to cut if scope tightens |
 | D6 | Is a hosted provider acceptable given egress? | **Yes**, off until configured, with show-before-send |
+| D7 | How does the portal's Suggest panel reach the model without the portal holding the key? (7 Oct 2026; amends §10) | **Gateway endpoints** `POST /api/v1/authoring/suggest` and `/accept` (owner: "1, plan it on Opus first"; then "Yes, go ahead with all six as recommended"). Sub-decisions below |
+
+**D7 sub-decisions** (all six taken as recommended by the Opus plan):
+
+1. A third, read-only `GET /api/v1/authoring/status` reports `{enabled, providers[{id, kind, available}], defaultProvider}`, so the panel stays *absent, not broken* (§7) without the portal opening the secret store.
+2. Show-before-send is `dryRun: true` on suggest: it sends nothing, writes no audit row, and shows exactly what the gateway would send from its own definitions root.
+3. Rate limit on suggest: the consumer's `limits.callsPerMinute`, applied per subject, unless an explicit deferral is recorded in TASKS.md.
+4. Accept is bound to a real suggestion: the request carries a `suggestionId` (the audit call id) and the text; the gateway requires the same subject, field and input name, a matching `textSha256`, and a TTL. Provenance is read from that audit row, never from the request.
+5. Consumer rule: authoring requires `consumer.attestation.humanInTheLoop` and the draft's sensitivity at or below `maxSensitivity` (the higher of the draft's and the served catalogue's value). An agent consumer gets no authoring endpoint.
+6. The provider key stays at `secretRef://gateway/authoring-model-<id>/api-key` in the gateway's `EncryptedFileStore`. No portal process reads it (closes W0-Q9 gap (d)).
+
+The acceptor (`acceptedBy`) is taken from the authenticated `Principal.subject` and appears in no request schema. `SecretStore.get()` is still called only inside `adapters/model` (non-negotiable 8, `no-secret-value-escape`).
 
 ## 10. Not covered, deliberately
 
-Model-written bindings or wrapped-vendor discovery (that is W0-Q10's Harvest, and needs its own note), fine-tuning, caching or reusing suggestions across tenants, cost budgeting and rate limits, and any model call at **runtime** in the gateway: this feature exists only at authoring time, and the gateway never calls a model.
+Model-written bindings or wrapped-vendor discovery (that is W0-Q10's Harvest, and needs its own note), fine-tuning, caching or reusing suggestions across tenants, cost budgeting, and any model call at **runtime** in the gateway on behalf of a *tool call*: this feature is an authoring aid, and no tool call, role or consumer path ever reaches a model. *(Amended 7 Oct 2026 by D7: the gateway now hosts the authoring endpoints and, through them, makes the authoring model call. The earlier wording, "the gateway never calls a model", no longer holds; the narrower statement above does.)* Rate limiting is covered by D7 sub-decision 3 only.
 
 ## 11. Implementation notes (W0-Q9, 6 Oct 2026)
 
