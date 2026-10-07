@@ -80,7 +80,7 @@ export async function suggestField(
     return failure(
       'AUTHORING_PROVIDER_UNAVAILABLE',
       `Provider "${picked.provider.id}" is not available (no key stored, or it is not fully configured).`,
-      `Store its key with "forge secrets put ${picked.provider.keyRef}", or choose another configured provider with --provider. No provider is switched to automatically.`,
+      `Store its key with "forge secrets put ${picked.provider.keyRef}", or choose another configured provider (--provider on the CLI, the Provider chooser in the portal). No provider is switched to automatically.`,
     );
   }
 

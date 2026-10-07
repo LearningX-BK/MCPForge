@@ -17,21 +17,18 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   ALLOWED_FIELDS,
-  UNCONFIGURED,
   applySuggestion,
   authoringEnabled,
-  parseAuthoringConfig,
+  loadAuthoringConfig,
   previewPayload,
   provenancePath,
   recordAcceptance,
+  siblingsOf,
   suggestField,
-  type AuthoringConfig,
   type AuthoringModel,
   type FieldTarget,
-  type SiblingTool,
 } from '@mcpforge/adapter-model';
 import { findDefinitionsRoot, findRepoRoot } from '@mcpforge/ci';
-import { loadManifestFiles } from '@mcpforge/codegen/validate';
 import { EncryptedFileStore } from '@mcpforge/gateway/secrets/server';
 import type { SecretStore } from '@mcpforge/gateway/secrets';
 import { parse as parseYaml } from 'yaml';
@@ -77,27 +74,6 @@ function fail(opts: SuggestOptions, code: string, message: string, next: string)
   return USAGE_EXIT_CODE;
 }
 
-export function loadAuthoringConfig(
-  definitionsRoot: string,
-  deployment: string,
-): { ok: true; config: AuthoringConfig } | { ok: false; message: string; next: string } {
-  const file = join(definitionsRoot, 'overlays', deployment, 'authoring.yaml');
-  if (!existsSync(file)) return { ok: true, config: UNCONFIGURED };
-  return parseAuthoringConfig(readFileSync(file, 'utf8'));
-}
-
-function siblingsOf(root: string, doc: Record<string, unknown>): SiblingTool[] {
-  const key = `${String(doc['app'])}.${String(doc['module'])}.${String(doc['entity'])}`;
-  const out: SiblingTool[] = [];
-  for (const m of loadManifestFiles(root)) {
-    const d = m.doc as Record<string, unknown> | null | undefined;
-    if (d?.['kind'] !== 'Tool' || typeof d['id'] !== 'string' || d['id'] === doc['id']) continue;
-    if (`${String(d['app'])}.${String(d['module'])}.${String(d['entity'])}` === key) {
-      out.push({ id: d['id'], purpose: typeof d['purpose'] === 'string' ? d['purpose'] : '' });
-    }
-  }
-  return out;
-}
 
 export async function runSuggestCommand(
   manifest: string | undefined,

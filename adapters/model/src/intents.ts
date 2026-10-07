@@ -84,7 +84,7 @@ export async function suggestIntents(
     return failure(
       'AUTHORING_PROVIDER_UNAVAILABLE',
       `Provider "${picked.provider.id}" is not available.`,
-      `Store its key with "forge secrets put ${picked.provider.keyRef}", or choose another provider with --provider.`,
+      `Store its key with "forge secrets put ${picked.provider.keyRef}", or choose another configured provider (--provider on the CLI, the Provider chooser in the portal).`,
     );
   }
   const r = await adapter.complete(intentsPrompt(input));
