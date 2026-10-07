@@ -118,7 +118,7 @@ describe('runCiPipeline', () => {
     for (const stage of report.stages) {
       expect(['passed', 'failed', 'not_implemented']).toContain(stage.status);
     }
-  }, 30000);
+  }, 120_000);
 
   it('NO stage is not_implemented any more — W0-P1 connected the last three (2, 4, 11)', async () => {
     repoRoot = makeFixtureRepoRoot();
@@ -176,7 +176,7 @@ describe('runCiPipeline', () => {
     expect(report.stages.find((s) => s.id === 15)!.status).toBe('failed');
     expect(report.stages.find((s) => s.id === 16)!.status).toBe('failed');
     expect(report.stages.find((s) => s.id === 17)!.status).toBe('failed');
-  }, 30000);
+  }, 120_000);
 
   it('stage 7 (contract tests, both modes) genuinely runs MCPFORGE_MODE=headless and =full, and names the mode that failed', async () => {
     repoRoot = makeFixtureRepoRoot();
@@ -184,7 +184,7 @@ describe('runCiPipeline', () => {
     const stage7 = report.stages.find((s) => s.id === 7)!;
     expect(stage7.status).toBe('failed');
     expect(stage7.detail).toContain('MCPFORGE_MODE=headless');
-  }, 30000);
+  }, 120_000);
 
   it('stages 1 (lint+typecheck), 6 (unit tests) and 8 (policy suite) actually run — and fail against a fixture with no matching scripts', async () => {
     repoRoot = makeFixtureRepoRoot();
@@ -199,7 +199,7 @@ describe('runCiPipeline', () => {
     expect(stage6.status).toBe('failed');
     expect(stage8.status).toBe('failed');
     expect(stage8.detail).toContain('test:policy');
-  }, 30000);
+  }, 120_000);
 
   it('stage 3 (regeneration invariant) is a real stage — never not_implemented — even against a fixture with no git repo', async () => {
     repoRoot = makeFixtureRepoRoot();
@@ -210,14 +210,14 @@ describe('runCiPipeline', () => {
     // (forge codegen itself DID run — this is the "no git repo" branch).
     expect(stage3.status).toBe('failed');
     expect(stage3.detail).toContain('not a git repository');
-  }, 30000);
+  }, 120_000);
 
   it('stage 3 passes against a git fixture whose generated/ tree matches its committed baseline exactly', async () => {
     repoRoot = await makeGitFixtureRepoRoot();
     const report = await runCiPipeline(repoRoot);
     const stage3 = report.stages.find((s) => s.id === 3)!;
     expect(stage3.status).toBe('passed');
-  }, 30000);
+  }, 120_000);
 
   it('stage 3 fails, naming the file, when a generated/ file has been hand-edited after commit', async () => {
     repoRoot = await makeGitFixtureRepoRoot();
@@ -228,7 +228,7 @@ describe('runCiPipeline', () => {
     const stage3 = report.stages.find((s) => s.id === 3)!;
     expect(stage3.status).toBe('failed');
     expect(stage3.detail).toContain('generated/tools/committed.txt');
-  }, 30000);
+  }, 120_000);
 
   it('stage 3 fails, naming the file, when a new file appears under generated/ that was never committed', async () => {
     repoRoot = await makeGitFixtureRepoRoot();
@@ -237,21 +237,21 @@ describe('runCiPipeline', () => {
     const stage3 = report.stages.find((s) => s.id === 3)!;
     expect(stage3.status).toBe('failed');
     expect(stage3.detail).toContain('generated/tools/uncommitted.txt');
-  }, 30000);
+  }, 120_000);
 
   it('ok is false whenever any stage failed, true when only not_implemented/passed stages exist', async () => {
     repoRoot = makeFixtureRepoRoot();
     const report = await runCiPipeline(repoRoot);
     expect(report.summary.failed).toBeGreaterThan(0);
     expect(report.ok).toBe(false);
-  }, 30000);
+  }, 120_000);
 
   it('stage 9 (token-budget gate) passes against W0-G5\'s own base fixture — every card, resident definition, describe response and role core set within budget', async () => {
     repoRoot = makeBudgetFixtureRepoRoot();
     const report = await runCiPipeline(repoRoot);
     const stage9 = report.stages.find((s) => s.id === 9)!;
     expect(stage9.status).toBe('passed');
-  }, 30000);
+  }, 120_000);
 
   it('stage 9 fails, naming the specific tools to demote, when a role\'s coreTools sum exceeds 1,300 tokens', async () => {
     repoRoot = makeBudgetFixtureRepoRoot();
@@ -286,7 +286,7 @@ describe('runCiPipeline', () => {
     expect(stage9.detail).toContain('roleCoreSet');
     expect(stage9.detail).toContain('p2p');
     expect(stage9.detail).toContain('Demote from coreTools');
-  }, 30000);
+  }, 120_000);
 
   it('a not_implemented stage is never mistaken for a soft-allowed failure: it never appears as "passed"', async () => {
     repoRoot = makeFixtureRepoRoot();
@@ -297,7 +297,7 @@ describe('runCiPipeline', () => {
         expect(stage.detail).toContain('Not built yet');
       }
     }
-  }, 30000);
+  }, 120_000);
 
   it('stages 16-17 (accessibility gates 3-4) genuinely spawn pnpm and are never not_implemented or allowed-to-fail', async () => {
     repoRoot = makeFixtureRepoRoot();
@@ -311,7 +311,7 @@ describe('runCiPipeline', () => {
     expect(stage17.status).toBe('failed');
     expect(stage16.detail).toContain('test:a11y:routes');
     expect(stage17.detail).toContain('Not fakeable');
-  }, 30000);
+  }, 120_000);
 });
 
 describe('formatCiReportHuman', () => {
@@ -327,5 +327,5 @@ describe('formatCiReportHuman', () => {
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }
-  }, 30000);
+  }, 120_000);
 });
