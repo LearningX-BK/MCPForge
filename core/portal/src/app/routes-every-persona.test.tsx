@@ -101,6 +101,7 @@ vi.mock('@/app/requests/_lib/load-requests', async (importActual) => {
       'governance: { owner: JDE Finance CoE, steward: bob, sensitivity: internal, processTag: P2P, expectedVolume: "", intendedToolId: jde.ap.voucher.search_by_amount, server: jde-fin-ap }',
       '',
     ].join('\n'),
+    'requests/req-20261006-route-test.request.yaml',
   );
   if (!parsed.ok) throw new Error(`route-test request fixture is invalid: ${parsed.message}`);
   const facts = {

@@ -170,6 +170,37 @@ describe('contrast — status chips as actually rendered (this task)', () => {
   );
 });
 
+describe('contrast — accent text on --accent-tint, as the preview branch badge renders it', () => {
+  // `BranchChip` (components/shell/branch-chip.tsx) is `text-accent` on
+  // `bg-accent-tint`, a translucent wash that composites onto whatever it sits
+  // on: the topbar (--bg-sidebar/--bg-surface-2 family) or a card
+  // (--bg-surface-3). Dark `--accent` was coral-500, which measured 4.38:1 on
+  // ink-800 and 3.70:1 on ink-600; axe's `color-contrast` caught it on
+  // /catalog and /environments. It is coral-300 now.
+  const flatten = (tint: string, bgHex: string): string => {
+    const m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*\)$/.exec(tint);
+    if (!m) throw new Error(`contrast.test: expected an rgba() colour, got "${tint}"`);
+    const [r, g, b, a] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])] as const;
+    const hex = bgHex.replace('#', '');
+    const ch = (i: number) => parseInt(hex.slice(i, i + 2), 16);
+    const mix = (fg: number, bg: number) => Math.round(fg * a + bg * (1 - a));
+    return `#${[mix(r, ch(0)), mix(g, ch(2)), mix(b, ch(4))].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+  };
+
+  it.each([
+    ['light', tokens.light.accent, tokens.light.accentTint, tokens.light.bgSurface],
+    ['light', tokens.light.accent, tokens.light.accentTint, tokens.light.bgSurface3],
+    ['dark', tokens.dark.accent, tokens.dark.accentTint, tokens.dark.bgSidebar],
+    ['dark', tokens.dark.accent, tokens.dark.accentTint, tokens.dark.bgSurface2],
+    ['dark', tokens.dark.accent, tokens.dark.accentTint, tokens.dark.bgSurface3],
+  ] as const)(
+    '%s: --accent on --accent-tint, over each surface it sits on, passes AA',
+    (_theme, fg, tint, surface) => {
+      expect(contrastRatio(fg, flatten(tint, surface))).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    },
+  );
+});
+
 describe('contrast — text-disabled is intentionally sub-AA (never used for content)', () => {
   it('light text-disabled on bg-surface is below AA', () => {
     expect(

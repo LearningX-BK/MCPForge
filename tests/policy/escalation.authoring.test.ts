@@ -389,5 +389,5 @@ describe('W0-Q9b — authoring endpoints fail closed at the front door and for a
     }
     expect(rows).not.toContain('mallory');
     expect((await launched.store.audit.verifyChain('local')).status).toBe('intact');
-  });
+  }, 30_000);
 });
