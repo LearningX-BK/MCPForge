@@ -11,6 +11,8 @@
 // The portal authenticates to this gateway as `portal-local`, with the private
 // key already on this machine (`.mcpforge/portal/`). That key never leaves the
 // machine, which is why config only turns this on when the file exists.
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { launchGateway } from '../../../../gateway/launch.js';
 import { launchRepo, TEST_CONSUMER, TEST_GROUP } from '../../../../gateway/launch.test-support.js';
@@ -21,6 +23,7 @@ import { planCanonicalHash } from '../../../../gateway/policy/confirm/hash.js';
 import { generateTestConsumerKeypair } from '../../../../gateway/transport/consumer-auth/testkit.js';
 import {
   E2E_GATEWAY_PORT,
+  E2E_IDS_FILE,
   E2E_PASSWORD,
   E2E_REQUESTER,
   E2E_VIEWER,
@@ -81,6 +84,23 @@ for (const amount of [18400, 920]) {
     expiresAt: '2099-01-01T00:00:00.000Z',
   });
 }
+
+// One executed write by the viewer, still inside its reversal window, for reverse.spec.ts.
+const executed = await launched.store.audit.append({
+  callerSubject: E2E_VIEWER.subject,
+  consumerId: TEST_CONSUMER,
+  humanInTheLoop: true,
+  toolId: 'jde.ap.voucher.create',
+  toolVersion: '1.0.0',
+  isWrite: true,
+  deploymentId: 'local',
+  phase: 'execute',
+  outcome: 'ok',
+  resultKeys: [{ keyName: 'voucher_number', keyValue: 'V-E2E-0001' }],
+  reversalClass: 'compensating-tool',
+  reversalToolId: 'jde.ap.voucher.cancel',
+});
+writeFileSync(E2E_IDS_FILE, JSON.stringify({ reversibleCallId: executed.id }));
 
 console.log(`e2e gateway ready on ${launched.gatewayPort} (definitions copy: ${join(repo)})`);
 const stop = async (): Promise<void> => {

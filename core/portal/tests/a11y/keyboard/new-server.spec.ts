@@ -4,6 +4,7 @@
 // Save draft, Propose. Nothing is written to the working tree: the manifest lands
 // on a branch in the change host's own sandbox.
 import { expect, test } from '@playwright/test';
+import { e2eCredentials, signIn } from './sign-in';
 
 test('a new module server is drafted and proposed from the Build landing page, by keyboard', async ({
   page,
@@ -18,17 +19,8 @@ test('a new module server is drafted and proposed from the Build landing page, b
   // has one) to run it; without them the test still proves the form, the split rule,
   // the duplicate warning and the real validate, and that an unauthenticated Save
   // draft is REFUSED with a `next`, which is the gate doing its job.
-  const username = process.env['MCPFORGE_E2E_USERNAME'];
-  const password = process.env['MCPFORGE_E2E_PASSWORD'];
-  const signedIn = username !== undefined && password !== undefined;
-  if (signedIn) {
-    await page.goto('/sign-in?returnTo=/build');
-    await page.getByLabel(/^username/i).fill(username);
-    await page.getByLabel(/^password/i).fill(password);
-    const totp = process.env['MCPFORGE_E2E_TOTP'];
-    if (totp !== undefined) await page.getByLabel(/code/i).fill(totp);
-    await page.keyboard.press('Enter');
-  }
+  const signedIn = e2eCredentials() !== undefined;
+  if (signedIn) await signIn(page, '/build');
   await page.goto('/build');
 
   const entry = page.getByRole('link', { name: /new module server/i });
