@@ -19,7 +19,7 @@
     "test:a11y:components": "vitest run src/components",
     "playwright:install": "playwright install chromium",
     "test:a11y:routes": "playwright test tests/a11y/axe-routes.spec.ts",
-    "test:a11y:keyboard": "playwright test tests/a11y/keyboard --workers=2"
+    "test:a11y:keyboard": "playwright test tests/a11y/keyboard --workers=1"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.18.6",
