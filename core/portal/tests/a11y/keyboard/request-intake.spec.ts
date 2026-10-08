@@ -2,6 +2,7 @@
 // through the real ChangeHost. The request lands as a file on its own branch in
 // the change host's sandbox; nothing is written to the working tree.
 import { expect, test } from '@playwright/test';
+import { e2eCredentials, signIn } from './sign-in';
 
 test('an ask is submitted as a tracked request and opens on its detail page, by keyboard', async ({
   page,
@@ -12,17 +13,8 @@ test('an ask is submitted as a tracked request and opens on its detail page, by 
   // MCPFORGE_E2E_PASSWORD (and MCPFORGE_E2E_TOTP) to run it; without them the test
   // proves the ask, the real verdict, the form, and that an unauthenticated Submit
   // is REFUSED with a `next`, which is the gate doing its job.
-  const username = process.env['MCPFORGE_E2E_USERNAME'];
-  const password = process.env['MCPFORGE_E2E_PASSWORD'];
-  const signedIn = username !== undefined && password !== undefined;
-  if (signedIn) {
-    await page.goto('/sign-in?returnTo=/requests');
-    await page.getByLabel(/^username/i).fill(username);
-    await page.getByLabel(/^password/i).fill(password);
-    const totp = process.env['MCPFORGE_E2E_TOTP'];
-    if (totp !== undefined) await page.getByLabel(/code/i).fill(totp);
-    await page.keyboard.press('Enter');
-  }
+  const signedIn = e2eCredentials() !== undefined;
+  if (signedIn) await signIn(page, '/requests');
   await page.goto('/requests');
 
   const type = async (label: RegExp, value: string) => {

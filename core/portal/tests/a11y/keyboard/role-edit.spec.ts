@@ -10,6 +10,7 @@
 // "same reasoning as `environments/_components/env-nav.tsx`"), so there is
 // no tab to switch to — the nav's own entry is a plain link.
 import { expect, test } from '@playwright/test';
+import { e2eCredentials, NO_SIGN_IN_REASON, signIn } from './sign-in';
 
 test('editing role globs and producing a change proposal is completable without a mouse', async ({
   page,
@@ -20,6 +21,9 @@ test('editing role globs and producing a change proposal is completable without 
   // the waits below. Wider than the file's own default so those two real
   // round trips are never mistaken for a hang.
   test.setTimeout(240_000);
+  // Save draft and Propose are gated on a signed-in human (W0-P5b).
+  test.skip(e2eCredentials() === undefined, NO_SIGN_IN_REASON);
+  await signIn(page, '/governance');
   await page.goto('/governance');
 
   await expect(page.getByRole('link', { name: /^roles$/i })).toBeVisible();

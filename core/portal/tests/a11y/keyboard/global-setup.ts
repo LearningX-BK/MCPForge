@@ -1,3 +1,6 @@
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { request, type FullConfig } from '@playwright/test';
 
 // MCPForge — W0-J21 gate 4 root-cause fix.
@@ -42,6 +45,27 @@ const ROUTES = [
 ] as const;
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
+  // The change host keeps ONE persistent sandbox working tree per machine. A
+  // sandbox left by an earlier run already holds role-edit's edit on
+  // `forge/role-p2p`, so the next run's Save draft would see "Nothing changed".
+  // Start every run from none; the first ChangeHost call seeds a fresh one.
+  rmSync(
+    join(
+      fileURLToPath(new URL('.', import.meta.url)),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      '.mcpforge',
+      'change-host-sandbox',
+    ),
+    {
+      recursive: true,
+      force: true,
+    },
+  );
+
   const baseURL = config.projects[0]?.use?.baseURL ?? 'http://127.0.0.1:3100';
   const context = await request.newContext({ baseURL });
   try {

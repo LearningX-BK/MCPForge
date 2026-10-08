@@ -1,4 +1,35 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+import {
+  E2E_GATEWAY_PORT,
+  E2E_PASSWORD,
+  E2E_VIEWER,
+} from './tests/a11y/keyboard/e2e-gateway-config';
+
+// W0-J21 gate 4 (owner decision, 8 Oct 2026): the specs that need a signed-in
+// human (approve, role-edit) run against a REAL local gateway with a real user
+// and seeded pending approvals (tests/a11y/keyboard/e2e-gateway.ts). The portal
+// authenticates to it as `portal-local` with the key already on this machine; if
+// that key is absent (a cloud session) the gateway is not started and those two
+// specs skip, saying why. An explicit MCPFORGE_E2E_USERNAME/PASSWORD still wins.
+const PORTAL_KEY = join(
+  fileURLToPath(new URL('.', import.meta.url)),
+  '..',
+  '..',
+  '.mcpforge',
+  'portal',
+  'portal-local.private.jwk.json',
+);
+export const E2E_GATEWAY =
+  existsSync(PORTAL_KEY) && process.env['MCPFORGE_E2E_NO_GATEWAY'] === undefined;
+if (E2E_GATEWAY) {
+  process.env['MCPFORGE_GATEWAY_URL'] = `http://127.0.0.1:${E2E_GATEWAY_PORT}`;
+  process.env['MCPFORGE_E2E_USERNAME'] ??= E2E_VIEWER.username;
+  process.env['MCPFORGE_E2E_PASSWORD'] ??= E2E_PASSWORD;
+  process.env['MCPFORGE_E2E_GATEWAY'] = '1';
+}
 
 // MCPForge — W0-J21, accessibility CI gates 3 and 4 (03 §12.7).
 //
@@ -56,13 +87,25 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'pnpm exec next dev --port 3100',
-    url: 'http://127.0.0.1:3100',
-    reuseExistingServer: !process.env.CI,
-    // `next dev` cold start took longer than 60 s on a slow developer
-    // machine ("Timed out waiting 60000ms from config.webServer"). Only the
-    // wait for the server widens; the per-test timeout above is unchanged.
-    timeout: 180_000,
-  },
+  webServer: [
+    ...(E2E_GATEWAY
+      ? [
+          {
+            command: 'pnpm exec tsx tests/a11y/keyboard/e2e-gateway.ts',
+            port: E2E_GATEWAY_PORT,
+            reuseExistingServer: false,
+            timeout: 180_000,
+          },
+        ]
+      : []),
+    {
+      command: 'pnpm exec next dev --port 3100',
+      url: 'http://127.0.0.1:3100',
+      reuseExistingServer: !process.env.CI,
+      // `next dev` cold start took longer than 60 s on a slow developer
+      // machine ("Timed out waiting 60000ms from config.webServer"). Only the
+      // wait for the server widens; the per-test timeout above is unchanged.
+      timeout: 180_000,
+    },
+  ],
 });
